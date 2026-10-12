@@ -1,0 +1,173 @@
+#!/usr/bin/env bash
+# jarvis — commandes courtes pour piloter les agents IA (Claude Code, Codex)
+# au-dessus de tmux + workmux, avec Linear comme canal de tâches.
+
+set -euo pipefail
+
+JARVIS_HOME="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")/.." && pwd)"
+SESSION="${JARVIS_SESSION:-jarvis}"
+
+C_CYAN=$'\033[36m'; C_GREEN=$'\033[32m'; C_YELLOW=$'\033[33m'; C_RED=$'\033[31m'; C_OFF=$'\033[0m'
+ok()   { printf '  %s✓%s %s\n' "$C_GREEN" "$C_OFF" "$1"; }
+warn() { printf '  %s!%s %s\n' "$C_YELLOW" "$C_OFF" "$1"; }
+bad()  { printf '  %s✗%s %s\n' "$C_RED" "$C_OFF" "$1"; }
+die()  { printf '%sErreur :%s %s\n' "$C_RED" "$C_OFF" "$1" >&2; exit 1; }
+has()  { command -v "$1" >/dev/null 2>&1; }
+
+usage() {
+  cat <<EOF
+${C_CYAN}jarvis${C_OFF} — poste de pilotage des agents IA
+
+  jarvis start                          Ouvre (ou rejoint) la session tmux « $SESSION »
+  jarvis task <ISSUE> <claude|codex> [description-courte]
+                                        Lance un agent sur une issue Linear, dans son worktree
+  jarvis board                          Tableau de bord de tous les agents
+  jarvis status                         Liste des tâches et état des agents
+  jarvis init-project [dossier]         Ajoute AGENTS.md + CLAUDE.md (protocole Linear) à un projet
+  jarvis doctor                         Vérifie que tout est installé et connecté
+  jarvis help                           Cette aide
+
+Exemples :
+  cd ~/projets/repriceo
+  jarvis task BIS-82 claude auth-avancee
+  jarvis task BIS-90 codex landing
+EOF
+}
+
+require_git_repo() {
+  git rev-parse --show-toplevel >/dev/null 2>&1 \
+    || die "lance cette commande depuis le dossier d'un projet git (ex. cd ~/projets/repriceo)."
+}
+
+slugify() {
+  # Une substitution par lettre accentuée : les classes [éè] cassent sur l'UTF-8.
+  printf '%s' "$1" \
+    | sed -e 's/À/a/g; s/Â/a/g; s/à/a/g; s/â/a/g; s/ä/a/g' \
+          -e 's/É/e/g; s/È/e/g; s/Ê/e/g; s/é/e/g; s/è/e/g; s/ê/e/g; s/ë/e/g' \
+          -e 's/Î/i/g; s/î/i/g; s/ï/i/g; s/Ô/o/g; s/ô/o/g; s/ö/o/g' \
+          -e 's/Ù/u/g; s/Û/u/g; s/ù/u/g; s/û/u/g; s/ü/u/g; s/Ç/c/g; s/ç/c/g' \
+    | tr '[:upper:]' '[:lower:]' \
+    | sed -e 's/[^a-z0-9]\{1,\}/-/g' -e 's/^-//' -e 's/-$//'
+}
+
+cmd_start() {
+  has tmux || die "tmux n'est pas installé (lance ./install.sh)."
+  if [[ -n "${TMUX:-}" ]]; then
+    echo "Tu es déjà dans tmux. Ctrl+B puis Ctrl+S pour le tableau de bord."
+    return
+  fi
+  exec tmux new-session -A -s "$SESSION"
+}
+
+cmd_task() {
+  [[ $# -ge 2 ]] || die "usage : jarvis task <ISSUE> <claude|codex> [description-courte]"
+  local issue="$1" who="$2" desc="${3:-}"
+  [[ "$issue" =~ ^[A-Za-z]+-[0-9]+$ ]] || die "« $issue » ne ressemble pas à un ID Linear (ex. BIS-82)."
+  issue="$(printf '%s' "$issue" | tr '[:lower:]' '[:upper:]')"
+
+  local agent rules
+  case "$who" in
+    claude|cc) agent="cc"; rules="CLAUDE.md" ;;
+    codex|cx)  agent="cx"; rules="AGENTS.md" ;;
+    *) die "agent inconnu « $who » : choisis claude ou codex." ;;
+  esac
+
+  require_git_repo
+  has workmux || die "workmux n'est pas installé (lance ./install.sh)."
+  [[ -n "${TMUX:-}" ]] || die "lance d'abord « jarvis start », puis cette commande dans la session."
+
+  local root
+  root="$(git rev-parse --show-toplevel)"
+  [[ -f "$root/$rules" ]] || warn "$rules absent de ce projet : lance « jarvis init-project » pour ajouter le protocole Linear."
+
+  local branch
+  branch="$(slugify "$issue")"
+  [[ -n "$desc" ]] && branch="$branch-$(slugify "$desc")"
+
+  local prompt
+  prompt="Traite l'issue Linear $issue. Lis-la en entier via l'outil Linear avant de coder, puis suis à la lettre le protocole décrit dans $rules (statut, commentaires ❓/✅, PR). Ne fusionne jamais dans main."
+
+  printf '%s▶%s %s → %s (branche %s)\n' "$C_CYAN" "$C_OFF" "$issue" "$who" "$branch"
+  workmux add "$branch" -a "$agent" -b -p "$prompt"
+  ok "Agent lancé en arrière-plan. Suis-le avec « jarvis board » (ou Ctrl+B, Ctrl+S)."
+}
+
+cmd_board()  { has workmux || die "workmux n'est pas installé."; exec workmux dashboard "$@"; }
+cmd_status() { has workmux || die "workmux n'est pas installé."; exec workmux list "$@"; }
+
+cmd_init_project() {
+  local dir="${1:-.}"
+  [[ -d "$dir" ]] || die "dossier introuvable : $dir"
+  dir="$(cd "$dir" && pwd)"
+  local f
+  for f in AGENTS.md CLAUDE.md; do
+    if [[ -e "$dir/$f" ]]; then
+      warn "$f existe déjà dans $dir : je n'y touche pas (compare avec $JARVIS_HOME/templates/$f)."
+    else
+      cp "$JARVIS_HOME/templates/$f" "$dir/$f"
+      ok "$f ajouté"
+    fi
+  done
+  echo
+  echo "Adapte la section « Projet » des deux fichiers, puis commite-les sur main :"
+  echo "  git add AGENTS.md CLAUDE.md && git commit -m \"chore: protocole des agents\" && git push"
+}
+
+cmd_doctor() {
+  local errors=0
+  printf '%sOutils%s\n' "$C_CYAN" "$C_OFF"
+  local t
+  local v
+  for t in git tmux gh node claude codex workmux; do
+    if has "$t"; then
+      if [[ "$t" == tmux ]]; then v="$(tmux -V 2>/dev/null || true)"; else v="$("$t" --version 2>/dev/null | head -1 || true)"; fi
+      ok "${v:-$t}"
+    else
+      bad "$t manquant"; errors=$((errors + 1))
+    fi
+  done
+
+  printf '\n%sEmplacement%s\n' "$C_CYAN" "$C_OFF"
+  if [[ "$PWD" == /mnt/* ]]; then
+    warn "Tu es sur le disque Windows ($PWD) : travaille plutôt dans ~/projets."
+  else
+    ok "Dossier Linux ($PWD)"
+  fi
+
+  printf '\n%sConfigurations%s\n' "$C_CYAN" "$C_OFF"
+  [[ -L "$HOME/.tmux.conf" ]] && ok "~/.tmux.conf lié à JarvisAgent" || warn "~/.tmux.conf n'est pas celui de JarvisAgent"
+  [[ -L "$HOME/.config/workmux/config.yaml" ]] && ok "config workmux liée à JarvisAgent" || warn "config workmux absente ou personnalisée"
+
+  printf '\n%sConnexions%s\n' "$C_CYAN" "$C_OFF"
+  if has gh; then gh auth status >/dev/null 2>&1 && ok "GitHub connecté" || { bad "GitHub non connecté (gh auth login)"; errors=$((errors + 1)); }; fi
+  if has claude; then
+    claude mcp get linear-server >/dev/null 2>&1 && ok "Claude Code ↔ Linear" || warn "Claude Code n'a pas Linear (voir README, étape Linear)"
+  fi
+  if has codex; then
+    codex mcp get linear >/dev/null 2>&1 && ok "Codex ↔ Linear" || warn "Codex n'a pas Linear (voir README, étape Linear)"
+  fi
+
+  printf '\n%sSession%s\n' "$C_CYAN" "$C_OFF"
+  if has tmux && tmux has-session -t "$SESSION" 2>/dev/null; then ok "Session « $SESSION » active"; else warn "Session « $SESSION » fermée (jarvis start)"; fi
+
+  echo
+  if ((errors)); then bad "$errors problème(s) bloquant(s). Relance ./install.sh"; return 1; fi
+  ok "Prêt à piloter."
+}
+
+main() {
+  local cmd="${1:-help}"
+  shift || true
+  case "$cmd" in
+    start)        cmd_start "$@" ;;
+    task|t)       cmd_task "$@" ;;
+    board|b)      cmd_board "$@" ;;
+    status|s|ls)  cmd_status "$@" ;;
+    init-project) cmd_init_project "$@" ;;
+    doctor)       cmd_doctor "$@" ;;
+    help|-h|--help) usage ;;
+    *) usage; die "commande inconnue : $cmd" ;;
+  esac
+}
+
+main "$@"

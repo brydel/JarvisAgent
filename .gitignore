@@ -1,0 +1,9 @@
+# Secrets et fichiers locaux
+.env
+.env.*
+*.bak.*
+.claude/settings.local.json
+
+# Système
+.DS_Store
+Thumbs.db

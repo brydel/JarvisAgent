@@ -1,0 +1,38 @@
+# JarvisAgent — configuration globale workmux
+# Installée par install.sh (lien symbolique vers ~/.config/workmux/config.yaml)
+# Référence complète : `workmux config reference`
+
+nerdfont: true
+agent: cc
+merge_strategy: rebase
+window_prefix: "wm-"
+
+# Profils d'agents utilisables avec `-a <nom>`
+agents:
+  cc:
+    type: claude
+    command: claude
+  cx:
+    type: codex
+    command: codex
+
+# Fichiers ignorés par git à recopier dans chaque nouveau worktree.
+# Ne mets JAMAIS de secrets de production dans ces fichiers.
+files:
+  copy:
+    - .env
+    - .env.local
+  symlink:
+    - .claude/settings.local.json
+
+# Disposition de chaque fenêtre : l'agent en haut, un terminal libre en bas
+panes:
+  - command: <agent>
+    focus: true
+  - split: horizontal
+    size: 12
+
+status_icons:
+  working: "🤖"
+  waiting: "💬"
+  done: "✅"
