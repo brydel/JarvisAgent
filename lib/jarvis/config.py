@@ -28,6 +28,26 @@ DEFAULTS: dict = {
         # Mode de permission du chef (auto = un classifieur valide les actions sûres, utile la nuit).
         # Ses règles deny (pas de code, pas de fusion, pas de push) restent prioritaires.
         "chef_permission_mode": "auto",
+        # Battement de cœur : si rien ne s'est passé depuis N minutes et qu'il reste de la place,
+        # le démon réveille le chef pour qu'il cherche du travail utile (0 = désactivé).
+        "battement_min": 30,
+        # Ferme la fenêtre d'un agent terminé depuis N minutes ; worktree et branche restent (0 = jamais).
+        "fermeture_auto_min": 60,
+        # Après un redémarrage du PC : relancer seuls les agents qui travaillaient et le chef.
+        "reprise_auto": True,
+    },
+    "codex": {
+        # "bac-a-sable" : Codex écrit seulement dans son worktree et dans le dépôt git du projet.
+        # "complet" : aucun bac à sable (dernier recours si Codex ne peut toujours pas committer).
+        "mode": "bac-a-sable",
+        # Serveurs MCP (séparés par des virgules) dont les outils sont approuvés d'avance pour Codex.
+        "mcp_approuves": "linear",
+    },
+    "sante": {
+        # Alertes sur l'état du PC (mémoire, disque, Docker, batterie, redémarrage Windows en attente).
+        "active": True,
+        "disque_min_go": 10,
+        "memoire_min_pct": 10,
     },
     "notifications": {
         "windows": True,

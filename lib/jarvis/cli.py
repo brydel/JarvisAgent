@@ -303,6 +303,9 @@ def cmd_regler(a) -> int:
         return _err("clé inconnue. Exemples : general.max_agents, general.poll_seconds, notifications.windows")
     current = data[section].get(key)
     value: object = a.valeur
+    allowed = {"codex.mode": ("bac-a-sable", "complet"), "plans.validation": ("humain", "auto")}.get(a.cle)
+    if allowed and a.valeur not in allowed:
+        return _err(f"{a.cle} accepte : {', '.join(allowed)}")
     if isinstance(current, bool):
         value = a.valeur.lower() in ("1", "true", "oui", "vrai", "on")
     elif isinstance(current, int):
@@ -387,6 +390,77 @@ def cmd_installer_statusline(a) -> int:
     return 0
 
 
+def cmd_fermer(a) -> int:
+    """Ferme la fenêtre d'agents terminés. Refuse tout agent qui travaille encore."""
+    found, err = ag.status_all()
+    if found is None:
+        return _err(f"impossible de lire l'état des agents ({err})", 2)
+    if a.termines:
+        cibles = [x for x in found if x["status"] in ag.CLOSABLE]
+        if not cibles:
+            print("Aucune fenêtre d'agent terminé à fermer.")
+            return 0
+    else:
+        if not a.cible:
+            return _err("précise une cible (projet:worktree) ou --termines")
+        agent = ag.find(a.cible)
+        if not agent:
+            return _err(f"agent « {a.cible} » introuvable (jarvis etat)")
+        cibles = [agent]
+    rc = 0
+    for agent in cibles:
+        ok, msg = ag.close(agent)
+        print(("✓ " if ok else "✗ ") + msg)
+        if ok:
+            store.feed_add("systeme", msg + " (worktree conservé)")
+        else:
+            rc = 1
+    return rc
+
+
+def cmd_reprendre(a) -> int:
+    from . import poste
+    if not poste.reprise_en_attente():
+        print("Rien à reprendre : aucun agent interrompu par un redémarrage.")
+        return 0
+    if not a.essai and not os.environ.get("TMUX"):
+        return _err("lance « jarvis reprendre » depuis la session Jarvis (jarvis start, puis Ctrl+B c).")
+    lignes = poste.reprendre(dry_run=a.essai)
+    for ln in lignes:
+        print(ln)
+    if not a.essai:
+        repris = sum(1 for ln in lignes if ln.startswith("repris"))
+        notify.alert("systeme", f"Jarvis relancé après un redémarrage du PC : {repris} agent(s) repris.",
+                     title="JARVIS · redémarrage", windows=False)
+    return 0
+
+
+def cmd_reprise_preparer(a) -> int:
+    from . import poste
+    snap = poste.preparer_reprise()
+    if snap:
+        print(json.dumps({"agents": len(snap.get("agents", [])), "chef": bool(snap.get("chef"))}))
+    return 0
+
+
+def cmd_sante(a) -> int:
+    from . import poste
+    print(poste.texte())
+    return 0
+
+
+def cmd_reparer_git(a) -> int:
+    from . import poste
+    p = config.projects().get(a.projet)
+    if not p:
+        return _err(f"projet inconnu « {a.projet} » (jarvis projet liste)")
+    ok, lignes = poste.reparer_git(Path(p["chemin"]))
+    for ln in lignes:
+        print(ln)
+    store.feed_add("systeme" if ok else "erreur", f"réparation git de {a.projet} : {'dépôt sain' if ok else 'à vérifier'}")
+    return 0 if ok else 1
+
+
 def cmd_voir(a) -> int:
     """Sortie récente d'un agent, même s'il n'est pas (encore) suivi par workmux."""
     print(ag.capture(a.cible, lines=a.lignes))
@@ -459,6 +533,8 @@ def cmd_chef_preparer(a) -> int:
                 "Bash(jarvis demander *)", "Bash(jarvis note *)", "Bash(jarvis journal *)", "Bash(jarvis journal)",
                 "Bash(jarvis voir *)", "Bash(jarvis jetons)", "Bash(jarvis jetons *)",
                 "Bash(jarvis veille)", "Bash(jarvis veille *)",
+                "Bash(jarvis fermer *)", "Bash(jarvis sante)", "Bash(jarvis reparer-git *)",
+                "Bash(jarvis reprendre --essai)",
                 # Veille concurrentielle : recherche web (lecture seule).
                 "WebSearch", "WebFetch",
                 "Bash(workmux status)", "Bash(workmux status *)", "Bash(workmux capture *)",
@@ -471,6 +547,8 @@ def cmd_chef_preparer(a) -> int:
                 "Bash(jarvis plan ok *)", "Bash(jarvis plan non *)", "Bash(jarvis plan verifier *)",
                 "Bash(jarvis plan relacher *)", "Bash(jarvis regler *)", "Bash(jarvis telegram *)",
                 "Bash(jarvis reglage-lire *)", "Bash(jarvis preparer-worktree *)", "Bash(jarvis chef-preparer *)",
+                "Bash(jarvis autostart)", "Bash(jarvis autostart *)", "Bash(jarvis reprise-preparer)",
+                "Bash(jarvis reprise-preparer *)", "Bash(jarvis reprendre)",
                 # Contournements de « jarvis task » et accès directs au noyau.
                 "Bash(workmux add *)", "Bash(workmux run *)", "Bash(python *)", "Bash(python3 *)",
                 "Bash(env *)", "Bash(script *)",
@@ -488,7 +566,9 @@ def cmd_chef_preparer(a) -> int:
 
 
 def cmd_chef_message(a) -> int:
-    print(CHEF_KICKOFF)
+    from . import poste
+    note = poste.note_redemarrage()
+    print(CHEF_KICKOFF + (f" IMPORTANT : {note}" if note else ""))
     return 0
 
 
@@ -590,6 +670,18 @@ def build_parser() -> argparse.ArgumentParser:
     s.add_argument("projet")
     s.set_defaults(fn=cmd_veille_fait)
     sub.add_parser("installer-statusline", help=argparse.SUPPRESS).set_defaults(fn=cmd_installer_statusline)
+    s = sub.add_parser("fermer", help="fermer la fenêtre d'un agent terminé (worktree conservé)")
+    s.add_argument("cible", nargs="?")
+    s.add_argument("--termines", action="store_true", help="toutes les fenêtres d'agents terminés")
+    s.set_defaults(fn=cmd_fermer)
+    s = sub.add_parser("reprendre", help="relancer les agents interrompus par un redémarrage")
+    s.add_argument("--essai", action="store_true", help="afficher sans rien relancer")
+    s.set_defaults(fn=cmd_reprendre)
+    sub.add_parser("reprise-preparer", help=argparse.SUPPRESS).set_defaults(fn=cmd_reprise_preparer)
+    sub.add_parser("sante", help="état du PC").set_defaults(fn=cmd_sante)
+    s = sub.add_parser("reparer-git", help="réparer le dépôt git d'un projet après un arrêt brutal")
+    s.add_argument("projet")
+    s.set_defaults(fn=cmd_reparer_git)
     s = sub.add_parser("voir", help="sortie récente d'un agent (projet:worktree)")
     s.add_argument("cible")
     s.add_argument("-n", "--lignes", type=int, default=80)

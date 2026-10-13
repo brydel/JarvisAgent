@@ -25,7 +25,7 @@ def tmux_agent_windows() -> list[dict]:
     if not shutil.which("tmux"):
         return []
     fmt = "\t".join(["#{session_name}", "#{window_name}", "#{pane_current_path}",
-                     "#{pane_current_command}", "#{window_activity}"])
+                     "#{pane_current_command}", "#{window_activity}", "#{window_id}"])
     try:
         res = _run(["tmux", "list-windows", "-a", "-F", fmt], timeout=5)
     except (subprocess.TimeoutExpired, OSError):
@@ -33,11 +33,11 @@ def tmux_agent_windows() -> list[dict]:
     out = []
     for line in res.stdout.splitlines():
         parts = line.split("\t")
-        if len(parts) != 5 or not parts[1].startswith(WINDOW_PREFIX):
+        if len(parts) != 6 or not parts[1].startswith(WINDOW_PREFIX):
             continue
-        session, window, path, command, activity = parts
+        session, window, path, command, activity, wid = parts
         out.append({"session": session, "window": window, "path": path, "command": command,
-                    "activity": int(activity) if activity.isdigit() else 0})
+                    "activity": int(activity) if activity.isdigit() else 0, "id": wid})
     return out
 
 
@@ -85,11 +85,15 @@ def status_all() -> tuple[list[dict] | None, str]:
     # Agents que workmux ne suit pas (encore) : repérés par leur fenêtre tmux.
     tracked = {a["window"] for a in agents if a["window"]}
     now = time.time()
-    for w in tmux_agent_windows():
+    windows = tmux_agent_windows()
+    panes = _pane_commands() if windows else {}
+    for a in agents:
+        if not a["kind"] and a["window"] in panes:
+            a["kind"] = _kind_from_command(panes[a["window"]])
+    for w in windows:
         if w["window"] in tracked:
             continue
-        cmd = w["command"].lower()
-        kind = "codex" if "codex" in cmd else ("claude" if "claude" in cmd else "")
+        kind = _kind_from_command(w["command"], panes.get(w["window"], ""))
         idle = max(0, int(now - w["activity"])) if w["activity"] else 0
         agents.append({
             "worktree": w["window"][len(WINDOW_PREFIX):],
@@ -107,6 +111,66 @@ def status_all() -> tuple[list[dict] | None, str]:
     order = {"waiting": 0, "untracked": 1, "working": 2, "done": 3}
     agents.sort(key=lambda a: (order.get(a["status"], 4), a["project"], a["worktree"]))
     return agents, ""
+
+
+def _pane_commands() -> dict[str, str]:
+    """{fenêtre: commandes de tous ses volets} — l'agent n'est pas forcément le volet actif."""
+    if not shutil.which("tmux"):
+        return {}
+    try:
+        res = _run(["tmux", "list-panes", "-a", "-F", "#{window_name}\t#{pane_current_command}"], timeout=5)
+    except (subprocess.TimeoutExpired, OSError):
+        return {}
+    out: dict[str, str] = {}
+    for line in res.stdout.splitlines():
+        w, _, c = line.partition("\t")
+        out[w] = f"{out.get(w, '')} {c}".strip()
+    return out
+
+
+def _kind_from_command(*commands: str) -> str:
+    cmd = " ".join(commands).lower()
+    return "codex" if "codex" in cmd else ("claude" if "claude" in cmd else "")
+
+
+CLOSABLE = ("done", "idle")
+
+
+def find(handle: str) -> dict | None:
+    """Agent désigné par « projet:worktree » (ou « worktree » seul)."""
+    found, _ = status_all()
+    project, _, worktree = handle.rpartition(":")
+    for a in found or []:
+        if a["worktree"] == worktree and (not project or a["project"] == project):
+            return a
+    return None
+
+
+def close(agent: dict) -> tuple[bool, str]:
+    """Ferme la fenêtre d'un agent terminé. Le worktree, la branche et la conversation restent."""
+    if agent["status"] not in CLOSABLE:
+        return False, f"{target(agent)} est « {STATUS_LABELS.get(agent['status'], agent['status'])} » : je ne ferme que les agents terminés"
+    proj = config.projects().get(agent.get("project") or "")
+    if proj and shutil.which("workmux") and agent["status"] == "done":
+        try:
+            res = subprocess.run(["workmux", "close", agent["worktree"]], cwd=proj["chemin"],
+                                 capture_output=True, text=True, timeout=20)
+            if res.returncode == 0:
+                return True, f"fenêtre de {target(agent)} fermée"
+        except (subprocess.TimeoutExpired, OSError):
+            pass
+    # Par identifiant (@12) : un nom contenant un point (« v1.2 ») serait lu comme « fenêtre.volet ».
+    wid = next((w["id"] for w in tmux_agent_windows()
+                if w["window"] == agent.get("window") and w["session"] == agent.get("session")), "")
+    if wid:
+        try:
+            res = _run(["tmux", "kill-window", "-t", wid], timeout=5)
+        except (subprocess.TimeoutExpired, OSError) as exc:
+            return False, str(exc)
+        if res.returncode == 0:
+            return True, f"fenêtre de {target(agent)} fermée"
+        return False, (res.stderr or "tmux kill-window a échoué").strip()
+    return False, f"fenêtre de {target(agent)} introuvable"
 
 
 def target(agent: dict) -> str:
@@ -159,6 +223,19 @@ def tmux_windows(session: str = config.SESSION) -> list[str]:
 
 def chef_running() -> bool:
     return config.CHEF_WINDOW in tmux_windows()
+
+
+def chef_idle_secs() -> int | None:
+    """Secondes depuis la dernière activité visible du chef (None s'il n'est pas lancé)."""
+    try:
+        res = _run(["tmux", "list-windows", "-t", config.SESSION, "-F", "#{window_name}\t#{window_activity}"], timeout=5)
+    except (subprocess.TimeoutExpired, OSError):
+        return None
+    for line in res.stdout.splitlines():
+        name, _, act = line.partition("\t")
+        if name == config.CHEF_WINDOW and act.isdigit():
+            return max(0, int(time.time()) - int(act))
+    return None
 
 
 CHEF_QUEUE = "chef_queue.json"

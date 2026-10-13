@@ -234,6 +234,9 @@ fi
 if [[ -z "$(PYTHONPATH="$JARVIS_HOME/lib" python3 -m jarvis reglage-lire telegram.chat_id 2>/dev/null)" ]]; then
   TODO+=("Relie ton téléphone : jarvis telegram config")
 fi
+if [[ -n "${WSL_DISTRO_NAME:-}" ]] && ! "$JARVIS_HOME/bin/jarvis" autostart etat 2>/dev/null | grep -q actif; then
+  TODO+=("Pour que Jarvis reparte seul après un redémarrage de Windows : jarvis autostart installer")
+fi
 
 if [[ -z "$(git config --global user.name || true)" ]]; then
   TODO+=("git config --global user.name \"Ton Nom\" && git config --global user.email \"ton@courriel.com\"")

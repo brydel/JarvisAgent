@@ -110,8 +110,10 @@ Ensuite, tu pilotes depuis le **cockpit** ou depuis **Telegram**.
 | `/etat` | Agents et plans en cours |
 | `/plans` | Plans à valider, avec boutons |
 | `/jetons` | Consommation Claude et Codex |
+| `/sante` | État du PC : mémoire, disque, Docker, batterie, redémarrage Windows en attente |
 | `/pause` · `/reprendre` | Bloquer ou relancer les lancements |
 | N'importe quel texte | Transmis au chef (« Priorise JobPilot cette nuit ») |
+| Une **image** ou un **fichier** (avec légende) | Enregistré dans le dossier du chef, qui l'ouvre (maquette, direction artistique, capture, PDF) |
 
 Tu reçois aussi les questions du chef (❓) et ses bilans (📝), avec une notification Windows quand tu es sur ton PC.
 
@@ -125,12 +127,18 @@ Tu reçois aussi les questions du chef (❓) et ses bilans (📝), avec une noti
 
 | Commande | Rôle |
 | --- | --- |
-| `jarvis start` | Session `jarvis` : cockpit + démon |
+| `jarvis start [--fond]` | Session `jarvis` : cockpit + démon. Après un redémarrage du PC, reprend les agents qui travaillaient et le chef |
 | `jarvis chef` | Lance ou rejoint le chef d'orchestre |
 | `jarvis cockpit` | Interface plein écran |
 | `jarvis etat` | État complet (agents, plans, projets, capacité) |
 | `jarvis plan liste` · `voir P-1` · `ok P-1` · `non P-1 raison` | Gérer les plans depuis le terminal |
 | `jarvis fil [n]` · `jarvis journal` | Événements récents · journal du chef |
+| `jarvis voir projet:worktree` | Sortie récente d'un agent |
+| `jarvis fermer projet:worktree` · `jarvis fermer --termines` | Ferme la fenêtre d'agents terminés (worktree, branche et conversation conservés) |
+| `jarvis reprendre [--essai]` | Relance les agents interrompus par un redémarrage |
+| `jarvis sante` | État du PC |
+| `jarvis autostart installer\|retirer\|etat` | Démarrer Jarvis tout seul à l'ouverture de session Windows |
+| `jarvis reparer-git <projet>` | Après un arrêt brutal : sauvegarde `.git`, recrée les références distantes cassées, `fetch` et `fsck` |
 | `jarvis task [--projet P] [--plan ID] <ISSUE> <claude\|codex> [desc] [--consignes f.md] [--revue N°PR]` | Lancer un agent sur une issue (`--revue` : relecture seule d'une PR). Hors terminal interactif, un plan approuvé est obligatoire |
 | `jarvis projet ajouter\|liste` | Registre des projets |
 | `jarvis telegram config\|test` | Liaison Telegram |
@@ -148,6 +156,11 @@ Tu reçois aussi les questions du chef (❓) et ses bilans (📝), avec une noti
 | `general.workspace` | `~/projets` | Dossier des projets (le chef n'a pas le droit d'y écrire) |
 | `general.chef_permission_mode` | `auto` | Mode de permission du chef |
 | `general.chef_remote_control` | `false` | `true` : tu peux aussi parler au chef depuis l'app Claude |
+| `general.battement_min` | `30` | Réveille le chef s'il reste de la place et des jetons après N min de calme (0 = jamais ; l'intervalle double tant qu'il ne trouve rien, jusqu'à 4 h) |
+| `general.fermeture_auto_min` | `60` | Ferme la fenêtre d'un agent terminé depuis N min (0 = jamais) |
+| `general.reprise_auto` | `true` | Après un redémarrage, `jarvis start` relance les agents qui travaillaient et le chef |
+| `codex.mode` | `bac-a-sable` | `complet` : Codex sans bac à sable (dernier recours si `jarvis doctor` dit qu'il ne peut pas committer) |
+| `sante.active` · `sante.disque_min_go` · `sante.memoire_min_pct` | `true` · `10` · `10` | Surveillance du PC et seuils d'alerte |
 | `notifications.windows` | `true` | Notifications Windows |
 | `jetons.alerte` · `jetons.arret` | `80` · `95` | Seuils d'alerte et d'arrêt (en % d'une fenêtre) |
 | `jetons.arret_agents` | `true` | À l'arrêt, demander aux agents de committer et de s'arrêter |
@@ -175,7 +188,8 @@ bin/jarvis-codex              Codex en mode autonome (bac à sable + règles)
 config/codex/jarvis.rules     Règles d'exécution des agents Codex
 lib/jarvis/                   Superagent en Python (bibliothèque standard uniquement)
   cockpit.py                  Interface plein écran (curses)
-  daemon.py                   Surveillance des agents + pont Telegram
+  daemon.py                   Surveillance des agents, battement, ménage, santé + pont Telegram
+  poste.py                    Reprise après redémarrage, santé du PC, réparation git
   plans.py                    Plans, approbations, verrou « une tâche = un lancement »
   agents.py                   Lecture workmux, messages au chef (file d'attente si dialogue ouvert)
   notify.py · telegram.py     Telegram, notifications Windows
@@ -225,9 +239,19 @@ Les agents lancés par Jarvis travaillent sans te solliciter, et sans perdre leu
 | **Règles Codex** (`config/codex/jarvis.rules` → `~/.codex/rules/`) | autorisé : `git add/commit/push` de sa branche, `gh pr create/view/review…`, `pnpm/npm/uv install` | **interdit** : `git push --force`, push sur `main`, `gh pr merge/close`, `git reset/clean` |
 | **Confiance des dossiers** | `jarvis task` pré-accepte chaque nouveau worktree (Claude : `~/.claude.json`, Codex : `~/.codex/config.toml`) | — |
 
-Pourquoi Codex demandait sans arrêt : en bac à sable, `.git` est protégé en écriture, y compris le vrai `.git` d'un worktree. Chaque commit sortait donc du bac à sable et déclenchait une demande. Les règles autorisent maintenant d'avance exactement ce dont un agent a besoin.
+Pourquoi Codex demandait sans arrêt : en bac à sable, `.git` est protégé en écriture, y compris le vrai `.git` d'un worktree. Chaque commit sortait donc du bac à sable et déclenchait une demande. Les règles autorisent maintenant d'avance exactement ce dont un agent a besoin, et `jarvis-codex` ouvre aussi en écriture le dépôt git du projet (objets, références, métadonnées du worktree).
+
+Avec `--ask-for-approval never`, Codex refuse aussi les **outils MCP** (Linear) qui demandent une approbation. `jarvis-codex` les approuve d'avance (`default_tools_approval_mode = "approve"`) pour chaque serveur déjà déclaré dans `~/.codex/config.toml`. `jarvis doctor` teste un vrai commit dans le bac à sable ; si Codex ne peut toujours pas committer, `jarvis regler codex.mode complet` le lance sans bac à sable (ses règles « interdit » restent actives).
 
 Un agent que workmux ne suit pas encore (souvent Codex avant la fin de son premier tour) apparaît comme **🌀 actif ?** dans le cockpit et `jarvis etat`. Il compte comme occupé, et `jarvis voir projet:worktree` affiche sa sortie.
+
+## Redémarrages et santé du PC
+
+- **Redémarrage imprévu** (mise à jour Windows, coupure) : le démon mémorise en continu les agents au travail. Au prochain `jarvis start`, seuls ceux-là sont rouverts **avec leur conversation** (`workmux open --continue`), puis le chef repart en sachant ce qui s'est passé. Les agents déjà terminés ne sont pas rouverts.
+- **Démarrage automatique** : `jarvis autostart installer` place un petit lanceur invisible dans le dossier Démarrage de Windows. À l'ouverture de session, WSL démarre et Jarvis reprend tout seul. Active aussi « Start Docker Desktop when you sign in » dans Docker Desktop.
+- **Santé** : toutes les 5 minutes, le démon vérifie la mémoire, le disque, Docker, la batterie et la présence d'un **redémarrage Windows en attente** (le signe qu'une mise à jour risque de redémarrer le PC pendant la nuit). Tu es prévenu sur Telegram quand un indicateur se dégrade. Jarvis ne modifie jamais ton système lui-même.
+- **Dépôt abîmé** par un arrêt brutal (`bad object`, objets vides) : `jarvis reparer-git <projet>`. Le chef peut aussi le lancer.
+- Les fenêtres des agents terminés se ferment seules au bout d'une heure : la capacité n'est jamais bloquée par de vieilles fenêtres.
 
 ## Sécurité et coûts
 
@@ -248,4 +272,5 @@ python3 -m unittest discover -s tests -v
 
 - [x] Phase 1 : installation, configurations, CLI `jarvis`, protocole Linear
 - [x] Phase 2 : chef d'orchestre, plans approuvés, cockpit, démon, Telegram, plan de nuit
+- [x] Phase 2.5 : reprise après redémarrage, démarrage automatique, santé du PC, battement du chef, images Telegram
 - [ ] Phase 3 : tableau de rentabilité (PR fusionnées par jour, temps d'agent utilisé par abonnement)

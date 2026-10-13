@@ -58,6 +58,27 @@ class Bot:
         return self.call("sendMessage", chat_id=chat_id, text=text, reply_markup=markup,
                          disable_web_page_preview=True)
 
+    def download(self, file_id: str, dest, max_bytes: int = 20 * 1024 * 1024) -> None:
+        """Télécharge un fichier envoyé au bot (photo, document) vers `dest`."""
+        info = self.call("getFile", file_id=file_id) or {}
+        path = info.get("file_path")
+        if not path:
+            raise TelegramError("getFile : chemin du fichier absent")
+        if (info.get("file_size") or 0) > max_bytes:
+            raise TelegramError("fichier trop gros")
+        url = f"{self.base}/file/bot{self.token}/{path}"
+        try:
+            with urllib.request.urlopen(url, timeout=60) as resp:
+                data = resp.read(max_bytes + 1)
+        except (urllib.error.URLError, TimeoutError, OSError) as exc:
+            raise TelegramError(f"téléchargement : {exc}") from exc
+        if len(data) > max_bytes:
+            raise TelegramError("fichier trop gros")
+        tmp = f"{dest}.part"
+        with open(tmp, "wb") as fh:
+            fh.write(data)
+        os.replace(tmp, dest)
+
     def answer(self, callback_id: str, text: str = "") -> None:
         self.call("answerCallbackQuery", callback_query_id=callback_id, text=text[:190] or None)
 

@@ -1,26 +1,80 @@
 #!/usr/bin/env bash
 # jarvis-codex — lance Codex en mode autonome pour un agent Jarvis.
 #
-#  - bac à sable « workspace-write » : l'agent écrit seulement dans son worktree ;
+# Mode « bac-a-sable » (par défaut, réglage codex.mode) :
+#  - bac à sable « workspace-write » : l'agent écrit dans son worktree, dans le dépôt git
+#    du projet (sinon un worktree ne peut pas committer : son .git vit dans le dépôt principal)
+#    et dans les caches de paquets (pnpm, npm, uv, pip) ;
 #  - --ask-for-approval never : aucune demande, une action non prévue échoue proprement ;
 #  - accès réseau dans le bac à sable (tests, API, gh) ;
-#  - caches de paquets inscriptibles (pnpm, npm, uv, pip) ;
-#  - git commit/push et gh pr passent par ~/.codex/rules/jarvis.rules (config/codex/jarvis.rules).
+#  - outils MCP déjà configurés (Linear…) approuvés d'avance : sinon « never » les refuse ;
+#  - git push et gh pr passent par ~/.codex/rules/jarvis.rules (config/codex/jarvis.rules).
+# Mode « complet » : sans bac à sable (dernier recours). Les règles « forbidden » restent actives.
 #
 # Utilisé par le profil workmux « cx » (config/workmux/config.yaml).
+# « jarvis-codex --tester-commit » vérifie qu'un commit passe dans le bac à sable (jarvis doctor).
 
 set -euo pipefail
 
-caches=("$HOME/.cache" "$HOME/.npm" "$HOME/.local/share/pnpm" "$HOME/.cargo/registry")
-roots=""
-for d in "${caches[@]}"; do
-  mkdir -p "$d" 2>/dev/null || continue
-  roots+="${roots:+,}\"$d\""
-done
+JARVIS_HOME="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")/.." && pwd)"
+CODEX_CFG="${CODEX_HOME:-$HOME/.codex}/config.toml"
 
-exec codex \
-  --sandbox workspace-write \
-  --ask-for-approval never \
-  -c sandbox_workspace_write.network_access=true \
-  -c "sandbox_workspace_write.writable_roots=[$roots]" \
-  "$@"
+mode="$(PYTHONPATH="$JARVIS_HOME/lib" python3 -m jarvis reglage-lire codex.mode 2>/dev/null || true)"
+
+roots=""
+add_root() { [[ -n "$1" && -d "$1" ]] && roots+="${roots:+,}\"$1\""; return 0; }
+for d in "$HOME/.cache" "$HOME/.npm" "$HOME/.local/share/pnpm" "$HOME/.cargo/registry"; do
+  mkdir -p "$d" 2>/dev/null && add_root "$d"
+done
+# Dépôt git du projet : uniquement ce qu'un commit écrit (objets, références, journaux) et les
+# métadonnées propres au worktree. Jamais .git/config ni .git/hooks : un agent pourrait y placer
+# une commande exécutée plus tard hors du bac à sable.
+if common="$(git rev-parse --path-format=absolute --git-common-dir 2>/dev/null)"; then
+  for d in objects refs logs; do add_root "$common/$d"; done
+  gitdir="$(git rev-parse --path-format=absolute --git-dir 2>/dev/null || true)"
+  [[ "$gitdir" != "$common" ]] && add_root "$gitdir"
+fi
+
+# Outils MCP : approuvés d'avance pour les serveurs choisis (réglage codex.mcp_approuves, « linear »
+# par défaut), s'ils sont déclarés dans la config de Codex. Sinon « never » les refuse.
+mcp=()
+approuves=" $(PYTHONPATH="$JARVIS_HOME/lib" python3 -m jarvis reglage-lire codex.mcp_approuves 2>/dev/null | tr ',' ' ') "
+if [[ -f "$CODEX_CFG" ]]; then
+  while IFS= read -r name; do
+    [[ "$approuves" == *" $name "* ]] || continue
+    mcp+=(-c "mcp_servers.$name.default_tools_approval_mode=\"approve\"")
+  done < <(sed -n 's/^[[:space:]]*\[mcp_servers\.\("\{0,1\}\)\([A-Za-z0-9_-]\{1,\}\)\1\][[:space:]]*$/\2/p' "$CODEX_CFG" | sort -u)
+fi
+
+sandbox=(--sandbox workspace-write --ask-for-approval never
+         -c sandbox_workspace_write.network_access=true
+         -c "sandbox_workspace_write.writable_roots=[$roots]")
+[[ "$mode" == "complet" ]] && sandbox=(--dangerously-bypass-approvals-and-sandbox)
+
+if [[ "${1:-}" == "--tester-commit" ]]; then
+  [[ "$mode" == "complet" ]] && { echo "COMPLET"; exit 0; }
+  # Hors de /tmp (toujours inscriptible dans le bac à sable) : sinon le test réussirait à tort.
+  tmp="${XDG_STATE_HOME:-$HOME/.local/state}/jarvis/essai-codex"
+  rm -rf "$tmp" && mkdir -p "$tmp"
+  trap 'rm -rf "$tmp"' EXIT
+  git init -q "$tmp/depot"
+  git -C "$tmp/depot" -c user.name=jarvis -c user.email=jarvis@localhost commit -q --allow-empty -m init
+  git -C "$tmp/depot" worktree add -q "$tmp/arbre" -b essai
+  cd "$tmp/arbre"
+  # Mêmes racines que pour un vrai agent, recalculées depuis le worktree d'essai.
+  "$JARVIS_HOME/bin/jarvis-codex" --tester-commit-dedans
+  exit 0
+fi
+if [[ "${1:-}" == "--tester-commit-dedans" ]]; then
+  if ! codex sandbox linux --help >/dev/null 2>&1; then echo "INCONNU"; exit 0; fi
+  if out="$(timeout 60 codex sandbox linux --full-auto -c "sandbox_workspace_write.writable_roots=[$roots]" \
+        -c sandbox_workspace_write.exclude_slash_tmp=true -c sandbox_workspace_write.exclude_tmpdir_env_var=true -- \
+        git -c user.name=jarvis -c user.email=jarvis@localhost commit -q --allow-empty -m essai 2>&1)"; then
+    echo "OK"
+  else
+    echo "ECHEC ${out##*$'\n'}"
+  fi
+  exit 0
+fi
+
+exec codex "${sandbox[@]}" ${mcp[@]+"${mcp[@]}"} "$@"

@@ -14,6 +14,6 @@ case "${1:-}" in
     for i in $(seq 1 30); do echo "ligne $i de la sortie de $2"; done
     echo "● Commit, push et PR."
     echo "✓ PR #12 ouverte" ;;
-  send|add|remove|list|dashboard) exit 0 ;;
+  send|add|remove|list|dashboard|close|open) exit 0 ;;
   *) echo "faux workmux : commande $1 non simulée" >&2; exit 1 ;;
 esac

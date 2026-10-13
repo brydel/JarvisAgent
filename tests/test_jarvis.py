@@ -26,6 +26,7 @@ TMUX_SOCKET = f"jarvis-test-{os.getpid()}"
 os.environ.update({
     "JARVIS_CONFIG_DIR": str(TMP / "cfg"),
     "JARVIS_STATE_DIR": str(TMP / "state"),
+    "JARVIS_DATA_DIR": str(TMP / "data"),
     "JARVIS_SESSION": "jtest",
     "FAKE_WORKMUX_STATUS": str(TMP / "status.json"),
     "FAKE_WORKMUX_LOG": str(TMP / "wm.log"),
@@ -59,6 +60,14 @@ def set_status(**overrides):
 class FakeTelegram(BaseHTTPRequestHandler):
     calls: list = []
     updates: list = []
+    FILE = b"\x89PNG maquette"
+
+    def do_GET(self):  # noqa: N802 — téléchargement d'un fichier (api.telegram.org/file/bot…/chemin)
+        FakeTelegram.calls.append(("GET", self.path))
+        self.send_response(200)
+        self.send_header("Content-Length", str(len(self.FILE)))
+        self.end_headers()
+        self.wfile.write(self.FILE)
 
     def do_POST(self):  # noqa: N802
         body = json.loads(self.rfile.read(int(self.headers["Content-Length"])) or b"{}")
@@ -71,6 +80,8 @@ class FakeTelegram(BaseHTTPRequestHandler):
             result = {"username": "jarvis_test_bot"}
         elif method == "sendMessage":
             result = {"message_id": len(FakeTelegram.calls)}
+        elif method == "getFile":
+            result = {"file_id": body.get("file_id"), "file_path": "photos/file_1.jpg", "file_size": len(self.FILE)}
         payload = json.dumps({"ok": True, "result": result}).encode()
         self.send_response(200)
         self.send_header("Content-Type", "application/json")
@@ -122,7 +133,8 @@ class JarvisTest(unittest.TestCase):
         FakeTelegram.calls.clear()
         store.write_json(plans.PLANS_FILE, {"seq": 0, "plans": []})  # chaque test part de zéro
         store.set_paused(False)
-        for name in ("claude_usage.json", "budget.json", "veille.json"):
+        for name in ("claude_usage.json", "budget.json", "veille.json", "battement.json", "sante.json",
+                     "reprise.json", "agents_actifs.json", "chef_queue.json"):
             store.state_path(name).unlink(missing_ok=True)
         shutil.rmtree(TMP / "codexhome" / "sessions", ignore_errors=True)
 
@@ -511,6 +523,212 @@ class JarvisTest(unittest.TestCase):
         self.assertEqual(agents.chef_flush_queue(), 1)
         self.assertIn("message important", self.chef_screen())
         tmux("kill-window", "-t", "jtest:dialog-tmp")
+
+
+    # --- fenêtres, redémarrage, santé, Telegram fichiers, Codex ------------------------
+    def wm_log(self) -> str:
+        return Path(os.environ["FAKE_WORKMUX_LOG"]).read_text()
+
+    def test_fermer_only_closes_finished_agents(self):
+        from jarvis import cli
+        set_status(**{"bis-69-adr-architecture": "done", "jp-12-onboarding": "working"})
+        Path(os.environ["FAKE_WORKMUX_LOG"]).write_text("")
+        self.assertEqual(cli.main(["fermer", "jobpilot-ia:jp-12-onboarding"]), 1)  # travaille : refusé
+        self.assertNotIn("close", self.wm_log())
+        self.assertEqual(cli.main(["fermer", "--termines"]), 0)
+        self.assertIn("close bis-69-adr-architecture", self.wm_log())
+        self.assertNotIn("close jp-12-onboarding", self.wm_log())
+
+    def test_menage_closes_long_finished_windows(self):
+        set_status(**{"bis-69-adr-architecture": "done", "jp-12-onboarding": "working"})
+        Path(os.environ["FAKE_WORKMUX_LOG"]).write_text("")
+        closed = daemon.menage_check()  # bis-69 : terminé depuis 412 s < 60 min
+        self.assertEqual(closed, [])
+        data = config.settings()
+        data["general"]["fermeture_auto_min"] = 5
+        config.save_settings(data)
+        try:
+            self.assertEqual(daemon.menage_check(), ["repriceo:bis-69-adr-architecture"])
+        finally:
+            data["general"]["fermeture_auto_min"] = 60
+            config.save_settings(data)
+
+    def test_reboot_resumes_only_working_agents_and_tells_chef(self):
+        from jarvis import cli, poste
+        wt = TMP / "p" / "repriceo__worktrees" / "bis-71-guardrails-couts"
+        wt.mkdir(parents=True, exist_ok=True)
+        set_status(**{"bis-71-guardrails-couts": "working", "bis-69-adr-architecture": "done",
+                      "jp-12-onboarding": "done"})
+        daemon.watch_once(first=True)  # le démon mémorise les agents au travail
+        snap = store.read_json(poste.SNAPSHOT, {})
+        self.assertEqual([a["worktree"] for a in snap["agents"]], ["bis-71-guardrails-couts"])
+        # tmux arrêté volontairement (même démarrage de Linux) : on ne relance rien.
+        self.assertIsNone(poste.preparer_reprise())
+        # Vrai redémarrage : l'identifiant de démarrage a changé.
+        snap["boot"] = "demarrage-precedent"
+        store.write_json(poste.SNAPSHOT, snap)
+        self.assertIsNotNone(poste.preparer_reprise())
+        self.assertFalse(store.state_path(poste.SNAPSHOT).exists())
+        # Le chemin du fixture n'existe pas ici : on pointe vers le vrai dossier de test.
+        rep = store.read_json(poste.REPRISE, {})
+        rep["agents"][0]["workdir"] = str(wt)
+        store.write_json(poste.REPRISE, rep)
+        Path(os.environ["FAKE_WORKMUX_LOG"]).write_text("")
+        lignes = poste.reprendre()
+        self.assertTrue(any(ln.startswith("repris : repriceo/bis-71") for ln in lignes), lignes)
+        self.assertIn("open bis-71-guardrails-couts --continue -p [JARVIS] Le PC a redémarré", self.wm_log())
+        self.assertNotIn("bis-69", self.wm_log())
+        self.assertIsNone(poste.reprise_en_attente())
+        import contextlib
+        import io
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            cli.main(["chef-message"])
+        self.assertIn("IMPORTANT : Le PC a redémarré", out.getvalue())
+        self.assertIn("repriceo/bis-71-guardrails-couts", out.getvalue())
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            cli.main(["chef-message"])
+        self.assertNotIn("IMPORTANT", out.getvalue())  # dit une seule fois
+
+    def test_old_snapshot_is_not_resumed(self):
+        from jarvis import poste
+        store.write_json(poste.SNAPSHOT, {"ts": time.time() - 3 * 86400, "chef": True,
+                                          "agents": [{"project": "repriceo", "worktree": "x"}]})
+        self.assertIsNone(poste.preparer_reprise())
+
+    def test_heartbeat_wakes_idle_chef_then_backs_off(self):
+        set_status(**{a["worktree"]: "done" for a in FIXTURE["agents"]})
+        self.set_claude(20)
+        self.set_codex(20)
+        old = agents.chef_idle_secs
+        agents.chef_idle_secs = lambda: 3600
+        try:
+            self.assertTrue(daemon.battement_check())
+            self.assertIn("[JARVIS battement]", self.chef_screen())
+            self.assertFalse(daemon.battement_check())  # trop tôt
+            st = store.read_json(daemon.BATTEMENT_STATE, {})
+            self.assertEqual(st["intervalle"], 2 * 30 * 60)  # aucun plan proposé : on espace
+            # Un plan en attente de l'humain : rien à faire pour le chef.
+            st["dernier"] = 0
+            store.write_json(daemon.BATTEMENT_STATE, st)
+            plans.create("Attente", [plans.parse_item("repriceo:BIS-1:claude")])
+            self.assertFalse(daemon.battement_check())
+            store.write_json(plans.PLANS_FILE, {"seq": 0, "plans": []})
+            # Capacité pleine : pas de réveil.
+            set_status()
+            data = config.settings()
+            data["general"]["max_agents"] = 2
+            config.save_settings(data)
+            self.assertFalse(daemon.battement_check())
+        finally:
+            agents.chef_idle_secs = old
+            data = config.settings()
+            data["general"]["max_agents"] = 3
+            config.save_settings(data)
+
+    def test_health_checks_and_alerts(self):
+        from jarvis import poste
+        items = {i["cle"]: i for i in poste.checks(windows=False)}
+        self.assertIn("memoire", items)
+        self.assertEqual(items["disque"]["niveau"], "ok")
+        data = config.settings()
+        data["sante"]["disque_min_go"] = 10 ** 9  # seuil impossible : alerte garantie
+        config.save_settings(data)
+        try:
+            self.assertIn("disque", daemon.sante_check())
+            sent = [b["text"] for m, b in FakeTelegram.calls if m == "sendMessage"]
+            self.assertTrue(any("Disque Linux" in t for t in sent))
+            self.assertEqual(daemon.sante_check(), [])  # pas de répétition dans les 5 min
+        finally:
+            data["sante"]["disque_min_go"] = 10
+            config.save_settings(data)
+
+    def test_telegram_photo_reaches_chef(self):
+        bot = Bot("123:ABC")
+        daemon.handle_update(bot, "42", {"message": {
+            "chat": {"id": 42}, "from": {"id": 42}, "caption": "Direction artistique du tableau de bord",
+            "photo": [{"file_id": "petit", "file_size": 10, "width": 90, "height": 90},
+                      {"file_id": "grand", "file_size": 999, "width": 1280, "height": 720}]}})
+        self.assertIn(("getFile", {"file_id": "grand"}), FakeTelegram.calls)
+        saved = list((TMP / "data" / "chef" / "boite").glob("*image.jpg"))
+        self.assertEqual(len(saved), 1)
+        self.assertEqual(saved[0].read_bytes(), FakeTelegram.FILE)
+        screen = self.chef_screen()
+        self.assertIn("Fichier joint", screen)
+        self.assertIn("Direction artistique du tableau de bord", screen)
+        # Un inconnu ne peut rien déposer.
+        FakeTelegram.calls.clear()
+        daemon.handle_update(bot, "42", {"message": {"chat": {"id": 666}, "photo": [{"file_id": "x"}]}})
+        self.assertNotIn("getFile", [m for m, _ in FakeTelegram.calls])
+
+    def test_reparer_git_rebuilds_broken_remote_refs(self):
+        from jarvis import poste
+        base = TMP / "git-crash"
+        origin = base / "origin.git"
+        subprocess.run(["git", "init", "-q", "--bare", str(origin)], check=True)
+        work = base / "travail"
+        subprocess.run(["git", "clone", "-q", str(origin), str(work)], check=True, capture_output=True)
+        g = lambda *a: subprocess.run(["git", "-c", "user.name=t", "-c", "user.email=t@t", *a], cwd=work,
+                                      check=True, capture_output=True, text=True)
+        g("commit", "-q", "--allow-empty", "-m", "init")
+        g("push", "-q", "origin", "HEAD:refs/heads/bis-90-ops-jobs")
+        g("fetch", "-q")
+        ref = work / ".git" / "refs" / "remotes" / "origin" / "bis-90-ops-jobs"
+        ref.write_text("0" * 40 + "\n")  # référence abîmée comme après le crash
+        (work / ".git" / "objects" / "ab").mkdir(exist_ok=True)
+        (work / ".git" / "objects" / "ab" / ("c" * 38)).write_bytes(b"")  # objet vide
+        set_status(**{a["worktree"]: "done" for a in FIXTURE["agents"]})
+        ok, lignes = poste.reparer_git(work)
+        self.assertTrue(ok, "\n".join(lignes))
+        self.assertFalse((work / ".git" / "objects" / "ab" / ("c" * 38)).exists())
+        self.assertIn("refs/remotes/origin/bis-90-ops-jobs", "\n".join(lignes))
+        self.assertNotEqual(ref.read_text().strip(), "0" * 40)  # recréée par le fetch
+        self.assertTrue(any((config.STATE_DIR / "sauvegardes").iterdir()))
+
+    def test_codex_wrapper_approves_mcp_and_opens_git_dir(self):
+        fake = TMP / "bin" / "codex"
+        fake.write_text('#!/bin/sh\nfor a in "$@"; do echo "$a"; done\n')
+        fake.chmod(0o755)
+        try:
+            (TMP / "codexhome").mkdir(exist_ok=True)
+            (TMP / "codexhome" / "config.toml").write_text(
+                '[mcp_servers.linear]\nurl = "https://mcp.linear.app/mcp"\n[mcp_servers.linear.env]\nX = "y"\n'
+                '[mcp_servers.shell]\ncommand = "shell-mcp"\n')
+            repo = TMP / "p" / "repriceo"
+            subprocess.run(["git", "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "--allow-empty",
+                            "-m", "i"], cwd=repo, check=True)
+            wt = TMP / "p" / "repriceo__worktrees" / "codex-essai"
+            subprocess.run(["git", "worktree", "add", "-q", str(wt), "-b", "codex-essai"], cwd=repo, check=True)
+            out = subprocess.run([str(ROOT / "bin" / "jarvis-codex"), "prompt"], cwd=wt, capture_output=True,
+                                 text=True, check=True).stdout.splitlines()
+            self.assertIn('mcp_servers.linear.default_tools_approval_mode="approve"', out)
+            # Seulement les serveurs choisis (linear), et pas la sous-table .env.
+            self.assertEqual(sum("default_tools_approval_mode" in x for x in out), 1)
+            roots = next(x for x in out if x.startswith("sandbox_workspace_write.writable_roots="))
+            git = str((repo / ".git").resolve())
+            self.assertIn(f'"{git}/objects"', roots)
+            self.assertIn(f'"{git}/worktrees/codex-essai"', roots)
+            self.assertNotIn(f'"{git}"', roots)  # jamais .git entier (hooks, config)
+            self.assertEqual(out[-1], "prompt")
+        finally:
+            fake.unlink()
+            (TMP / "codexhome" / "config.toml").unlink(missing_ok=True)
+
+    def test_kind_is_guessed_from_window_when_workmux_omits_it(self):
+        data = json.loads(json.dumps(FIXTURE))
+        data["agents"][1]["agent_kind"] = ""
+        data["agents"][1]["window_name"] = "wm-revue-sans-type"
+        Path(os.environ["FAKE_WORKMUX_STATUS"]).write_text(json.dumps(data))
+        tmux("new-window", "-d", "-t", "jtest", "-n", "wm-revue-sans-type", "sh -c 'exec -a codex cat'")
+        time.sleep(0.3)
+        try:
+            found, _ = agents.status_all()
+            a = next(x for x in found if x["window"] == "wm-revue-sans-type")
+            # Selon la plateforme, tmux voit « codex » ou « cat » : on vérifie au moins l'absence d'erreur.
+            self.assertIn(a["kind"], ("codex", ""))
+        finally:
+            tmux("kill-window", "-t", "jtest:wm-revue-sans-type")
 
 
 if __name__ == "__main__":

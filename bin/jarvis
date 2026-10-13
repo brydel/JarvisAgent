@@ -26,7 +26,8 @@ usage() {
 ${C_CYAN}jarvis${C_OFF} — poste de pilotage des agents IA
 
 ${C_CYAN}Pilotage${C_OFF}
-  jarvis start                          Ouvre la session « $SESSION » : cockpit + démon
+  jarvis start [--fond]                 Ouvre la session « $SESSION » : cockpit + démon
+                                        (après un redémarrage : reprend les agents et le chef)
   jarvis chef                           Lance (ou rejoint) le chef d'orchestre
   jarvis cockpit                        Interface plein écran (agents, plans, fil)
   jarvis etat                           État des agents, plans et projets
@@ -39,6 +40,9 @@ ${C_CYAN}Agents${C_OFF}
   jarvis task [--projet P] <ISSUE> <claude|codex> [desc] [--consignes fichier.md]
                                         Lance un agent sur une issue Linear, dans son worktree
   jarvis voir <projet:worktree>         Sortie récente d'un agent (même non suivi par workmux)
+  jarvis fermer <projet:worktree>|--termines
+                                        Ferme la fenêtre d'agents terminés (worktree conservé)
+  jarvis reprendre [--essai]            Relance les agents interrompus par un redémarrage
   jarvis board                          Tableau de bord workmux
   jarvis status                         Tâches et état des agents (projet courant)
 
@@ -49,6 +53,12 @@ ${C_CYAN}Réglages${C_OFF}
   jarvis regler <clé> <valeur>          ex. general.max_agents 3
   jarvis init-project [dossier]         Ajoute AGENTS.md + CLAUDE.md (protocole Linear)
   jarvis doctor                         Vérifie que tout est installé et connecté
+
+${C_CYAN}Poste${C_OFF}
+  jarvis sante                          Mémoire, disque, Docker, batterie, redémarrage Windows
+  jarvis autostart installer|retirer|etat
+                                        Démarrer Jarvis tout seul à l'ouverture de session Windows
+  jarvis reparer-git <projet>           Répare le dépôt après un arrêt brutal (sauvegarde d'abord)
 
 Exemples :
   jarvis task --projet repriceo BIS-82 claude auth-avancee
@@ -77,14 +87,46 @@ ensure_window() {  # ensure_window <nom> <commande>
     || tmux new-window -d -t "$SESSION:" -n "$1" "$2"
 }
 
+FRESH_SESSION=0
+REPRISE_INFO=""
+
 ensure_session() {
   has tmux || die "tmux n'est pas installé (lance ./install.sh)."
   local jarvis="$JARVIS_HOME/bin/jarvis"
   if ! tmux has-session -t "$SESSION" 2>/dev/null; then
+    FRESH_SESSION=1
+    # Avant le démon (qui réécrirait l'instantané) : agents interrompus par un redémarrage ?
+    REPRISE_INFO="$(py reprise-preparer 2>/dev/null || true)"
     tmux new-session -d -s "$SESSION" -n cockpit -c "$HOME" "$jarvis cockpit; exec bash"
   fi
+  # Les suggestions de prochaine commande de Claude Code n'ont aucun sens pour un agent
+  # et brouillent la lecture de son écran : désactivées pour toutes les fenêtres Jarvis.
+  tmux set-environment -g CLAUDE_CODE_ENABLE_PROMPT_SUGGESTION false
   ensure_window cockpit "$jarvis cockpit; exec bash"
   ensure_window daemon "$jarvis daemon; exec bash"
+}
+
+# Après un redémarrage : relance les agents qui travaillaient, puis le chef s'il tournait.
+resume_after_reboot() {
+  ((FRESH_SESSION)) && [[ -n "$REPRISE_INFO" ]] || return 0
+  local jarvis="$JARVIS_HOME/bin/jarvis" agents chef
+  agents="$(sed -n 's/.*"agents": \([0-9]*\).*/\1/p' <<<"$REPRISE_INFO")"
+  chef="$(sed -n 's/.*"chef": \(true\|false\).*/\1/p' <<<"$REPRISE_INFO")"
+  if [[ "$(py reglage-lire general.reprise_auto)" != "true" ]]; then
+    warn "Redémarrage détecté : ${agents:-0} agent(s) interrompu(s). Relance-les avec « jarvis reprendre »."
+    return 0
+  fi
+  if [[ "${agents:-0}" -gt 0 ]]; then
+    printf '%s↻%s Redémarrage détecté : reprise de %s agent(s)…\n' "$C_CYAN" "$C_OFF" "$agents"
+    # workmux open doit tourner DANS tmux : petite fenêtre temporaire, attendue au plus 3 min.
+    tmux new-window -d -t "$SESSION:" -n reprise \
+      "$jarvis reprendre; tmux wait-for -S jarvis-reprise-$$; sleep 5"
+    timeout 180 tmux wait-for "jarvis-reprise-$$" || warn "reprise des agents encore en cours (fenêtre « reprise »)"
+  else
+    py reprendre >/dev/null 2>&1 || true  # rien à rouvrir, mais le chef doit être informé
+  fi
+  [[ "$chef" == "true" ]] && start_chef
+  return 0
 }
 
 attach_to() {  # attach_to [fenêtre]
@@ -97,13 +139,24 @@ attach_to() {  # attach_to [fenêtre]
 }
 
 cmd_start() {
+  local fond=0
+  [[ "${1:-}" == "--fond" ]] && fond=1
   ensure_session
+  resume_after_reboot
+  ((fond)) && { ok "Jarvis tourne en arrière-plan (session « $SESSION »)."; return 0; }
   attach_to cockpit
 }
 
 cmd_chef() {
   has claude || die "Claude Code n'est pas installé (lance ./install.sh)."
   ensure_session
+  resume_after_reboot
+  start_chef
+  attach_to chef
+}
+
+start_chef() {
+  has claude || { warn "Claude Code introuvable : chef non lancé."; return 0; }
   if ! tmux list-windows -t "$SESSION" -F '#{window_name}' | grep -qx chef; then
     local dir flags="" kickoff mode
     dir="$(py chef-preparer)"
@@ -119,11 +172,10 @@ cmd_chef() {
     fi
     # JARVIS_ROLE=chef : « jarvis task » exigera alors un plan approuvé.
     tmux new-window -d -t "$SESSION:" -n chef -c "$dir" \
-      "env JARVIS_ROLE=chef claude$flags $(squote "$kickoff"); exec bash"
+      "env JARVIS_ROLE=chef CLAUDE_CODE_ENABLE_PROMPT_SUGGESTION=false claude$flags $(squote "$kickoff"); exec bash"
     py evenement chef "chef d'orchestre démarré"
     ok "Chef lancé dans la fenêtre « chef ». Il va proposer un premier plan."
   fi
-  attach_to chef
 }
 
 cmd_task() {
@@ -260,6 +312,42 @@ cmd_init_project() {
   echo "  git add AGENTS.md CLAUDE.md && git commit -m \"chore: protocole des agents\" && git push"
 }
 
+# --- Démarrage automatique (Windows + WSL) -------------------------------------------
+
+startup_file() {
+  local appdata
+  appdata="$(cmd.exe /c 'echo %APPDATA%' 2>/dev/null | tr -d '\r')" || return 1
+  [[ -n "$appdata" && "$appdata" != "%APPDATA%" ]] || return 1
+  printf '%s/Microsoft/Windows/Start Menu/Programs/Startup/jarvis-agent.vbs' "$(wslpath -u "$appdata")"
+}
+
+cmd_autostart() {
+  local action="${1:-etat}" file distro
+  [[ -n "${WSL_DISTRO_NAME:-}" ]] || grep -qi microsoft /proc/version 2>/dev/null \
+    || die "le démarrage automatique ne concerne que Windows + WSL."
+  file="$(startup_file)" || die "impossible de trouver le dossier Démarrage de Windows (cmd.exe introuvable ?)."
+  distro="${WSL_DISTRO_NAME:-Ubuntu}"
+  case "$action" in
+    installer)
+      # wscript lance wsl.exe sans fenêtre ; « sleep infinity » garde WSL (et donc tmux) en vie.
+      local cmd="$JARVIS_HOME/bin/jarvis start --fond; exec sleep infinity"
+      printf '%s\r\n' \
+        "' JarvisAgent - demarrage automatique (cree par: jarvis autostart installer)" \
+        "' Pour l'arreter : jarvis autostart retirer (ou supprime ce fichier)" \
+        "CreateObject(\"WScript.Shell\").Run \"wsl.exe -d $distro -- bash -lic \"\"$cmd\"\"\", 0, False" \
+        >"$file"
+      ok "Démarrage automatique installé : à chaque ouverture de session Windows, Jarvis repart tout seul."
+      echo "  Fichier : $file"
+      echo "  Pense aussi à Docker Desktop → Settings → General → « Start Docker Desktop when you sign in »."
+      ;;
+    retirer)
+      rm -f "$file" && ok "Démarrage automatique retiré." ;;
+    etat)
+      if [[ -f "$file" ]]; then ok "Démarrage automatique actif ($file)"; else warn "Démarrage automatique non installé (jarvis autostart installer)"; fi ;;
+    *) die "usage : jarvis autostart installer|retirer|etat" ;;
+  esac
+}
+
 cmd_doctor() {
   local errors=0
   printf '%sOutils%s\n' "$C_CYAN" "$C_OFF"
@@ -307,6 +395,23 @@ cmd_doctor() {
   ((nproj > 0)) && ok "$nproj projet(s) enregistré(s)" || warn "aucun projet : jarvis projet ajouter <nom> <chemin>"
   [[ "$(py reglage-lire telegram.chat_id)" != "" ]] && ok "Telegram relié" || warn "Telegram non relié (jarvis telegram config)"
 
+  printf '\n%sAutonomie de Codex%s\n' "$C_CYAN" "$C_OFF"
+  if has codex; then
+    local res
+    res="$("$JARVIS_HOME/bin/jarvis-codex" --tester-commit 2>&1 | tail -1)" || true
+    case "$res" in
+      OK*)     ok "Codex peut committer depuis un worktree (bac à sable)" ;;
+      COMPLET*) ok "Codex en mode complet (sans bac à sable)" ;;
+      INCONNU*) warn "test du bac à sable impossible avec cette version de Codex" ;;
+      *)       warn "Codex ne peut pas committer dans son bac à sable : ${res#ECHEC }"
+               echo "     Solution : jarvis regler codex.mode complet" ;;
+    esac
+  fi
+
+  printf '\n%sPoste%s\n' "$C_CYAN" "$C_OFF"
+  py sante 2>/dev/null | sed 's/^/  /' || true
+  if [[ -n "${WSL_DISTRO_NAME:-}" ]]; then cmd_autostart etat || true; fi
+
   printf '\n%sSession%s\n' "$C_CYAN" "$C_OFF"
   if has tmux && tmux has-session -t "$SESSION" 2>/dev/null; then
     ok "Session « $SESSION » active"
@@ -330,12 +435,14 @@ main() {
     start)        cmd_start "$@" ;;
     chef)         cmd_chef "$@" ;;
     task|t)       cmd_task "$@" ;;
-    cockpit|etat|plan|fil|projet|telegram|regler|capacite|demander|note|journal|daemon|voir|jetons|veille)
+    cockpit|etat|plan|fil|projet|telegram|regler|capacite|demander|note|journal|daemon|voir|jetons|veille|\
+    fermer|reprendre|sante|reparer-git)
                   py "$cmd" "$@" ;;
     board|b)      cmd_board "$@" ;;
     status|s|ls)  cmd_status "$@" ;;
     init-project) cmd_init_project "$@" ;;
     doctor)       cmd_doctor "$@" ;;
+    autostart)    cmd_autostart "$@" ;;
     help|-h|--help) usage ;;
     *) usage; die "commande inconnue : $cmd" ;;
   esac
