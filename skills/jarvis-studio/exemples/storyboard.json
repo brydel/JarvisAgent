@@ -1,0 +1,71 @@
+{
+  "marque": {
+    "nom": "JobPilot",
+    "accent": "#5B8CFF",
+    "fond": "#0B0D12"
+  },
+  "scenes": [
+    {
+      "type": "titre",
+      "duree": 3.4,
+      "sur_titre": "Démonstration",
+      "titre": "Ton copilote emploi",
+      "sous_titre": "Suivi, relances et lettres au même endroit."
+    },
+    {
+      "type": "capture",
+      "duree": 5.0,
+      "image": "captures/tableau.png",
+      "url": "jobpilot.app/candidatures",
+      "titre": "Tout ton suivi d'un coup d'œil",
+      "sous_titre": "Envoyées, réponses, entretiens.",
+      "zoom": {
+        "de": 1.0,
+        "a": 1.12,
+        "vers": [
+          30,
+          30
+        ]
+      },
+      "reperes": [
+        {
+          "x": 17,
+          "y": 27,
+          "texte": "Candidatures envoyées",
+          "a": 1.3
+        },
+        {
+          "x": 80,
+          "y": 27,
+          "texte": "Entretiens obtenus",
+          "a": 2.5
+        }
+      ]
+    },
+    {
+      "type": "capture",
+      "duree": 6.5,
+      "video": "$JARVIS_LIVRABLES/brouillons/parcours.webm",
+      "debut": 0.7,
+      "url": "jobpilot.app/candidatures",
+      "titre": "Une lettre en un clic"
+    },
+    {
+      "type": "points",
+      "duree": 4.6,
+      "titre": "Pourquoi JobPilot",
+      "points": [
+        "Toutes tes candidatures suivies",
+        "Relances préparées pour toi",
+        "Lettres adaptées à chaque poste"
+      ]
+    },
+    {
+      "type": "fin",
+      "duree": 3.5,
+      "titre": "Reprends la main sur ta recherche",
+      "bouton": "Essayer la démo",
+      "url": "jobpilot.app"
+    }
+  ]
+}

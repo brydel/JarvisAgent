@@ -109,6 +109,8 @@ def reprendre(dry_run: bool = False) -> list[str]:
             repris.append(label)
             lignes.append(f"repris : {label} ({ag.kind_label(a['kind'])})")
             store.feed_add("task", f"{label} repris après le redémarrage")
+            from . import taches
+            taches.reouvrir(a["project"], a["worktree"])
         else:
             echecs.append(a)
             lignes.append(f"ÉCHEC : {label} — {' '.join(err) or 'workmux open a échoué'}")
@@ -156,10 +158,18 @@ $pending = $false; foreach ($k in $keys) { if (Test-Path $k) { $pending = $true 
 """
 
 
-def _windows_info(now: float) -> dict | None:
+BATTERIE_TTL_SECTEUR = 10 * 60   # sur secteur : un débranchement est vu en dix minutes au plus
+BATTERIE_TTL_BATTERIE = 2 * 60   # sur batterie : niveau relu toutes les deux minutes
+BATTERIE_CACHE_MAX = 20 * 60     # au-delà, une mesure ne prouve plus rien : on ne restreint pas sur sa foi
+
+
+def _windows_info(now: float, rafraichir: bool = True, max_age: float = WIN_TTL) -> dict | None:
+    """Batterie et redémarrage en attente. `rafraichir=False` : cache seulement (jamais de PowerShell)."""
     cache = store.read_json(WIN_CACHE, {})
-    if cache and now - cache.get("ts", 0) < WIN_TTL:
+    if cache and now - cache.get("ts", 0) < max_age:
         return cache.get("info")
+    if not rafraichir:
+        return None
     ps = shutil.which("powershell.exe")
     if not ps:
         return None
@@ -241,6 +251,79 @@ def checks(now: float | None = None, windows: bool = True) -> list[dict]:
     except (OSError, ValueError, IndexError):
         pass
     return out
+
+
+# --- Capacité adaptée au poste ------------------------------------------------------------------
+
+MEMOIRE_RESERVE_MO = 1500  # gardée pour Windows, le navigateur, Docker et le chef
+CHARGE_MAX = 2.5           # charge moyenne par cœur au-delà de laquelle on n'ajoute plus d'agent
+
+
+def capacite(busy: int = 0, now: float | None = None) -> dict:
+    """Nombre d'agents que le PC peut porter maintenant.
+
+    Renvoie {"max": plafond effectif, "base": max_agents, "raisons": [pourquoi il est réduit]}.
+    Le plafond ne descend jamais sous le nombre d'agents déjà occupés : on n'arrête personne ici,
+    on évite seulement d'en lancer de nouveaux sur un PC qui n'a plus la place.
+    """
+    now = now or time.time()
+    base = int(config.settings()["general"].get("max_agents", 3))
+    cfg = config.settings()["sante"]
+    out = {"max": base, "base": base, "raisons": []}
+    if not cfg.get("capacite_auto", True):
+        return out
+
+    def _plafonner(n: int, raison: str) -> None:
+        n = max(busy, n)
+        if n < out["max"]:
+            out["max"] = n
+            out["raisons"].append(raison)
+
+    mem = _meminfo()
+    if mem.get("MemAvailable"):
+        libre = mem["MemAvailable"] / 1024
+        par_agent = max(200, int(cfg.get("memoire_par_agent_mo", 1200)))
+        places = int(max(0.0, libre - MEMOIRE_RESERVE_MO) // par_agent)
+        _plafonner(busy + places, f"mémoire libre {libre / 1024:.1f} Go")
+    try:
+        free = shutil.disk_usage(config.HOME).free / 1e9
+        if free < cfg["disque_min_go"] / 2:
+            _plafonner(busy, f"disque presque plein ({free:.0f} Go libres)")
+    except OSError:
+        pass
+    try:
+        charge = os.getloadavg()[0] / max(1, os.cpu_count() or 1)
+        if charge > CHARGE_MAX:
+            _plafonner(busy, f"processeur saturé (charge {charge:.1f} par cœur)")
+    except (OSError, AttributeError):
+        pass
+    info = _windows_info(now, rafraichir=False, max_age=BATTERIE_CACHE_MAX)
+    if info and info.get("batterie") is not None and not info.get("secteur", True):
+        if info["batterie"] < int(cfg.get("batterie_min_pct", 30)):
+            _plafonner(busy, f"PC sur batterie ({info['batterie']} %)")
+    return out
+
+
+def batterie(now: float | None = None, rafraichir: bool = False) -> dict | None:
+    """{"pct", "secteur"} ou None si inconnu. Avec `rafraichir`, la mesure est relue quand elle a vieilli :
+    toutes les deux minutes sur batterie, toutes les dix sur secteur (appel réservé au démon : PowerShell est lent)."""
+    now = now or time.time()
+    cache = (store.read_json(WIN_CACHE, {}) or {}).get("info") or {}
+    sur_batterie = cache.get("batterie") is not None and not cache.get("secteur", True)
+    age = BATTERIE_TTL_BATTERIE if sur_batterie else BATTERIE_TTL_SECTEUR
+    info = _windows_info(now, rafraichir=rafraichir, max_age=age if rafraichir else BATTERIE_CACHE_MAX)
+    if not info or info.get("batterie") is None:
+        return None
+    return {"pct": int(info["batterie"]), "secteur": bool(info.get("secteur", True))}
+
+
+def batterie_critique(now: float | None = None, rafraichir: bool = False) -> int | None:
+    """Pourcentage de batterie si le PC est sur batterie sous le seuil d'arrêt, sinon None."""
+    b = batterie(now, rafraichir)
+    if not b or b["secteur"]:
+        return None
+    seuil = int(config.settings()["sante"].get("batterie_arret_pct", 12))
+    return b["pct"] if b["pct"] <= seuil else None
 
 
 ICONES = {"ok": "🟢", "alerte": "🟠", "critique": "🔴"}

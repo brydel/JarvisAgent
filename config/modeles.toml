@@ -1,0 +1,104 @@
+# JarvisAgent — catalogue des modèles utilisables par les agents.
+#
+# Le routeur (jarvis modele choisir) choisit dans ce catalogue selon le rôle, la taille de la
+# tâche et la marge de jetons de chaque abonnement. Un modèle n'est utilisé qu'après un essai
+# réussi avec ton abonnement (jarvis modele verifier) : un identifiant retiré ou absent de ton
+# forfait est simplement ignoré, et le modèle par défaut du CLI prend le relais.
+#
+# Ne modifie pas ce fichier : tes ajustements vont dans ~/.config/jarvis/modeles.toml (même
+# format, il complète et remplace celui-ci), ou passent par « jarvis modele proposer ».
+#
+# fournisseur  claude | codex
+# id           valeur passée au CLI (--model). Vide = modèle par défaut du CLI, toujours valide.
+# niveau       1 léger · 2 courant · 3 fort · 4 le plus fort
+# cout         poids relatif sur l'abonnement (1 à 5) : à niveau égal, le moins coûteux gagne
+# effort       effort de raisonnement par défaut (low, medium, high, xhigh), ajusté selon la taille
+# repli        Claude uniquement : modèles de repli si le premier est indisponible ou surchargé
+# atouts       rôles pour lesquels ce modèle est préféré (voir « jarvis role liste »)
+#
+# Identifiants relevés dans la documentation officielle le 2026-10-13 :
+#   Claude Code : alias de « claude --model » (fable, opus, sonnet, haiku)
+#   Codex : https://developers.openai.com/codex/models
+
+[modeles.fable]
+fournisseur = "claude"
+id = "fable"
+niveau = 4
+cout = 5
+effort = "high"
+repli = "opus,sonnet"
+atouts = "architecte,securite,recherche"
+note = "Le plus fort côté Claude : architecture, sécurité, décisions ambiguës, longues tâches."
+
+[modeles.opus]
+fournisseur = "claude"
+id = "opus"
+niveau = 3
+cout = 4
+effort = "high"
+repli = "sonnet"
+atouts = "backend,data,design,marketing,video,revue"
+note = "Fort : logique métier, conception d'interface, relecture exigeante."
+
+[modeles.sonnet]
+fournisseur = "claude"
+id = "sonnet"
+niveau = 2
+cout = 2
+effort = "medium"
+atouts = "generaliste,frontend,qa,redaction"
+note = "Courant : le bon rapport qualité / jetons pour le travail quotidien."
+
+[modeles.haiku]
+fournisseur = "claude"
+id = "haiku"
+niveau = 1
+cout = 1
+effort = ""
+atouts = ""
+note = "Léger : petites corrections, renommages, tâches mécaniques."
+
+[modeles.claude-defaut]
+fournisseur = "claude"
+id = ""
+niveau = 2
+cout = 3
+effort = ""
+atouts = ""
+note = "Modèle par défaut de Claude Code : filet de sécurité, toujours disponible."
+
+[modeles.astra]
+fournisseur = "codex"
+id = "gpt-6-astra"
+niveau = 4
+cout = 5
+effort = "high"
+atouts = "architecte,securite"
+note = "Le plus fort côté Codex : travail complexe sur le code, raisonnement avancé."
+
+[modeles.sol]
+fournisseur = "codex"
+id = "gpt-6.1-sol"
+niveau = 3
+cout = 3
+effort = "high"
+atouts = "backend,frontend,devops,data,qa"
+note = "Fort et endurant : longues tâches de code répétées, proche du plus fort pour moins cher."
+
+[modeles.luna]
+fournisseur = "codex"
+id = "gpt-6-luna"
+niveau = 1
+cout = 1
+effort = "medium"
+atouts = "redaction"
+note = "Léger et rapide : tâches ciblées à fort volume."
+
+[modeles.codex-defaut]
+fournisseur = "codex"
+id = ""
+niveau = 2
+cout = 3
+effort = ""
+atouts = "generaliste"
+note = "Modèle par défaut de Codex : filet de sécurité, toujours disponible."

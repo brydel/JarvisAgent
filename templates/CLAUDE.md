@@ -23,6 +23,14 @@ Ce fichier est lu par Codex (`AGENTS.md`) et par Claude Code (`CLAUDE.md`). Les 
    - le nom de la branche.
    Puis ouvre une PR avec `gh pr create` (titre préfixé par l'ID de l'issue) et passe l'issue à « In Review ».
 
+## Ton rôle dans l'usine
+
+Ton prompt te donne un **rôle** (architecte, back-end, front-end, DevOps, qualité, vidéo…) et son brief : c'est ta spécialité pour cette tâche, avec sa propre définition de « fini ». Elle s'ajoute aux règles de ce fichier.
+
+- Les fichiers qui ne vont pas dans le dépôt (captures d'écran, vidéos, rapports) se déposent dans le dossier `$JARVIS_LIVRABLES`. Ne les committe jamais.
+- Tu ne livres rien toi-même à l'humain et tu ne publies rien : le chef d'orchestre fait contre-relire, puis livre.
+- Ton travail sera relu par un autre agent, d'un autre modèle. Facilite-lui la tâche : dis ce que tu as vérifié, et comment le revérifier.
+
 ## Interdits
 
 - Ne jamais fusionner dans `main`, ne jamais forcer un push.

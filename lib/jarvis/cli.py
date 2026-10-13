@@ -47,6 +47,7 @@ def cmd_plan_nouveau(a) -> int:
         for it in items:
             if it["projet"] not in known:
                 return _err(f"projet inconnu « {it['projet']} » (jarvis projet liste)")
+        plans.resoudre(items)  # rôle, fournisseur, modèle et secours de chaque tâche
         plan = plans.create(a.titre, items, mode="nuit" if a.nuit else "vague", resume=a.pourquoi, origine="chef")
     except plans.PlanError as exc:
         return _err(str(exc))
@@ -104,28 +105,49 @@ def cmd_plan_decision(a, ok: bool) -> int:
     return 0
 
 
+def _capacite(agents: list[dict]) -> tuple[int, dict]:
+    """(agents occupés, capacité du poste)."""
+    from . import poste
+    busy = sum(1 for x in agents if x["status"] in ag.BUSY)
+    return busy, poste.capacite(busy)
+
+
+def _fiche_shell(fiche: dict) -> str:
+    """Affectation d'un lancement, une « clé=valeur » par ligne, lue par bin/jarvis."""
+    keys = ("agent", "modele", "modele_id", "effort", "repli", "role", "taille", "raison")
+    lines = [f"{k}={' '.join(str(fiche.get(k) or '').split())}" for k in keys]
+    lines.append(f"par_secours={'1' if fiche.get('par_secours') else '0'}")
+    return "\n".join(lines)
+
+
 def cmd_plan_verifier(a) -> int:
-    """Utilisé par `jarvis task` : vérifie pause, capacité et plan, puis marque le lancement."""
+    """Utilisé par `jarvis task` : vérifie pause, capacité, jetons et plan, puis marque le lancement.
+
+    Affiche l'affectation à lancer (fournisseur, modèle, effort, rôle), une « clé=valeur » par ligne.
+    """
     if store.paused():
         return _err("Jarvis est en PAUSE : aucun nouveau lancement autorisé.", 3)
     from . import usage
-    kind = plans.AGENTS.get(a.agent, a.agent)
-    u = usage.summary().get(kind)
-    if u and u["niveau"] == "epuise":
-        other = "codex" if kind == "claude" else "claude"
-        reprise = usage.fmt_reset(u.get("reprise")) or "sa remise à zéro"
-        return _err(f"jetons {kind} épuisés jusqu'à {reprise} : assigne la tâche à {other} "
-                    f"(nouveau plan) ou attends.", 5)
+    resume = usage.summary()
+    epuises = {p for p in usage.PROVIDERS if resume[p]["niveau"] == "epuise"}
     agents, err = ag.status_all()
     if agents is None:
         return _err(f"impossible de compter les agents ({err})", 2)
-    busy = sum(1 for x in agents if x["status"] in ag.BUSY)
-    limit = int(config.settings()["general"].get("max_agents", 3))
+    busy, cap = _capacite(agents)
+    if cap["max"] < cap["base"] and busy >= cap["max"]:
+        return _err(f"le PC ne peut pas porter un agent de plus maintenant ({' ; '.join(cap['raisons'])}) : "
+                    "attends qu'un agent termine.", 2)
     try:
-        plans.authorize_launch(a.id, a.projet, a.issue, a.agent, busy=busy,
-                               visible={x["worktree"] for x in agents}, max_agents=limit)
+        fiche = plans.authorize_launch(a.id, a.projet, a.issue, a.agent, busy=busy,
+                                       visible={x["worktree"] for x in agents}, max_agents=cap["max"],
+                                       epuises=epuises, relecture=a.revue)
+    except plans.BudgetError as exc:
+        reprises = [usage.fmt_reset(resume[p].get("reprise")) for p in sorted(epuises) if resume[p].get("reprise")]
+        suite = f" (remise à zéro : {', '.join(reprises)})" if reprises else ""
+        return _err(f"{exc}{suite}", 5)
     except plans.PlanError as exc:
         return _err(str(exc), 2)
+    print(_fiche_shell(fiche))
     return 0
 
 
@@ -142,11 +164,12 @@ def cmd_capacite(a) -> int:
     agents, err = ag.status_all()
     if agents is None:
         return _err(f"impossible de compter les agents ({err})", 2)
-    busy = sum(1 for x in agents if x["status"] in ag.BUSY)
-    limit = int(config.settings()["general"].get("max_agents", 3))
+    busy, cap = _capacite(agents)
+    limit = cap["max"]
+    pourquoi = f" (plafond réduit : {' ; '.join(cap['raisons'])})" if cap["raisons"] else ""
     if busy >= limit:
-        return _err(f"{busy}/{limit} agents déjà occupés : attends qu'un agent termine.", 1)
-    print(f"{busy}/{limit} agents occupés")
+        return _err(f"{busy}/{limit} agents déjà occupés{pourquoi} : attends qu'un agent termine.", 1)
+    print(f"{busy}/{limit} agents occupés{pourquoi}")
     return 0
 
 
@@ -304,6 +327,8 @@ def cmd_regler(a) -> int:
     current = data[section].get(key)
     value: object = a.valeur
     allowed = {"codex.mode": ("bac-a-sable", "complet"), "plans.validation": ("humain", "auto")}.get(a.cle)
+    if current is None:
+        return _err(f"clé inconnue « {a.cle} » (voir le tableau des réglages du README)")
     if allowed and a.valeur not in allowed:
         return _err(f"{a.cle} accepte : {', '.join(allowed)}")
     if isinstance(current, bool):
@@ -480,6 +505,310 @@ def cmd_evenement(a) -> int:
     return 0
 
 
+# --- Rôles et modèles -----------------------------------------------------------------------
+
+def cmd_role_liste(a) -> int:
+    from . import roles
+    print(roles.texte())
+    return 0
+
+
+def cmd_role_voir(a) -> int:
+    from . import roles
+    r = roles.get(a.nom)
+    if not r:
+        return _err(f"rôle inconnu « {a.nom} » (jarvis role liste)")
+    print(f"{r['emoji']} {r['titre']} — équipe {r['equipe']} · niveau {r['niveau']} · {r['fournisseur']}\n")
+    print(r["corps"])
+    return 0
+
+
+def cmd_modele_liste(a) -> int:
+    from . import modeles
+    print(modeles.texte())
+    en_attente = modeles.propositions()
+    if en_attente:
+        print("\nPROPOSITIONS À VALIDER")
+        for i in en_attente:
+            print(modeles.format_proposition(i))
+    return 0
+
+
+def cmd_modele_choisir(a) -> int:
+    """Montre (ou fournit à bin/jarvis) l'affectation que le routeur choisirait."""
+    from . import modeles, taches
+    auteur = ""
+    if a.relit:
+        projet, _, issue = a.relit.partition(":")
+        auteur = taches.dernier_auteur(projet, issue)
+    try:
+        fiche = modeles.choisir(a.role or None, a.taille, a.agent, a.modele or "", auteur=auteur)
+    except modeles.RoutageError as exc:
+        return _err(str(exc))
+    if a.shell:
+        print(_fiche_shell(fiche))
+        return 0
+    print(f"→ {modeles.libelle(fiche['agent'], fiche['modele'], fiche['effort'])}")
+    print(f"  {fiche['raison']}")
+    if fiche["secours"]:
+        s = fiche["secours"]
+        print(f"  secours : {modeles.libelle(s['agent'], s['modele'], s['effort'])}")
+    return 0
+
+
+def cmd_modele_verifier(a) -> int:
+    from . import modeles, usage
+    print("Essai des modèles du catalogue avec tes abonnements (une courte requête par modèle)…")
+    res = modeles.verifier(a.noms or None, usage.summary())
+    if not res:
+        print("Aucun modèle à essayer.")
+    for nom, r in res.items():
+        mark = {True: "✓", False: "✗", None: "?"}[r["ok"]]
+        print(f"  {mark} {nom} : {r['detail']}")
+    return 0
+
+
+def cmd_modele_proposer(a) -> int:
+    from . import modeles
+    champs = {"fournisseur": a.fournisseur, "id": a.id, "niveau": a.niveau, "cout": a.cout, "effort": a.effort,
+              "atouts": a.atouts, "repli": a.repli, "note": a.note}
+    if a.retirer:
+        champs["actif"] = False
+    try:
+        item = modeles.proposer(a.nom, champs, a.pourquoi or "", a.source or "")
+    except modeles.RoutageError as exc:
+        return _err(str(exc))
+    notify.telegram(f"🧬 Proposition sur le catalogue des modèles\n\n{modeles.format_proposition(item)}",
+                    notify.proposition_buttons(item["id"]))
+    notify.toast("JARVIS · modèle à valider", f"{item['id']} : {item['nom']}")
+    print(modeles.format_proposition(item))
+    print(f"\n{item['id']} envoyé à ton humain. Sa décision te sera transmise ici.")
+    return 0
+
+
+def cmd_modele_decision(a, ok: bool) -> int:
+    refused = _human_only("modifier le catalogue des modèles")
+    if refused is not None:
+        return refused
+    from . import modeles
+    try:
+        item = modeles.decider(a.id, ok, par="terminal")
+    except modeles.RoutageError as exc:
+        return _err(str(exc))
+    print(modeles.format_proposition(item))
+    return 0
+
+
+# --- Registre des tâches, bilan, usine ------------------------------------------------------------
+
+def cmd_prompt_construire(a) -> int:
+    """Écrit le prompt d'un agent : mission, brief de son rôle, poste de travail, consignes du chef."""
+    from . import livrables, roles
+    role = roles.ou_defaut(a.role)
+    issue = a.issue.upper()
+    dossier = livrables.dossier(a.projet, issue)
+    out = [f"Tu travailles dans l'usine Jarvis en tant que **{role['titre']}** (équipe {role['equipe']}).", ""]
+    out.append("## Mission")
+    if a.revue:
+        out += [f"Mission de RELECTURE uniquement : relis la PR #{a.revue} liée à l'issue Linear {issue}.",
+                "Ne modifie aucun fichier, ne crée aucun commit, n'ouvre aucune PR.",
+                "Vérifie point par point les critères d'acceptation de l'issue, la sécurité, les tests et la lisibilité.",
+                f"Publie tes remarques avec « gh pr review {a.revue} --comment --body-file <fichier> »,",
+                "puis résume ton verdict dans l'issue Linear (commentaire « ✅ REVUE » ou « ❓ REVUE »)."]
+    elif role["nom"] == "revue":
+        out += [f"Mission de RELECTURE uniquement : relis le travail livré pour l'issue Linear {issue}.",
+                "Ne modifie aucun fichier, ne crée aucun commit, n'ouvre aucune PR.",
+                f"Ce travail est soit une PR liée à l'issue, soit des fichiers déposés dans `{dossier}` : l'issue et son "
+                "commentaire ✅ TERMINÉ te disent lesquels. Pour une vidéo ou un visuel, lance le contrôle "
+                "(`jarvis studio verifier <fichier>`), regarde la planche-contact avec ton outil de lecture d'image, "
+                "et vérifie chaque affirmation contre le produit réel.",
+                "Publie ton verdict dans l'issue Linear (commentaire « ✅ REVUE » ou « ❓ REVUE »)."]
+    else:
+        out += [f"Traite l'issue Linear {issue}. Lis-la en entier via l'outil Linear avant de commencer,",
+                f"puis suis à la lettre le protocole décrit dans {a.regles} (statut, commentaires ❓/✅, PR).",
+                "Ne fusionne jamais dans main."]
+        if role["livrable"] != "pr":
+            out += ["Ton livrable principal est un ensemble de fichiers, pas du code : dépose-les dans le dossier des "
+                    "livrables ci-dessous. La PR ne contient que les sources utiles à versionner (scénarios, "
+                    "storyboards, textes) ; s'il n'y en a aucune, ne crée pas de PR et dis-le dans ton commentaire final."]
+    if role["corps"]:
+        out += ["", f"## Ton rôle : {role['titre']}", "", role["corps"]]
+    out += ["", "## Ton poste", "",
+            f"- Projet : {a.projet} · issue : {issue} · branche : {a.branche}",
+            f"- Livrables hors dépôt (captures, vidéos, rapports) : `{dossier}` (variable `$JARVIS_LIVRABLES`). "
+            "Ne les committe jamais.",
+            f"- Outils de l'usine : `{config.JARVIS_HOME}` (variable `$JARVIS_HOME`), dont le studio "
+            "`skills/jarvis-studio/`.",
+            "- Ton commentaire final dans Linear cite ton rôle et liste les fichiers déposés dans les livrables.",
+            "- Tu ne livres rien toi-même à l'humain : le chef d'orchestre contrôle puis envoie."]
+    if a.consignes:
+        try:
+            texte = Path(a.consignes).read_text(encoding="utf-8")
+        except OSError as exc:
+            return _err(f"consignes illisibles : {exc}")
+        out += ["", "## Consignes du chef d'orchestre", "", texte.rstrip()]
+    print("\n".join(out))
+    return 0
+
+
+def cmd_tache_enregistrer(a) -> int:
+    from . import taches
+    fiche = taches.enregistrer(projet=a.projet, issue=a.issue, agent=a.agent, worktree=a.worktree, chemin=a.chemin,
+                               role=a.role, modele=a.modele, modele_id=a.modele_id, effort=a.effort, repli=a.repli,
+                               taille=a.taille, plan=a.plan, revue=a.revue, raison=a.raison, secours=a.secours)
+    print(fiche["id"])
+    return 0
+
+
+def cmd_tache_annuler(a) -> int:
+    from . import taches
+    taches.annuler(a.id)
+    return 0
+
+
+def cmd_lancement_args(a) -> int:
+    """Pour bin/jarvis-claude et bin/jarvis-codex : options du modèle et environnement du worktree courant.
+
+    Une ligne « arg<TAB>valeur » par argument du CLI, « env<TAB>NOM=valeur » par variable.
+    """
+    from . import livrables, modeles, taches
+    fiche = taches.par_chemin(os.getcwd())
+    if not fiche:
+        return 0  # worktree inconnu du registre (lancé à la main) : réglages par défaut du CLI
+    args: list[str] = []
+    cat = modeles.catalogue()
+    verif = modeles.etat_verif()
+    m = cat.get(fiche.get("modele") or "")
+    ident = fiche.get("modele_id") or ""
+    if ident and not (m and m["id"] == ident and modeles.utilisable(m, verif)):
+        # Retiré, modifié ou devenu indisponible depuis la validation du plan : un identifiant qui n'est
+        # plus celui d'un modèle vérifié ferait échouer le démarrage. Le modèle par défaut prend le relais.
+        store.feed_add("erreur", f"modèle {fiche.get('modele') or ident} indisponible : {fiche['projet']} "
+                                 f"{fiche['issue']} démarre avec le modèle par défaut")
+        ident = ""
+    surs = {x["id"] for x in cat.values() if x["fournisseur"] == a.agent and x["id"] and modeles.utilisable(x, verif)}
+    effort = fiche.get("effort") or ""
+    if a.agent == "claude":
+        if ident:
+            args += ["--model", ident]
+            replis = [x for x in (fiche.get("repli") or "").split(",") if x and x != ident and x in surs]
+            if replis:
+                args += ["--fallback-model", ",".join(replis)]
+        if effort:
+            args += ["--effort", effort]
+    else:
+        if ident:
+            args += ["--model", ident]
+        if effort:
+            args += ["-c", f'model_reasoning_effort="{effort}"']
+    for x in args:
+        print(f"arg\t{x}")
+    env = {"JARVIS_PROJET": fiche["projet"], "JARVIS_ISSUE": fiche["issue"], "JARVIS_METIER": fiche["role"],
+           "JARVIS_LIVRABLES": str(livrables.dossier(fiche["projet"], fiche["issue"]))}
+    for k, v in env.items():
+        print(f"env\t{k}={v}")
+    return 0
+
+
+def cmd_tache_liste(a) -> int:
+    from . import modeles, roles, taches
+    nombres = [x for x in a.quoi if x != "liste"]
+    if len(nombres) > 1 or any(not x.isdigit() or int(x) < 1 for x in nombres):
+        return _err("usage : jarvis tache [n]  (n = nombre de tâches à afficher)")
+    fiches = taches.toutes()[-(int(nombres[0]) if nombres else 20):]
+    if not fiches:
+        print("Aucune tâche enregistrée.")
+    for t in fiches:
+        r = roles.ou_defaut(t["role"])
+        quand = time.strftime("%d/%m %H:%M", time.localtime(t["cree"]))
+        ligne = (f"{t['id']} {quand} {t['projet']} {t['issue']} [{r['sigle']} {r['titre']}] "
+                 f"{modeles.libelle(t['agent'], t['modele'], t['effort'])} — {taches.STATUTS.get(t['statut'], t['statut'])}")
+        if t.get("jetons"):
+            ligne += f" · {taches.fmt_jetons(t['jetons'].get('total', 0))} jetons"
+        if t.get("verdict"):
+            ligne += f" · relecture : {taches.VERDICTS[t['verdict']]}"
+        print(ligne)
+    return 0
+
+
+def cmd_verdict(a) -> int:
+    from . import taches
+    if a.projet not in config.projects():
+        return _err(f"projet inconnu « {a.projet} »")
+    try:
+        fiche = taches.noter_verdict(a.projet, a.issue, a.verdict, " ".join(a.note))
+    except ValueError as exc:
+        return _err(str(exc))
+    if not fiche:
+        return _err(f"aucune tâche de production trouvée pour {a.projet} {a.issue.upper()}")
+    store.feed_add("note", f"relecture de {a.projet} {fiche['issue']} : {taches.VERDICTS[a.verdict]}")
+    print(f"Verdict enregistré pour {fiche['id']} ({a.projet} {fiche['issue']}) : {taches.VERDICTS[a.verdict]}.")
+    return 0
+
+
+def cmd_bilan(a) -> int:
+    from . import taches
+    b = taches.bilan(a.jours)
+    if a.json:
+        print(json.dumps(b, ensure_ascii=False, indent=2, default=str))
+    else:
+        print(taches.texte_bilan(b))
+    return 0
+
+
+def cmd_usine(a) -> int:
+    print(report.usine())
+    return 0
+
+
+# --- Studio et livrables --------------------------------------------------------------------------
+
+def cmd_studio_verifier(a) -> int:
+    from . import studio
+    rapport = studio.verifier(a.fichier, duree_min=a.duree_min, duree_max=a.duree_max)
+    if a.json:
+        print(json.dumps(rapport, ensure_ascii=False, indent=2))
+    else:
+        print(studio.texte(rapport))
+    return 0 if rapport["verdict"] == "PRÊT" else 1
+
+
+def cmd_livrer(a) -> int:
+    from . import livrables, studio
+    interactif = sys.stdin.isatty() and sys.stdout.isatty()
+    if os.environ.get("JARVIS_METIER") or not (os.environ.get("JARVIS_ROLE") == "chef" or interactif):
+        # Un agent de l'usine dépose ses fichiers ; c'est le chef qui contrôle, fait relire, puis livre.
+        # (Garde-fou contre l'erreur, pas barrière de sécurité : la destination reste ton seul Telegram.)
+        return _err("la livraison revient au chef d'orchestre : dépose ton fichier dans $JARVIS_LIVRABLES "
+                    "et cite-le dans ton commentaire ✅ TERMINÉ.", 4)
+    if a.forcer and (os.environ.get("JARVIS_ROLE") == "chef" or not interactif):
+        return _err("envoyer un fichier qui échoue au contrôle qualité est réservé à l'humain, dans son terminal.", 4)
+    try:
+        item = livrables.livrer(a.fichier, a.titre or "", a.legende or "", forcer=a.forcer)
+    except livrables.LivrableError as exc:
+        return _err(str(exc))
+    print(studio.texte(item["rapport"]))
+    if item["envoye"]:
+        print(f"\n{item['id']} envoyé à ton humain sur Telegram.")
+    else:
+        print(f"\n{item['id']} enregistré mais NON envoyé : {item['erreur']}. Fichier : {item['fichier']}")
+    return 0 if item["envoye"] else 6
+
+
+def cmd_livrables(a) -> int:
+    from . import livrables
+    if a.projet and a.issue:
+        if a.projet not in config.projects():
+            return _err(f"projet inconnu « {a.projet} »")
+        try:
+            print(livrables.dossier(a.projet, a.issue))
+        except livrables.LivrableError as exc:
+            return _err(str(exc))
+        return 0
+    print(livrables.texte())
+    return 0
+
+
 CHEF_KICKOFF = (
     "Nouvelle session. Applique ta boucle : relis « jarvis journal », puis « jarvis etat » et "
     "« jarvis projet liste », consulte Linear pour les projets actifs, reprends les agents en cours, "
@@ -535,6 +864,13 @@ def cmd_chef_preparer(a) -> int:
                 "Bash(jarvis veille)", "Bash(jarvis veille *)",
                 "Bash(jarvis fermer *)", "Bash(jarvis sante)", "Bash(jarvis reparer-git *)",
                 "Bash(jarvis reprendre --essai)",
+                # Usine : rôles, routeur, registre, bilan, studio et livrables.
+                "Bash(jarvis role)", "Bash(jarvis role *)", "Bash(jarvis modele)", "Bash(jarvis modele liste)",
+                "Bash(jarvis modele choisir *)", "Bash(jarvis modele proposer *)",
+                "Bash(jarvis tache)", "Bash(jarvis tache *)", "Bash(jarvis verdict *)",
+                "Bash(jarvis bilan)", "Bash(jarvis bilan *)", "Bash(jarvis usine)",
+                "Bash(jarvis studio verifier *)", "Bash(jarvis livrer *)",
+                "Bash(jarvis livrables)", "Bash(jarvis livrables *)",
                 # Veille concurrentielle : recherche web (lecture seule).
                 "WebSearch", "WebFetch",
                 "Bash(workmux status)", "Bash(workmux status *)", "Bash(workmux capture *)",
@@ -549,6 +885,11 @@ def cmd_chef_preparer(a) -> int:
                 "Bash(jarvis reglage-lire *)", "Bash(jarvis preparer-worktree *)", "Bash(jarvis chef-preparer *)",
                 "Bash(jarvis autostart)", "Bash(jarvis autostart *)", "Bash(jarvis reprise-preparer)",
                 "Bash(jarvis reprise-preparer *)", "Bash(jarvis reprendre)",
+                "Bash(jarvis modele ok *)", "Bash(jarvis modele non *)", "Bash(jarvis modele verifier)",
+                "Bash(jarvis modele verifier *)", "Bash(jarvis livrer * --forcer*)", "Bash(jarvis livrer --forcer*)",
+                "Bash(jarvis tache-enregistrer *)", "Bash(jarvis tache-annuler *)", "Bash(jarvis lancement-args *)",
+                "Bash(jarvis prompt-construire *)", "Bash(jarvis chef-lancer)", "Bash(jarvis chef-lancer *)",
+                "Bash(jarvis web)", "Bash(jarvis web *)", "Bash(jarvis relancer)", "Bash(jarvis relancer *)",
                 # Contournements de « jarvis task » et accès directs au noyau.
                 "Bash(workmux add *)", "Bash(workmux run *)", "Bash(python *)", "Bash(python3 *)",
                 "Bash(env *)", "Bash(script *)",
@@ -589,7 +930,8 @@ def build_parser() -> argparse.ArgumentParser:
     plan = sub.add_parser("plan", help="plans proposés par le chef").add_subparsers(dest="action", required=True)
     s = plan.add_parser("nouveau", help="proposer un plan à valider")
     s.add_argument("--titre", required=True)
-    s.add_argument("--item", action="append", default=[], required=True, metavar="projet:ISSUE:agent[:desc]")
+    s.add_argument("--item", action="append", default=[], required=True, metavar="projet:ISSUE:agent[/modèle][@rôle][+taille][:desc]",
+                   help="agent : claude, codex ou auto (le routeur choisit) ; taille S, M ou L")
     s.add_argument("--pourquoi", default="", help="justification courte (2-3 phrases)")
     s.add_argument("--nuit", action="store_true", help="plan de nuit, valable 16 h")
     s.set_defaults(fn=cmd_plan_nouveau)
@@ -611,6 +953,7 @@ def build_parser() -> argparse.ArgumentParser:
     s.add_argument("projet")
     s.add_argument("issue")
     s.add_argument("agent")
+    s.add_argument("--revue", action="store_true")
     s.set_defaults(fn=cmd_plan_verifier)
     s = plan.add_parser("relacher", help=argparse.SUPPRESS)
     s.add_argument("id")
@@ -700,9 +1043,117 @@ def build_parser() -> argparse.ArgumentParser:
     sub.add_parser("chef-preparer", help=argparse.SUPPRESS).set_defaults(fn=cmd_chef_preparer)
     sub.add_parser("chef-message", help=argparse.SUPPRESS).set_defaults(fn=cmd_chef_message)
 
+    # --- Rôles, modèles, registre des tâches ---
+    role = sub.add_parser("role", help="rôles spécialisés de l'usine")
+    role.set_defaults(fn=cmd_role_liste)
+    role_sub = role.add_subparsers(dest="action")
+    role_sub.add_parser("liste").set_defaults(fn=cmd_role_liste)
+    s = role_sub.add_parser("voir")
+    s.add_argument("nom")
+    s.set_defaults(fn=cmd_role_voir)
+
+    modele = sub.add_parser("modele", help="catalogue des modèles et routeur")
+    modele.set_defaults(fn=cmd_modele_liste)
+    modele_sub = modele.add_subparsers(dest="action")
+    modele_sub.add_parser("liste").set_defaults(fn=cmd_modele_liste)
+    s = modele_sub.add_parser("choisir", help="affectation que le routeur choisirait")
+    s.add_argument("--role", default="")
+    s.add_argument("--taille", default="M")
+    s.add_argument("--agent", default="auto")
+    s.add_argument("--modele", default="")
+    s.add_argument("--relit", default="", metavar="projet:ISSUE", help="contre-relecture : l'autre fournisseur")
+    s.add_argument("--shell", action="store_true", help=argparse.SUPPRESS)
+    s.set_defaults(fn=cmd_modele_choisir)
+    s = modele_sub.add_parser("verifier", help="essayer les modèles avec tes abonnements")
+    s.add_argument("noms", nargs="*")
+    s.set_defaults(fn=cmd_modele_verifier)
+    s = modele_sub.add_parser("proposer", help="proposer un ajout ou une modification du catalogue")
+    s.add_argument("nom")
+    s.add_argument("--fournisseur", choices=("claude", "codex"))
+    s.add_argument("--id", help="identifiant passé au CLI (--model)")
+    s.add_argument("--niveau", type=int, choices=(1, 2, 3, 4))
+    s.add_argument("--cout", type=int, choices=(1, 2, 3, 4, 5))
+    s.add_argument("--effort", choices=("low", "medium", "high", "xhigh"))
+    s.add_argument("--atouts", help="rôles séparés par des virgules")
+    s.add_argument("--repli", help="Claude : modèles de repli séparés par des virgules")
+    s.add_argument("--note")
+    s.add_argument("--retirer", action="store_true", help="proposer de retirer ce modèle du routage")
+    s.add_argument("--source", required=True, help="URL de la source (documentation officielle, annonce)")
+    s.add_argument("--pourquoi", required=True)
+    s.set_defaults(fn=cmd_modele_proposer)
+    s = modele_sub.add_parser("ok", help="accepter une proposition")
+    s.add_argument("id")
+    s.set_defaults(fn=lambda a: cmd_modele_decision(a, True))
+    s = modele_sub.add_parser("non", help="refuser une proposition")
+    s.add_argument("id")
+    s.set_defaults(fn=lambda a: cmd_modele_decision(a, False))
+
+    s = sub.add_parser("tache", help="registre des tâches lancées")
+    s.add_argument("quoi", nargs="*", metavar="[liste] [n]", help="nombre de tâches à afficher (20 par défaut)")
+    s.set_defaults(fn=cmd_tache_liste)
+    s = sub.add_parser("tache-enregistrer", help=argparse.SUPPRESS)
+    for opt in ("projet", "issue", "agent", "worktree"):
+        s.add_argument(f"--{opt}", required=True)
+    for opt in ("chemin", "role", "modele", "modele-id", "effort", "repli", "plan", "revue", "raison"):
+        s.add_argument(f"--{opt}", default="")
+    s.add_argument("--taille", default="M")
+    s.add_argument("--secours", action="store_true")
+    s.set_defaults(fn=cmd_tache_enregistrer)
+    s = sub.add_parser("tache-annuler", help=argparse.SUPPRESS)
+    s.add_argument("id")
+    s.set_defaults(fn=cmd_tache_annuler)
+    s = sub.add_parser("lancement-args", help=argparse.SUPPRESS)
+    s.add_argument("agent", choices=("claude", "codex"))
+    s.set_defaults(fn=cmd_lancement_args)
+    s = sub.add_parser("prompt-construire", help=argparse.SUPPRESS)
+    for opt in ("projet", "issue", "branche", "regles"):
+        s.add_argument(f"--{opt}", required=True)
+    for opt in ("role", "revue", "consignes"):
+        s.add_argument(f"--{opt}", default="")
+    s.set_defaults(fn=cmd_prompt_construire)
+    s = sub.add_parser("verdict", help="enregistrer le verdict d'une contre-relecture")
+    s.add_argument("projet")
+    s.add_argument("issue")
+    s.add_argument("verdict", choices=("pret", "corrections"))
+    s.add_argument("note", nargs="*")
+    s.set_defaults(fn=cmd_verdict)
+    s = sub.add_parser("bilan", help="ce que l'usine a produit (par fournisseur, rôle et modèle)")
+    s.add_argument("--jours", type=float, default=7)
+    s.add_argument("--json", action="store_true")
+    s.set_defaults(fn=cmd_bilan)
+    sub.add_parser("usine", help="les ateliers : qui travaille sur quoi").set_defaults(fn=cmd_usine)
+
+    # --- Studio et livrables ---
+    studio = sub.add_parser("studio", help="studio : contrôle des vidéos et visuels").add_subparsers(
+        dest="action", required=True)
+    s = studio.add_parser("verifier", help="contrôle technique + planche-contact")
+    s.add_argument("fichier")
+    s.add_argument("--duree-min", type=float)
+    s.add_argument("--duree-max", type=float)
+    s.add_argument("--json", action="store_true")
+    s.set_defaults(fn=cmd_studio_verifier)
+    s = sub.add_parser("livrer", help="contrôler un livrable puis l'envoyer à l'humain (Telegram)")
+    s.add_argument("fichier")
+    s.add_argument("--titre")
+    s.add_argument("--legende")
+    s.add_argument("--forcer", action="store_true", help="envoyer malgré un contrôle en échec (humain seulement)")
+    s.set_defaults(fn=cmd_livrer)
+    s = sub.add_parser("livrables", help="livrables récents, ou dossier d'une issue")
+    s.add_argument("projet", nargs="?")
+    s.add_argument("issue", nargs="?")
+    s.set_defaults(fn=cmd_livrables)
+
+    s = sub.add_parser("web", help="tableau de bord dans le navigateur (lecture seule)")
+    s.add_argument("--port", type=int)
+    s.set_defaults(fn=lambda a: _web(a))
     sub.add_parser("daemon", help="surveillance + Telegram").set_defaults(fn=lambda a: _daemon())
     sub.add_parser("cockpit", help="interface plein écran").set_defaults(fn=lambda a: _cockpit())
     return p
+
+
+def _web(a) -> int:
+    from . import web
+    return web.main(a.port)
 
 
 def _daemon() -> int:

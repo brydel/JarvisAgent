@@ -35,6 +35,12 @@ DEFAULTS: dict = {
         "fermeture_auto_min": 60,
         # Après un redémarrage du PC : relancer seuls les agents qui travaillaient et le chef.
         "reprise_auto": True,
+        # Si le chef s'arrête alors qu'il reste du travail (agents occupés, plan en cours), le relancer.
+        "chef_relance_auto": True,
+        # Prévenir le chef quand un agent « travaille » sans rien afficher depuis N minutes (0 = jamais).
+        "blocage_min": 45,
+        # Prévenir le chef quand une tâche dure depuis plus de N minutes (0 = jamais).
+        "duree_max_min": 240,
     },
     "codex": {
         # "bac-a-sable" : Codex écrit seulement dans son worktree et dans le dépôt git du projet.
@@ -48,6 +54,13 @@ DEFAULTS: dict = {
         "active": True,
         "disque_min_go": 10,
         "memoire_min_pct": 10,
+        # Capacité adaptée au PC : moins d'agents quand la mémoire manque, aucun lancement sur batterie
+        # faible, disque plein ou processeur saturé. max_agents reste le plafond.
+        "capacite_auto": True,
+        "memoire_par_agent_mo": 1200,
+        "batterie_min_pct": 30,
+        # Sur batterie sous ce niveau : les agents committent leur travail et Jarvis se met en pause.
+        "batterie_arret_pct": 12,
     },
     "notifications": {
         "windows": True,
@@ -60,10 +73,30 @@ DEFAULTS: dict = {
         "arret_agents": True,
         # Si les deux abonnements sont épuisés : pause automatique, levée à la remise à zéro.
         "pause_auto": True,
+        # Au-delà de ce pourcentage de la fenêtre semaine, les modèles les plus coûteux sont réservés
+        # aux grosses tâches (taille L).
+        "semaine_prudence": 70,
+    },
+    "modeles": {
+        # Un modèle du catalogue n'est utilisé qu'après un essai réussi avec ton abonnement
+        # (jarvis modele verifier, relancé seul par le démon tous les N jours).
+        "verification": True,
+        "verification_jours": 7,
+    },
+    "studio": {
+        # Taille maximale d'un livrable envoyé sur Telegram (limite de l'API Bot : 50 Mo).
+        "taille_max_mo": 49,
+    },
+    "web": {
+        # Tableau de bord dans le navigateur (lecture seule), servi par le démon sur ce PC uniquement.
+        "actif": True,
+        "port": 7717,
     },
     "veille": {
         # Veille concurrentielle par projet tous les N jours (0 = désactivée).
         "jours": 7,
+        # Veille des modèles (nouveautés Claude et Codex) tous les N jours (0 = désactivée).
+        "modeles_jours": 14,
     },
     "plans": {
         # "humain" : chaque plan attend ta validation. "auto" : approuvé aussitôt (tu es prévenu),

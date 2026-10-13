@@ -162,13 +162,181 @@ def next_reset(u: dict) -> int | None:
 
 def summary(now: float | None = None) -> dict:
     out = {}
+    hist = store.read_json(HIST_FILE, {})
     for name, fn in (("claude", claude_usage), ("codex", codex_usage)):
         u = fn(now)
         u["niveau"] = level(u)
         u["marge"] = headroom(u)
         u["reprise"] = next_reset(u)
+        u["prevision"] = prevision(u, hist.get(name) or [], now)
         out[name] = u
     return out
+
+
+# --- Historique et prévision ------------------------------------------------------------
+
+HIST_FILE = "usage_hist.json"
+HIST_PERIODE = 5 * 60       # un point toutes les 5 minutes au plus
+HIST_MAX = 72               # 6 heures d'historique
+PREVISION_FENETRE = 45 * 60  # rythme mesuré sur les 45 dernières minutes
+
+
+def enregistrer_historique(s: dict | None = None, now: float | None = None) -> None:
+    """Appelé par le démon : mémorise la consommation de la fenêtre 5 h pour en déduire le rythme."""
+    now = now or time.time()
+    s = s or summary(now)
+
+    def _add(hist):
+        for name in PROVIDERS:
+            w = (s.get(name) or {}).get("5h")
+            if not w:
+                continue
+            points = hist.setdefault(name, [])
+            if points and now - points[-1][0] < HIST_PERIODE:
+                continue
+            points.append([now, w["used"], w.get("resets_at") or 0])
+            del points[:-HIST_MAX]
+
+    store.update_json(HIST_FILE, {}, _add)
+
+
+def prevision(u: dict, points: list, now: float | None = None) -> dict | None:
+    """Rythme de consommation de la fenêtre 5 h et délai avant le seuil d'arrêt.
+
+    Renvoie {"rythme": % par heure, "minutes": avant l'arrêt, "avant_reset": bool} ou None si le
+    rythme n'est pas mesurable (pas assez de points, fenêtre remise à zéro entre-temps).
+    """
+    now = now or time.time()
+    w = u.get("5h")
+    if not w or not points:
+        return None
+    reset = w.get("resets_at") or 0
+    # Seulement les points de la fenêtre en cours : après une remise à zéro, le rythme repart de rien.
+    recents = [p for p in points if now - p[0] <= PREVISION_FENETRE and (p[2] or 0) == reset and p[1] <= w["used"]]
+    if not recents or now - recents[0][0] < 10 * 60:
+        return None
+    rythme = (w["used"] - recents[0][1]) / ((now - recents[0][0]) / 3600)
+    if rythme <= 0.5:
+        return {"rythme": max(0.0, rythme), "minutes": None, "avant_reset": False}
+    _alert, stop = thresholds()
+    minutes = max(0.0, (stop - w["used"]) / rythme * 60)
+    avant = bool(reset) and now + minutes * 60 < reset
+    return {"rythme": rythme, "minutes": minutes, "avant_reset": avant}
+
+
+# --- Jetons consommés par une tâche -------------------------------------------------------
+
+def _claude_projects_dir() -> Path:
+    return Path(os.environ.get("CLAUDE_CONFIG_DIR") or config.HOME / ".claude") / "projects"
+
+
+def claude_task_tokens(workdir: str) -> dict | None:
+    """Jetons des sessions Claude Code ouvertes dans `workdir` (journaux ~/.claude/projects)."""
+    import re
+    root = _claude_projects_dir()
+    slug = re.sub(r"[^A-Za-z0-9]", "-", str(Path(workdir)))
+    d = root / slug
+    if not d.is_dir():
+        return None
+    vus: set[str] = set()
+    tot = {"entree": 0, "sortie": 0, "cache_lecture": 0, "cache_ecriture": 0}
+    for f in d.glob("*.jsonl"):
+        try:
+            with f.open(encoding="utf-8", errors="replace") as fh:
+                for line in fh:
+                    if '"usage"' not in line:
+                        continue
+                    try:
+                        item = json.loads(line)
+                    except json.JSONDecodeError:
+                        continue
+                    msg = item.get("message") or {}
+                    us = msg.get("usage")
+                    if not isinstance(us, dict):
+                        continue
+                    # Un même message est écrit plusieurs fois pendant sa diffusion : compté une fois.
+                    key = f"{msg.get('id')}:{item.get('requestId')}"
+                    if msg.get("id") and key in vus:
+                        continue
+                    vus.add(key)
+                    tot["entree"] += int(us.get("input_tokens") or 0)
+                    tot["sortie"] += int(us.get("output_tokens") or 0)
+                    tot["cache_lecture"] += int(us.get("cache_read_input_tokens") or 0)
+                    tot["cache_ecriture"] += int(us.get("cache_creation_input_tokens") or 0)
+        except OSError:
+            continue
+    if not vus:
+        return None
+    tot["total"] = tot["entree"] + tot["sortie"] + tot["cache_ecriture"]
+    return tot
+
+
+def codex_task_tokens(workdir: str, depuis: float = 0) -> dict | None:
+    """Jetons des sessions Codex ouvertes dans `workdir` (dernier total de chaque fichier de session)."""
+    root = codex_sessions_dir()
+    if not root.exists():
+        return None
+    workdir = str(Path(workdir))
+    tot = {"entree": 0, "sortie": 0, "cache_lecture": 0, "cache_ecriture": 0}
+    trouve = False
+    day_dirs = sorted((p for p in root.glob("*/*/*") if p.is_dir()), reverse=True)[:8]
+    for d in day_dirs:
+        for f in d.glob("rollout-*.jsonl"):
+            try:
+                if depuis and f.stat().st_mtime < depuis - 60:
+                    continue
+                with f.open(encoding="utf-8", errors="replace") as fh:
+                    first = fh.readline()
+                meta = (json.loads(first).get("payload") or {}) if first.strip() else {}
+            except (OSError, json.JSONDecodeError):
+                continue
+            if str(Path(meta.get("cwd") or "/nulle-part")) != workdir:
+                continue
+            info = _last_token_info(f)
+            if not info:
+                continue
+            trouve = True
+            t = info.get("total_token_usage") or {}
+            cache = int(t.get("cached_input_tokens") or 0)
+            tot["entree"] += max(0, int(t.get("input_tokens") or 0) - cache)
+            tot["sortie"] += int(t.get("output_tokens") or 0)
+            tot["cache_lecture"] += cache
+    if not trouve:
+        return None
+    tot["total"] = tot["entree"] + tot["sortie"]
+    return tot
+
+
+def _last_token_info(path: Path) -> dict | None:
+    try:
+        with path.open("rb") as fh:
+            fh.seek(0, os.SEEK_END)
+            size = fh.tell()
+            fh.seek(max(0, size - 400_000))
+            lines = fh.read().decode("utf-8", errors="replace").splitlines()
+    except OSError:
+        return None
+    for line in reversed(lines):
+        if '"token_count"' not in line or '"total_token_usage"' not in line:
+            continue
+        try:
+            payload = json.loads(line).get("payload") or {}
+        except json.JSONDecodeError:
+            continue
+        if payload.get("type") == "token_count" and isinstance(payload.get("info"), dict):
+            return payload["info"]
+    return None
+
+
+def task_tokens(fiche: dict) -> dict | None:
+    """Consommation d'une tâche du registre (fiche de taches.py), selon son fournisseur."""
+    if not fiche.get("chemin"):
+        return None
+    if fiche.get("agent") == "claude":
+        return claude_task_tokens(fiche["chemin"])
+    if fiche.get("agent") == "codex":
+        return codex_task_tokens(fiche["chemin"], fiche.get("cree") or 0)
+    return None
 
 
 def fmt_reset(ts: int | None) -> str:
@@ -180,6 +348,11 @@ def fmt_reset(ts: int | None) -> str:
         jours = ("lun", "mar", "mer", "jeu", "ven", "sam", "dim")
         when = f"{jours[t.tm_wday]} {t.tm_mday} {when}"
     return when
+
+
+def fmt_duree(minutes: float) -> str:
+    minutes = int(minutes)
+    return f"{minutes} min" if minutes < 60 else f"{minutes // 60} h {minutes % 60:02d}"
 
 
 def bar(pct: float | None, width: int = 10) -> str:
@@ -211,6 +384,10 @@ def text(s: dict | None = None) -> str:
                 lines.append(f"          (données d'il y a {age} min : lance une session pour les rafraîchir)")
         if u["niveau"] == "epuise" and u.get("reprise"):
             lines.append(f"          → épuisé jusqu'à {fmt_reset(u['reprise'])}")
+        prev = u.get("prevision") or {}
+        if u["niveau"] != "epuise" and prev.get("minutes") is not None:
+            quand = "avant la remise à zéro" if prev["avant_reset"] else "après la remise à zéro : ça passe"
+            lines.append(f"          rythme {prev['rythme']:.0f} %/h → seuil d'arrêt dans {fmt_duree(prev['minutes'])} ({quand})")
     alert, stop = thresholds()
     lines.append(f"Seuils : alerte {alert:.0f} %, arrêt {stop:.0f} %")
     return "\n".join(lines)

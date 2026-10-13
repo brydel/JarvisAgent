@@ -1,0 +1,19 @@
+{
+  "format": "16:9",
+  "ips": 30,
+  "transition": 0.4,
+  "segments": [
+    {
+      "fichier": "$JARVIS_LIVRABLES/presentation.mp4",
+      "fin": 8.4
+    },
+    {
+      "fichier": "$JARVIS_LIVRABLES/brouillons/parcours.webm",
+      "vitesse": 1.2
+    },
+    {
+      "fichier": "$JARVIS_LIVRABLES/presentation.mp4",
+      "debut": 19.5
+    }
+  ]
+}

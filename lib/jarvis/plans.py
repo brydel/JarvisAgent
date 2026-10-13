@@ -1,7 +1,8 @@
 """Plans proposés par le chef et validés par toi (Telegram, cockpit ou terminal).
 
-Un plan liste des lancements précis : (projet, issue Linear, agent). Le chef ne peut
-lancer QUE ce qui figure dans un plan approuvé, une seule fois par élément.
+Un plan liste des lancements précis : (projet, issue Linear, agent), avec le rôle, le modèle et
+la taille de chaque tâche. Le chef ne peut lancer QUE ce qui figure dans un plan approuvé, une
+seule fois par élément, avec le modèle que tu as validé.
 Un « plan de nuit » est un plan plus long, validé avant de dormir.
 """
 
@@ -13,32 +14,87 @@ import time
 from . import store
 
 PLANS_FILE = "plans.json"
-AGENTS = {"claude": "claude", "cc": "claude", "codex": "codex", "cx": "codex"}
+AGENTS = {"claude": "claude", "cc": "claude", "codex": "codex", "cx": "codex", "auto": "auto"}
 VALIDITE = {"vague": 24 * 3600, "nuit": 16 * 3600}  # durée de validité après approbation
 
-_ITEM_RE = re.compile(r"^(?P<projet>[\w.-]+):(?P<issue>[A-Za-z]+-\d+):(?P<agent>[a-z]+)(?::(?P<desc>.+))?$")
+# projet:ISSUE:agent[/modèle][@rôle][+taille][:description]
+_ITEM_RE = re.compile(
+    r"^(?P<projet>[\w.-]+):(?P<issue>[A-Za-z]+-\d+):(?P<agent>[a-z]+)"
+    r"(?:/(?P<modele>[A-Za-z0-9._-]+))?(?:@(?P<role>[a-z-]+))?(?:\+(?P<taille>[SMLsml]))?"
+    r"(?::(?P<desc>.+))?$")
+
+
+_DESC_REVUE = re.compile(r"^(revue|relecture)(-pr-\d+)?$")
 
 
 class PlanError(ValueError):
     pass
 
 
+class BudgetError(PlanError):
+    """Lancement refusé faute de jetons chez le fournisseur prévu."""
+
+
 def parse_item(spec: str) -> dict:
-    """« repriceo:BIS-71:codex:garde-fous coûts » → élément de plan."""
+    """« repriceo:BIS-71:auto@devops+M:pipeline CI » → élément de plan (pas encore routé).
+
+    L'agent vaut claude, codex ou auto (le routeur choisit). Facultatifs : /modèle pour imposer un
+    modèle du catalogue, @rôle pour la spécialité, +S/+M/+L pour la taille.
+    """
     m = _ITEM_RE.match(spec.strip())
     if not m:
-        raise PlanError(f"élément invalide « {spec} » (attendu projet:ISSUE:agent[:description])")
+        raise PlanError(f"élément invalide « {spec} » "
+                        "(attendu projet:ISSUE:agent[/modèle][@rôle][+taille][:description])")
     agent = AGENTS.get(m["agent"])
     if not agent:
-        raise PlanError(f"agent inconnu « {m['agent']} » dans « {spec} » (claude ou codex)")
+        raise PlanError(f"agent inconnu « {m['agent']} » dans « {spec} » (claude, codex ou auto)")
     return {
         "projet": m["projet"],
         "issue": m["issue"].upper(),
         "agent": agent,
+        "modele": (m["modele"] or "").lower(),
+        "role": (m["role"] or "").lower(),
+        "taille": (m["taille"] or "M").upper(),
         "desc": (m["desc"] or "").strip(),
         "lance": False,
         "lance_ts": None,
     }
+
+
+def resoudre(items: list[dict], usage_resume: dict | None = None) -> list[dict]:
+    """Route chaque élément : fournisseur, modèle, effort et secours. Lève PlanError si impossible.
+
+    Fait à la création du plan : tu valides une affectation précise, pas un « auto ».
+    """
+    from . import modeles, taches
+    vus: set[tuple] = set()
+    for it in items:
+        # Compatibilité avec l'ancienne écriture « projet:ISSUE:codex:revue-pr-12 », et elle seule :
+        # « date-prevue » ou « revue-de-presse » ne sont pas des relectures.
+        if not it.get("role") and _DESC_REVUE.match(it.get("desc", "").strip().lower()):
+            it["role"] = "revue"
+    # La production d'abord : une relecture « auto » doit connaître le fournisseur qu'elle relit.
+    for it in sorted(items, key=lambda i: i.get("role") == "revue"):
+        role = it.get("role") or ""
+        auteur = ""
+        if role == "revue" and it["agent"] == "auto":
+            auteur = next((o["agent"] for o in items if o is not it and o["issue"] == it["issue"]
+                           and o["projet"] == it["projet"] and o.get("role") != "revue"), "")
+            auteur = auteur or taches.dernier_auteur(it["projet"], it["issue"])
+        try:
+            choix = modeles.choisir(role or None, it.get("taille") or "M", it["agent"], it.get("modele") or "",
+                                    usage_resume=usage_resume, auteur=auteur)
+        except modeles.RoutageError as exc:
+            raise PlanError(f"{it['projet']}:{it['issue']} — {exc}") from exc
+        it.update(agent=choix["agent"], modele=choix["modele"], modele_id=choix["modele_id"],
+                  effort=choix["effort"], repli=choix["repli"], role=choix["role"], taille=choix["taille"],
+                  raison=choix["raison"], secours=choix["secours"])
+        key = (it["projet"], it["issue"], it["agent"])
+        if key in vus:
+            raise PlanError(f"{it['projet']}:{it['issue']} apparaît deux fois pour {it['agent']} : "
+                            "un élément par agent et par issue")
+        vus.add(key)
+    return items
 
 
 def _empty() -> dict:
@@ -132,17 +188,86 @@ def decide(plan_id: str, ok: bool, par: str, raison: str = "") -> dict:
 RECENT_LAUNCH = 300  # s : un agent tout juste lancé peut mettre ce temps à apparaître dans workmux
 
 
+def _est_relecture(item: dict) -> bool:
+    return item.get("role") == "revue"
+
+
+def _selectionner(p: dict, plan_id: str, projet: str, issue: str, agent: str, epuises: set[str],
+                  relecture: bool = False) -> tuple[dict, bool]:
+    """Élément du plan à lancer pour (projet, issue, agent) et s'il part avec son secours.
+
+    Une issue peut porter deux éléments : la production, puis sa contre-relecture par l'autre
+    fournisseur. Sans indication, c'est la production qui part d'abord ; la relecture part quand
+    elle est demandée (`relecture`, c'est-à-dire « jarvis task --revue … ») ou quand il ne reste qu'elle.
+    Ainsi le secours d'une production ne peut jamais être confondu avec l'élément de relecture.
+    """
+    prevus = [i for i in p["items"] if (i["projet"], i["issue"]) == (projet, issue)]
+    if not prevus:
+        raise PlanError(f"{projet}:{issue} ne fait pas partie de {plan_id}")
+    libres = [i for i in prevus if not i["lance"]]
+    if relecture:
+        choix = [i for i in libres if _est_relecture(i)] or [i for i in libres if not i.get("role")]
+        if not choix:
+            raise PlanError(f"aucune contre-relecture à lancer pour {issue} dans {plan_id}")
+    else:
+        choix = [i for i in libres if not _est_relecture(i)] or libres
+
+    def _secours(i) -> str:
+        return (i.get("secours") or {}).get("agent", "")
+
+    if agent == "auto":
+        # « auto » : l'élément restant de cette issue, avec son secours si son fournisseur est épuisé.
+        if not choix:
+            raise PlanError(f"{issue} a déjà été lancé avec {plan_id}")
+        if len(choix) > 1:
+            qui = ", ".join(i["agent"] for i in choix)
+            raise PlanError(f"{issue} a plusieurs éléments à lancer dans {plan_id} ({qui}) : précise l'agent")
+        item = choix[0]
+        if item["agent"] in epuises:
+            if _secours(item) and _secours(item) not in epuises:
+                return item, True
+            raise BudgetError(f"jetons {item['agent']} épuisés et aucun secours disponible pour {issue} : attends "
+                              "la remise à zéro ou propose un nouveau plan")
+        return item, False
+
+    exact = [i for i in choix if i["agent"] == agent]
+    if exact:
+        item = exact[0]
+        if agent in epuises:
+            autre = _secours(item)
+            conseil = (f"lance-la avec son secours : jarvis task --plan {plan_id} --projet {projet} {issue} auto"
+                       if autre and autre not in epuises else "attends la remise à zéro ou propose un nouveau plan")
+            raise BudgetError(f"jetons {agent} épuisés : {conseil}")
+        return item, False
+    par_secours = [i for i in choix if _secours(i) == agent]
+    if par_secours:
+        item = par_secours[0]
+        if item["agent"] not in epuises:
+            raise PlanError(f"{projet}:{issue} est prévu pour {item['agent']} dans {plan_id} : le secours "
+                            f"({agent}) ne sert que si {item['agent']} est épuisé")
+        return item, True
+    if any(i["agent"] == agent or i.get("lance_par") == agent for i in prevus):
+        raise PlanError(f"{issue} ({agent}) a déjà été lancé avec {plan_id}")
+    qui = ", ".join(sorted({i["agent"] for i in prevus}))
+    raise PlanError(f"{projet}:{issue}:{agent} ne fait pas partie de {plan_id} (prévu pour {qui})")
+
+
 def authorize_launch(plan_id: str, projet: str, issue: str, agent: str, *,
                      busy: int | None = None, visible: set[str] | None = None,
-                     max_agents: int | None = None) -> dict:
+                     max_agents: int | None = None, epuises: set[str] | None = None,
+                     relecture: bool = False) -> dict:
     """Vérifie qu'un lancement figure dans un plan approuvé et le marque comme lancé.
 
     Si `max_agents` est donné, la capacité est vérifiée sous le même verrou : agents occupés
     (`busy`) + lancements récents pas encore visibles dans workmux (`visible` = worktrees vus).
-    Lève PlanError avec une explication si ce n'est pas autorisé.
+    `epuises` : fournisseurs sans jetons. Un élément dont le fournisseur prévu est épuisé peut être
+    lancé avec son secours (l'autre fournisseur, validé avec le plan).
+    `relecture` : le lancement demandé est une contre-relecture (« jarvis task --revue »).
+    Renvoie l'élément avec son affectation effective. Lève PlanError avec une explication sinon.
     """
     plan_id, issue, agent = plan_id.upper(), issue.upper(), AGENTS.get(agent, agent)
     visible = {v.lower() for v in (visible or set())}
+    epuises = epuises or set()
 
     def _check(data):
         if max_agents is not None:
@@ -167,16 +292,18 @@ def authorize_launch(plan_id: str, projet: str, issue: str, agent: str, *,
                 raise PlanError(f"{plan_id} est terminé : toutes ses tâches ont été lancées")
             if time.time() - (p["decide"] or 0) > VALIDITE[p["mode"]]:
                 raise PlanError(f"{plan_id} a expiré : propose un nouveau plan")
-            for item in p["items"]:
-                if (item["projet"], item["issue"], item["agent"]) == (projet, issue, agent):
-                    if item["lance"]:
-                        raise PlanError(f"{issue} ({agent}) a déjà été lancé avec {plan_id}")
-                    item["lance"] = True
-                    item["lance_ts"] = time.time()
-                    if all(i["lance"] for i in p["items"]):
-                        p["statut"] = "termine"
-                    return dict(item)
-            raise PlanError(f"{projet}:{issue}:{agent} ne fait pas partie de {plan_id}")
+            item, par_secours = _selectionner(p, plan_id, projet, issue, agent, epuises, relecture)
+            item["lance"] = True
+            item["lance_ts"] = time.time()
+            effectif = dict(item)
+            if par_secours:
+                item["lance_par"] = item["secours"]["agent"]
+                effectif.update(item["secours"])
+                effectif["par_secours"] = True
+                effectif["raison"] = (f"secours : {item['agent']} épuisé ; " + (item.get("raison") or "")).rstrip(" ;")
+            if all(i["lance"] for i in p["items"]):
+                p["statut"] = "termine"
+            return effectif
         raise PlanError(f"plan {plan_id} introuvable")
 
     return store.update_json(PLANS_FILE, _empty(), _check)
@@ -190,15 +317,29 @@ def release(plan_id: str, projet: str, issue: str, agent: str) -> None:
         for p in data["plans"]:
             if p["id"] != plan_id:
                 continue
-            for item in p["items"]:
-                if (item["projet"], item["issue"], item["agent"]) == (projet, issue, agent):
-                    item["lance"], item["lance_ts"] = False, None
-                    if p["statut"] == "termine":
-                        p["statut"] = "approuve"
-                    return
+            lances = [i for i in p["items"] if (i["projet"], i["issue"]) == (projet, issue) and i["lance"]
+                      and i.get("lance_par", i["agent"]) == agent]
+            if not lances:
+                break
+            # Le lancement qui vient d'échouer est le plus récent : une issue peut avoir deux éléments
+            # lancés par le même fournisseur (production, puis relecture partie avec son secours).
+            item = max(lances, key=lambda i: i.get("lance_ts") or 0)
+            item["lance"], item["lance_ts"] = False, None
+            item.pop("lance_par", None)
+            if p["statut"] == "termine":
+                p["statut"] = "approuve"
+            return
         raise PlanError(f"{projet}:{issue}:{agent} introuvable dans {plan_id}")
 
     store.update_json(PLANS_FILE, _empty(), _release)
+
+
+def affectation(item: dict) -> str:
+    """« Codex · sol · high » pour un élément routé, « codex » pour un ancien plan."""
+    if not item.get("modele"):
+        return item["agent"]
+    from . import modeles
+    return modeles.libelle(item["agent"], item["modele"], item.get("effort", ""))
 
 
 def format_plan(p: dict, detail: bool = True) -> str:
@@ -207,8 +348,19 @@ def format_plan(p: dict, detail: bool = True) -> str:
     if detail:
         if p.get("resume"):
             lines.append(f"  Pourquoi : {p['resume']}")
+        from . import roles
         for i in p["items"]:
             mark = "✓" if i["lance"] else "·"
             desc = f" — {i['desc']}" if i["desc"] else ""
-            lines.append(f"  {mark} {i['projet']} {i['issue']} → {i['agent']}{desc}")
+            ligne = f"  {mark} {i['projet']} {i['issue']} → {affectation(i)}"
+            if i.get("role"):
+                r = roles.ou_defaut(i["role"])
+                ligne += f"  [{r['emoji']} {r['titre']}, taille {i.get('taille', 'M')}]"
+            lines.append(ligne + desc)
+            if i.get("secours") and not i["lance"]:
+                s = i["secours"]
+                from . import modeles
+                lines.append(f"      secours si {i['agent']} est épuisé : {modeles.libelle(s['agent'], s['modele'], s.get('effort', ''))}")
+            if i.get("lance_par") and i["lance_par"] != i["agent"]:
+                lines.append(f"      lancé avec le secours ({i['lance_par']})")
     return "\n".join(lines)

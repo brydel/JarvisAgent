@@ -1,25 +1,33 @@
 # JarvisAgent
 
-Poste de pilotage pour faire travailler **plusieurs agents IA de code en parallèle** (Claude Code et Codex) sur **plusieurs SaaS à la fois**, dirigés par un **chef d'orchestre** IA qui planifie, lance, surveille, fait contre-relire et se remet en question. Tu valides depuis ton terminal ou depuis ton téléphone (Telegram).
+Une **usine à produits numériques** sur ton PC : des agents IA **spécialisés** (architecte, back-end, front-end, DevOps, sécurité, qualité, design, marketing, vidéo…) travaillent en parallèle sur **plusieurs SaaS à la fois**, exécutés par Claude Code ou Codex avec **le modèle qui convient à chaque tâche**. Un **chef d'orchestre** IA planifie, lance, surveille et fait contre-relire. Tu valides depuis ton terminal ou depuis ton téléphone (Telegram), et tu reçois les livrables finis : pull requests, vidéos de produit, dossiers de campagne.
 
 ```
- Toi ── Telegram / cockpit ──▶ démon Jarvis ──▶ CHEF D'ORCHESTRE (Claude, rôle chef/CLAUDE.md)
-  ▲        ✅ Approuver / ✋ Refuser    │              │ propose des plans → tu valides
-  │                                     │              │ jarvis task --plan …
-  │                                     ▼              ▼
-  │                       surveillance workmux    Agents Claude / Codex (1 worktree + 1 fenêtre tmux chacun)
-  │                                                    │ lisent leur issue Linear, codent, ouvrent une PR
-  └──────────── GitHub : tu relis et tu fusionnes ◀────┘
+ Toi ── Telegram / cockpit / web ──▶ démon Jarvis ──▶ CHEF D'ORCHESTRE (Claude, rôle chef/CLAUDE.md)
+  ▲        ✅ Approuver / ✋ Refuser       │                │ propose des plans → tu valides
+  │                                       │                │ jarvis task --plan …
+  │                                       ▼                ▼
+  │            surveillance, jetons, PC ◀─┤   ROUTEUR : rôle + taille + jetons → fournisseur, modèle, effort
+  │                                       │                │
+  │                                       ▼                ▼
+  │        Conception · Fabrication · Exploitation · Qualité · Studio · Veille
+  │        (1 spécialiste = 1 worktree + 1 fenêtre tmux, Claude ou Codex)
+  │                                       │
+  └── PR à fusionner (GitHub) · vidéos et dossiers (Telegram) ◀── contre-relecture par l'autre fournisseur
 ```
 
-## Ce que fait le superagent
+## Ce que fait l'usine
 
-- **Planifie** : il lit tes projets (registre Jarvis) et leurs issues Linear, puis prépare des **vagues** de tâches indépendantes.
-- **Se remet en question** : avant chaque plan, il fait une pré-mortem et le fait attaquer par un sous-agent « avocat du diable ». Après chaque vague, il écrit un bilan avec les causes racines dans son journal, qui lui sert de mémoire.
-- **Te demande la permission** : chaque plan t'arrive sur Telegram avec des boutons **Approuver / Refuser**. Il ne peut lancer **que** ce que tu as approuvé, une seule fois par tâche : ce n'est pas une consigne, `jarvis task` le refuse techniquement.
-- **Dirige l'équipe** : il lance les agents avec des consignes précises, répond à leurs questions techniques, les relance s'ils bloquent, et fait relire le travail de Claude par Codex et inversement.
-- **Travaille la nuit** : le **plan de nuit** est une liste ordonnée que tu valides avant de dormir. Il l'exécute au fil des places libres, puis t'envoie un bilan le matin.
-- **Garde-fous** : il ne code pas, ne fusionne pas, ne pousse rien, ne lit pas les `.env`. Il respecte un plafond d'agents simultanés et la **pause** (`/pause` sur Telegram).
+- **Spécialise** : chaque tâche part avec un rôle. L'agent reçoit le brief de son métier (ses règles, sa définition de « fini »), et tu vois dans le cockpit quel atelier travaille : DevOps, front-end, vidéo…
+- **Choisit le modèle** : un routeur affecte à chaque tâche un fournisseur (Claude ou Codex), un modèle et un effort de raisonnement, selon le rôle, la taille de la tâche, les atouts de chaque modèle et les jetons qu'il reste. Le choix est expliqué, et tu le valides avec le plan.
+- **Planifie** : le chef lit tes projets et leurs issues Linear, puis prépare des **vagues** de tâches indépendantes.
+- **Se remet en question** : pré-mortem et « avocat du diable » avant chaque plan, bilan avec causes racines après chaque vague.
+- **Te demande la permission** : chaque plan t'arrive sur Telegram avec des boutons **Approuver / Refuser**. Le chef ne peut lancer **que** ce que tu as approuvé, une seule fois par tâche, avec le modèle validé : ce n'est pas une consigne, `jarvis task` le refuse techniquement.
+- **Fait contre-relire** : ce que Claude produit, Codex le relit, et inversement. Le verdict est enregistré ; le bilan liste ce qui n'a pas été relu.
+- **Produit plus que du code** : le **studio** filme le produit, anime une présentation, monte la vidéo, la contrôle et te l'envoie sur Telegram, avec le dossier de campagne.
+- **Gère les jetons et le PC** : consommation réelle des deux abonnements, prévision d'épuisement, bascule sur l'autre fournisseur, capacité adaptée à la mémoire et à la batterie.
+- **Travaille la nuit** : le **plan de nuit** est une liste ordonnée que tu valides avant de dormir. Bilan le matin.
+- **Garde-fous** : le chef ne code pas, ne fusionne pas, ne pousse rien, ne lit pas les `.env`, ne publie rien à l'extérieur. Il respecte la capacité et la **pause** (`/pause` sur Telegram).
 
 ## Installation (Windows + WSL)
 
@@ -40,7 +48,7 @@ git clone https://github.com/brydel/JarvisAgent.git
 cd JarvisAgent && ./install.sh
 ```
 
-Le script installe tmux, gh, Node 22, Claude Code, Codex et workmux, active le suivi des agents et branche Linear. Il ignore les versions Windows de `claude` et `codex` qui traînent dans le PATH de WSL. Tu peux le relancer autant de fois que tu veux.
+Le script installe tmux, gh, Node 22, Claude Code, Codex, workmux et le studio vidéo (ffmpeg, Playwright, Chromium ; `--no-studio` pour s'en passer), active le suivi des agents et branche Linear. Il ignore les versions Windows de `claude` et `codex` qui traînent dans le PATH de WSL. Tu peux le relancer autant de fois que tu veux.
 
 **3. Les connexions** (une seule fois) : suis la liste « À faire maintenant » affichée à la fin (Claude, Codex, GitHub, Linear).
 
@@ -61,7 +69,11 @@ jarvis telegram config
 
 Suis les étapes : tu crées un bot avec **@BotFather**, tu colles son jeton, puis tu envoies au bot le code à 6 chiffres affiché. Seule **ta** conversation est acceptée ; tout autre expéditeur est refusé.
 
-**6. Vérifier** : `jarvis doctor`. Tout doit être vert.
+**6. Les modèles** : `jarvis modele verifier` essaie chaque modèle du catalogue avec tes abonnements (une courte requête par modèle). Le démon le refait seul chaque semaine.
+
+**7. Vérifier** : `jarvis doctor`. Tout doit être vert.
+
+**Mise à jour** : `git pull` dans le dépôt, `./install.sh` (idempotent), puis `jarvis relancer --chef`. Le démon, le cockpit et le chef repartent avec la nouvelle version ; les agents déjà lancés ne sont pas touchés et finissent leur tâche.
 
 > Garde tes projets dans Linux (`~/projets/...`), jamais dans `/mnt/c/...`.
 
@@ -77,30 +89,47 @@ Ensuite, tu pilotes depuis le **cockpit** ou depuis **Telegram**.
 ### Le cockpit
 
 ```
- ◆ J A R V I S  ·  poste de pilotage                                         22:35:08
- Agents 2/3   ? 1 en attente   ✓ 1 terminés   ◇ 1 plan(s) à valider   ● chef actif   ● Telegram
-╭─ AGENTS ───────────────────────────────────────────────╮╭─ À VALIDER ───────────────────╮
-│ ?  repriceo     bis-71-guardrails-couts  Codex  attend  ││ ◇ P-0002 Nuit : auth [nuit]   │
-│ ▶  jobpilot-ia  jp-12-onboarding         Claude travail…││   repriceo BIS-72 → claude    │
-│ ✓  repriceo     bis-69-adr-architecture  Claude terminé ││   jobpilot-ia JP-14 → codex   │
-╰─────────────────────────────────────────────────────────╯╰───────────────────────────────╯
-╭─ FIL D'ACTIVITÉ ────────────────────────────────────────────────────────────────────────╮
-│ 22:34 ◇ P-0001 proposé : Vague docs architecture (2 tâche(s), vague)                    │
-│ 22:34 ✓ P-0001 approuvé (Telegram)                                                       │
+ ◆ J A R V I S  ·  usine                                          ● démon  ● chef  ● Telegram    10:14:17
+ Agents 5/5   ? 1 attend   ✓ 1 terminé   ◇ 2 à valider   ▣ 2 livrables
+ ● Claude 5h █████░░░  62%  sem ███░░░░░  41%  ↗23%/h ⚠ 1 h 24    ● Codex 5h ██░░░░░░  22%     ▪ 7.3 Go libres
+╭─ ATELIERS ──────────────────────────────────── 5 au travail · v : vue ─╮╭─ À VALIDER ─────────────── 2 ─╮
+│ CONCEPTION · libres : DSG                                              ││ ◇ P-0001 Vague auth [vague]   │
+│  ARC  Architecte ▶ repriceo     bis-90-adr-auth   Claude · fable · high ││    FRT  BIS-82 → Codex · sol  │
+│ FABRICATION · libres : DAT DEV                                         ││    SEC  BIS-83 → Codex · astra│
+│  BCK  Back-end   ? repriceo     bis-71-guardrails Codex · sol · high    ││ ◈ M-0001 modèle sol (codex)   │
+│  FRT  Front-end  ▶ jobpilot-ia  jp-12-onboarding  Codex · sol · high    │╰───────────────────────────────╯
+│ EXPLOITATION · libres : SEC                                            │╭─ LIVRABLES ─────────────── 2 ─╮
+│  OPS  DevOps     ▶ repriceo     bis-77-pipeline   Codex · sol · high    ││ ▶ L-0002 Teaser 15 s   09:53  │
+│ STUDIO · libres : MKT RED                                              ││ ≡ L-0001 Dossier       08:43  │
+│  VID  Vidéo      ▶ jobpilot-ia  jp-20-video       Claude · opus · high  │╰───────────────────────────────╯
+╰────────────────────────────────────────────────────────────────────────╯
+╭─ FIL D'ACTIVITÉ ─────────────────────────────────────────────── p : aperçu · d : fiche · b : bilan ─╮
+│ 10:13 » repriceo BIS-77 lancé → codex · sol · high [devops] (P-0001)                                 │
 ```
+
+Chaque agent porte la pastille colorée de son rôle. Les postes libres de chaque équipe tiennent sur la ligne d'en-tête.
 
 | Touche | Action |
 | --- | --- |
-| **Tab** | Passer du panneau Agents au panneau À valider |
-| **↑ ↓** | Choisir un agent ou un plan |
+| **Tab** | Passer du panneau Ateliers au panneau À valider |
+| **↑ ↓** | Choisir un agent, un plan ou une proposition de modèle |
 | **Entrée** | Ouvrir la fenêtre de l'agent (Ctrl+B puis 1 pour revenir) |
-| **o** / **x** | Approuver / refuser le plan sélectionné |
+| **o** / **x** | Approuver / refuser le plan ou la proposition sélectionnés |
 | **p** | Aperçu en direct de la sortie de l'agent sélectionné |
+| **d** | Fiche de la tâche : rôle, modèle et pourquoi ce choix, plan d'origine, jetons, verdict |
+| **b** | Bilan des 7 derniers jours (par fournisseur, rôle et modèle) |
+| **v** | Basculer entre la vue par ateliers et la liste simple |
 | **m** | Écrire au chef |
 | **e** | Écrire directement à l'agent sélectionné |
 | **c** | Ouvrir la fenêtre du chef |
 | **P** | Pause / reprise : plus aucun nouveau lancement |
 | **q** | Quitter le cockpit |
+
+### Le tableau de bord web
+
+`jarvis web` (ou http://localhost:7717 dès que le démon tourne) ouvre le **plan de l'usine** dans ton navigateur Windows : une travée par équipe, un poste par spécialité, les postes occupés allumés à la couleur de leur rôle, les réservoirs de jetons, les plans en attente, et les livrables avec leur lecteur vidéo.
+
+Il est en **lecture seule** et ne répond qu'à ce PC : approuver un plan reste réservé au cockpit, au terminal et à Telegram. `jarvis regler web.actif false` le coupe.
 
 ### Telegram
 
@@ -108,19 +137,23 @@ Ensuite, tu pilotes depuis le **cockpit** ou depuis **Telegram**.
 | --- | --- |
 | Boutons ✅ / ✋ sous un plan | Approuver ou refuser |
 | `/etat` | Agents et plans en cours |
-| `/plans` | Plans à valider, avec boutons |
-| `/jetons` | Consommation Claude et Codex |
+| `/usine` | Les ateliers : quel spécialiste travaille sur quoi, avec quel modèle |
+| `/plans` | Plans et propositions de modèles à valider, avec boutons |
+| `/livrables` | Vidéos, visuels et rapports produits |
+| `/modeles` | Catalogue des modèles et leur disponibilité |
+| `/bilan` | Ce que l'usine a produit sur 7 jours |
+| `/jetons` | Consommation Claude et Codex, rythme et prévision |
 | `/sante` | État du PC : mémoire, disque, Docker, batterie, redémarrage Windows en attente |
 | `/pause` · `/reprendre` | Bloquer ou relancer les lancements |
 | N'importe quel texte | Transmis au chef (« Priorise JobPilot cette nuit ») |
 | Une **image** ou un **fichier** (avec légende) | Enregistré dans le dossier du chef, qui l'ouvre (maquette, direction artistique, capture, PDF) |
 
-Tu reçois aussi les questions du chef (❓) et ses bilans (📝), avec une notification Windows quand tu es sur ton PC.
+Tu reçois aussi les questions du chef (❓), ses bilans (📝) et les **livrables** (🎬 vidéos, 🖼 visuels, 📄 documents), avec une notification Windows quand tu es sur ton PC.
 
 ### Une journée type
 
 1. **Matin** : lis le bilan de nuit sur Telegram, puis relis et fusionne les PR prêtes.
-2. **Journée** : le chef propose des vagues, tu approuves en un clic, tu réponds à ses questions.
+2. **Journée** : le chef propose des vagues, tu approuves en un clic, tu réponds à ses questions. Tu peux lui écrire « prépare la campagne de lancement de JobPilot » : il découpe, fait produire, contrôle, et t'envoie la vidéo et le dossier.
 3. **Soir** : écris « je vais dormir » au chef. Il propose un **plan de nuit**, tu l'approuves, et l'équipe travaille pendant que tu dors.
 
 ## Commandes
@@ -129,8 +162,8 @@ Tu reçois aussi les questions du chef (❓) et ses bilans (📝), avec une noti
 | --- | --- |
 | `jarvis start [--fond]` | Session `jarvis` : cockpit + démon. Après un redémarrage du PC, reprend les agents qui travaillaient et le chef |
 | `jarvis chef` | Lance ou rejoint le chef d'orchestre |
-| `jarvis cockpit` | Interface plein écran |
-| `jarvis etat` | État complet (agents, plans, projets, capacité) |
+| `jarvis cockpit` · `jarvis web` | Interface plein écran · tableau de bord dans le navigateur |
+| `jarvis etat` · `jarvis usine` | État complet (agents, plans, projets, capacité) · les ateliers |
 | `jarvis plan liste` · `voir P-1` · `ok P-1` · `non P-1 raison` | Gérer les plans depuis le terminal |
 | `jarvis fil [n]` · `jarvis journal` | Événements récents · journal du chef |
 | `jarvis voir projet:worktree` | Sortie récente d'un agent |
@@ -139,13 +172,21 @@ Tu reçois aussi les questions du chef (❓) et ses bilans (📝), avec une noti
 | `jarvis sante` | État du PC |
 | `jarvis autostart installer\|retirer\|etat` | Démarrer Jarvis tout seul à l'ouverture de session Windows |
 | `jarvis reparer-git <projet>` | Après un arrêt brutal : sauvegarde `.git`, recrée les références distantes cassées, `fetch` et `fsck` |
-| `jarvis task [--projet P] [--plan ID] <ISSUE> <claude\|codex> [desc] [--consignes f.md] [--revue N°PR]` | Lancer un agent sur une issue (`--revue` : relecture seule d'une PR). Hors terminal interactif, un plan approuvé est obligatoire |
+| `jarvis task [--projet P] [--plan ID] <ISSUE> <claude\|codex\|auto> [desc] [--role R] [--taille S\|M\|L] [--modele M] [--consignes f.md] [--revue N°PR]` | Lancer un agent spécialisé sur une issue (`--revue` : relecture seule d'une PR). Hors terminal interactif, un plan approuvé est obligatoire et fixe le rôle et le modèle |
+| `jarvis role` · `jarvis role voir <nom>` | Les spécialités et le brief de chacune |
+| `jarvis modele` · `choisir --role R` · `verifier` · `ok\|non M-1` | Catalogue des modèles · ce que le routeur choisirait · essai avec tes abonnements · décider d'une proposition du chef |
+| `jarvis tache [n]` · `jarvis bilan [--jours 7]` | Registre des tâches (rôle, modèle, jetons, verdict) · bilan par fournisseur, rôle et modèle |
+| `jarvis verdict <projet> <ISSUE> pret\|corrections [note]` | Enregistrer le verdict d'une contre-relecture |
+| `jarvis studio verifier <fichier>` | Contrôle technique d'une vidéo ou d'un visuel + planche-contact |
+| `jarvis livrer <fichier> [--titre T] [--legende L]` | Contrôler un livrable puis te l'envoyer sur Telegram |
+| `jarvis livrables [<projet> <ISSUE>]` | Livrables récents, ou dossier d'une issue |
 | `jarvis projet ajouter\|liste` | Registre des projets |
 | `jarvis telegram config\|test` | Liaison Telegram |
 | `jarvis regler <clé> <valeur>` | Réglages (voir ci-dessous) |
 | `jarvis board` · `jarvis status` | Tableau de bord workmux · tâches du projet courant |
 | `jarvis init-project [dossier]` | Protocole Linear dans un projet |
 | `jarvis doctor` | Diagnostic complet |
+| `jarvis relancer [--chef]` | Après une mise à jour : relance le démon et le cockpit (et le chef), sans toucher aux agents |
 
 ### Réglages
 
@@ -159,12 +200,21 @@ Tu reçois aussi les questions du chef (❓) et ses bilans (📝), avec une noti
 | `general.battement_min` | `30` | Réveille le chef s'il reste de la place et des jetons après N min de calme (0 = jamais ; l'intervalle double tant qu'il ne trouve rien, jusqu'à 4 h) |
 | `general.fermeture_auto_min` | `60` | Ferme la fenêtre d'un agent terminé depuis N min (0 = jamais) |
 | `general.reprise_auto` | `true` | Après un redémarrage, `jarvis start` relance les agents qui travaillaient et le chef |
+| `general.chef_relance_auto` | `true` | Relancer le chef s'il s'arrête alors qu'il reste du travail (3 fois par heure au plus) |
+| `general.blocage_min` · `general.duree_max_min` | `45` · `240` | Prévenir le chef quand un agent n'affiche plus rien depuis N min, ou travaille depuis plus de N min |
 | `codex.mode` | `bac-a-sable` | `complet` : Codex sans bac à sable (dernier recours si `jarvis doctor` dit qu'il ne peut pas committer) |
 | `sante.active` · `sante.disque_min_go` · `sante.memoire_min_pct` | `true` · `10` · `10` | Surveillance du PC et seuils d'alerte |
+| `sante.capacite_auto` · `sante.memoire_par_agent_mo` | `true` · `1200` | Moins d'agents quand la mémoire manque ; aucun lancement sur batterie faible, disque plein ou processeur saturé |
+| `sante.batterie_min_pct` · `sante.batterie_arret_pct` | `30` · `12` | Sur batterie : plus de lancement sous le premier seuil ; sous le second, les agents committent et Jarvis se met en pause |
 | `notifications.windows` | `true` | Notifications Windows |
 | `jetons.alerte` · `jetons.arret` | `80` · `95` | Seuils d'alerte et d'arrêt (en % d'une fenêtre) |
 | `jetons.arret_agents` | `true` | À l'arrêt, demander aux agents de committer et de s'arrêter |
 | `jetons.pause_auto` | `true` | Pause automatique si les deux abonnements sont épuisés |
+| `jetons.semaine_prudence` | `70` | Au-delà de ce % de la fenêtre semaine, les modèles coûteux sont réservés aux tâches de taille L |
+| `modeles.verification` · `modeles.verification_jours` | `true` · `7` | N'utiliser un modèle qu'après un essai réussi avec ton abonnement ; fréquence du nouvel essai |
+| `veille.modeles_jours` | `14` | Fréquence de la veille des modèles (0 = désactivée) |
+| `studio.taille_max_mo` | `49` | Taille maximale d'un livrable envoyé sur Telegram |
+| `web.actif` · `web.port` | `true` · `7717` | Tableau de bord web (lecture seule, ce PC uniquement) |
 | `veille.jours` | `7` | Fréquence de la veille concurrentielle (0 = désactivée) |
 | `plans.validation` | `humain` | `auto` : les plans sont approuvés sans attendre ta validation |
 
@@ -179,27 +229,105 @@ Exemple : `jarvis regler general.max_agents 4`. Les réglages vivent dans `~/.co
 | Ctrl+B puis L | Agent qui a fini ou qui attend |
 | Ctrl+B puis D | Se détacher sans rien arrêter (`jarvis start` pour revenir) |
 
+## Les rôles : une équipe de spécialistes
+
+| Équipe | Rôles (`jarvis role`) |
+| --- | --- |
+| Conception | `architecte` · `design` |
+| Fabrication | `backend` · `frontend` · `data` · `generaliste` |
+| Exploitation | `devops` · `securite` |
+| Qualité | `qa` · `revue` (contre-relecture, aucun commit) |
+| Studio | `marketing` · `video` · `redaction` |
+| Veille | `recherche` |
+
+Un rôle est un fichier `roles/<nom>.md` : un en-tête (titre, équipe, couleur, niveau attendu, fournisseur préféré) et le **brief** que l'agent reçoit en plus des consignes du chef. Pour adapter un rôle ou en créer un, dépose un fichier du même format dans `~/.config/jarvis/roles/` : il remplace ou complète ceux du dépôt, sans toucher au code.
+
+Dans un plan, une tâche s'écrit `projet:ISSUE:agent[/modèle][@rôle][+taille][:description]` :
+
+```bash
+jarvis plan nouveau --titre "Vague auth" --pourquoi "…" \
+  --item repriceo:BIS-82:auto@frontend+M:auth-2fa \
+  --item repriceo:BIS-83:auto@securite+L:audit-sessions \
+  --item repriceo:BIS-82:auto@revue:revue-pr-41
+```
+
+```
+P-0007 — Vague auth  [vague, ⏳ en attente]
+  · repriceo BIS-82 → Codex · sol · high  [🖥️ Développeur front-end, taille M] — auth-2fa
+      secours si codex est épuisé : Claude · sonnet · medium
+  · repriceo BIS-83 → Claude · fable · xhigh  [🛡️ Ingénieur sécurité, taille L] — audit-sessions
+      secours si claude est épuisé : Codex · astra · xhigh
+```
+
+## Le routeur de modèles
+
+`agent` vaut `claude`, `codex` ou **`auto`**. Avec `auto`, le routeur choisit, et explique son choix (`jarvis modele choisir --role frontend --taille M`). Il tient compte :
+
+1. du **niveau** visé : celui du rôle, ajusté par la taille (`S` −1, `M`, `L` +1). Un modèle trop faible est pénalisé plus fort qu'un modèle trop puissant ;
+2. des **atouts** de chaque modèle (les rôles pour lesquels il est préféré) et du fournisseur préféré du rôle ;
+3. des **jetons** : marge de chaque abonnement, alerte, prévision d'épuisement avant la remise à zéro, fenêtre semaine (au-delà de 70 %, les modèles coûteux sont gardés pour les tâches `L`) ;
+4. de la **disponibilité réelle** : un modèle n'est utilisé qu'après un essai réussi avec ton abonnement. Un identifiant retiré ou absent de ton forfait est ignoré, et le modèle par défaut du CLI prend le relais.
+
+L'**effort de raisonnement** suit la taille. Chaque tâche reçoit aussi un **secours** chez l'autre fournisseur, utilisable seulement si le premier est épuisé au lancement : la nuit ne s'arrête pas parce qu'un abonnement est vide.
+
+Le catalogue vit dans `config/modeles.toml` (valeurs du dépôt) et `~/.config/jarvis/modeles.toml` (tes ajustements). Il évolue de deux façons :
+
+- **Veille des modèles** : tous les 14 jours, le chef cherche les nouveautés de Claude Code et de Codex dans les sources officielles, croise avec le bilan de l'usine, et **propose** des changements (`jarvis modele proposer … --source <URL>`). Tu acceptes ou refuses (Telegram, cockpit, `jarvis modele ok M-0001`). Un modèle accepté est essayé avant d'être utilisé.
+- **À la main** : édite `~/.config/jarvis/modeles.toml`, puis `jarvis modele verifier`.
+
+> Les identifiants de `config/modeles.toml` ont été relevés dans la documentation officielle le 13 octobre 2026. Ils changent tous les quelques mois : `jarvis modele` montre ce qui est vérifié chez toi.
+
+## Le studio : vidéos, visuels, campagnes
+
+Demande au chef « prépare la campagne publicitaire de JobPilot » : tu n'obtiens pas un texte, tu reçois sur Telegram une **vidéo de produit** et le **dossier de campagne**.
+
+```
+ stratège marketing ──▶ brief, angles, annonces, scénario
+ motion designer   ──▶ filme l'application (enregistrer.cjs) ─▶ scènes animées (rendre.cjs)
+                       ─▶ montage (monter.py) ─▶ contrôle + planche-contact (verifier.py) ─▶ corrige, recommence
+ relecteur (autre fournisseur) ──▶ regarde la planche-contact, vérifie chaque promesse contre le produit
+ chef ──▶ jarvis studio verifier ─▶ regarde ─▶ jarvis livrer ──▶ ton Telegram
+```
+
+- `skills/jarvis-studio/` contient la méthode (`SKILL.md`) et les scripts. Tout est local et gratuit : Chromium filme et dessine, ffmpeg monte.
+- **Filmer** : un scénario JSON décrit le parcours dans l'application lancée en local, avec un curseur visible et des zones sensibles floutées.
+- **Animer** : un storyboard JSON décrit titres, captures mises en scène (zoom, repères), arguments et écran de fin, aux couleurs de la marque. Le rendu est calculé image par image : fluide et identique à chaque fois, en 16:9, 9:16, 1:1 ou 4:5.
+- **Contrôler** : durée, définition, fluidité, compatibilité, taille, écrans noirs, images figées, plus une planche-contact que l'agent, le relecteur et le chef regardent.
+- **Livrer** : `jarvis livrer` refuse une vidéo qui échoue au contrôle. Les fichiers vivent dans `~/.local/share/jarvis/livrables/<projet>/<ISSUE>/`, jamais dans git.
+- La **diffusion** (publier, payer une publicité, écrire à des clients) reste ta décision : l'usine prépare, tu déclenches.
+
+Pas de voix ni de musique générées : une musique n'est ajoutée que si tu fournis le fichier.
+
 ## Structure
 
 ```
 install.sh                    Installation complète, idempotente
 bin/jarvis                    Point d'entrée (bash) : start, chef, task, doctor…
-bin/jarvis-codex              Codex en mode autonome (bac à sable + règles)
+bin/jarvis-claude             Claude Code en mode auto, avec le modèle de la tâche
+bin/jarvis-codex              Codex en mode autonome (bac à sable + règles), avec le modèle de la tâche
+config/modeles.toml           Catalogue des modèles
 config/codex/jarvis.rules     Règles d'exécution des agents Codex
+roles/                        Un fichier par spécialité : en-tête + brief de l'agent
+skills/jarvis-studio/         Studio : méthode et scripts (filmer, animer, monter, contrôler)
 lib/jarvis/                   Superagent en Python (bibliothèque standard uniquement)
-  cockpit.py                  Interface plein écran (curses)
-  daemon.py                   Surveillance des agents, battement, ménage, santé + pont Telegram
-  poste.py                    Reprise après redémarrage, santé du PC, réparation git
-  plans.py                    Plans, approbations, verrou « une tâche = un lancement »
+  roles.py · modeles.py       Rôles, catalogue, routeur, propositions du chef
+  plans.py                    Plans, approbations, verrou « une tâche = un lancement », secours
+  taches.py                   Registre des tâches : rôle, modèle, durée, jetons, verdict, bilan
+  usage.py                    Jetons : fenêtres 5 h et semaine, rythme, prévision, jetons par tâche
+  cockpit.py                  Interface plein écran par ateliers (curses)
+  web.py · usine.html         Tableau de bord web en lecture seule
+  daemon.py                   Surveillance, chiens de garde, battement, ménage, santé + pont Telegram
+  poste.py                    Reprise après redémarrage, santé et capacité du PC, réparation git
+  studio.py · livrables.py    Contrôle des vidéos, registre des livrables, envoi Telegram
   agents.py                   Lecture workmux, messages au chef (file d'attente si dialogue ouvert)
-  notify.py · telegram.py     Telegram, notifications Windows
+  notify.py · telegram.py     Telegram (messages et fichiers), notifications Windows
 chef/CLAUDE.md                Rôle du chef d'orchestre
 config/                       tmux et workmux
 templates/                    Protocole Linear pour les projets (AGENTS.md / CLAUDE.md)
-tests/                        Tests de bout en bout (faux workmux, faux Telegram, tmux isolé)
+tests/                        Tests de bout en bout (faux workmux, faux Telegram, faux CLI, tmux isolé)
 ```
 
-Données locales : `~/.config/jarvis/` (réglages, projets), `~/.local/state/jarvis/` (plans, fil, journal du chef), `~/.local/share/jarvis/chef/` (dossier de travail du chef).
+Données locales : `~/.config/jarvis/` (réglages, projets, catalogue et rôles personnels), `~/.local/state/jarvis/` (plans, registre des tâches, fil, journal du chef), `~/.local/share/jarvis/` (dossier de travail du chef, livrables).
 
 ## Surveillance des jetons
 
@@ -220,7 +348,16 @@ Jarvis lit la **consommation réelle** des deux abonnements, sur les fenêtres d
 | **Arrêt** (`jetons.arret`, 95 %) | Les agents de cet abonnement **committent leur travail et s'arrêtent** ; `jarvis task` refuse de leur assigner de nouvelles tâches |
 | **Les deux épuisés** | **Pause automatique**, levée dès qu'un abonnement est remis à zéro (une pause décidée par toi n'est jamais levée automatiquement) |
 
-Avant chaque vague, le chef répartit les tâches selon la marge restante de chaque côté. Les jauges sont en haut du cockpit, et sur Telegram avec `/jetons`.
+**Prévision.** Le démon mesure le rythme de consommation de la fenêtre 5 heures. Quand il mène au seuil d'arrêt avant la remise à zéro, tu es prévenu 45 minutes avant (et le chef aussi), et le routeur évite ce fournisseur pour les nouvelles tâches :
+
+```
+🟢 Claude   5 h ██████░░░░ 62 %  ·  semaine ████░░░░░░ 41 %
+          rythme 24 %/h → seuil d'arrêt dans 1 h 22 (avant la remise à zéro)
+```
+
+**Par tâche.** À la fin de chaque tâche, Jarvis lit dans les journaux de Claude Code et de Codex les jetons qu'elle a consommés. `jarvis bilan` les additionne par fournisseur, par rôle et par modèle : tu vois ce que coûte chaque atelier et ce qu'il livre.
+
+Le routeur tient compte de ces marges à chaque affectation. Les jauges sont en haut du cockpit, sur le tableau de bord web, et sur Telegram avec `/jetons`.
 
 ## Linear et veille concurrentielle
 
@@ -234,7 +371,7 @@ Les agents lancés par Jarvis travaillent sans te solliciter, et sans perdre leu
 
 | | Comment | Ce qui reste bloqué |
 | --- | --- | --- |
-| **Claude Code** | mode `auto` : un classifieur valide les actions sûres | actions jugées risquées, règles `deny` |
+| **Claude Code** | `bin/jarvis-claude` : mode `auto` (un classifieur valide les actions sûres), modèle et effort de la tâche | actions jugées risquées, règles `deny` |
 | **Codex** | `bin/jarvis-codex` : bac à sable `workspace-write`, `--ask-for-approval never`, réseau autorisé, caches de paquets inscriptibles | tout ce qui sort du worktree, sauf les commandes autorisées par les règles |
 | **Règles Codex** (`config/codex/jarvis.rules` → `~/.codex/rules/`) | autorisé : `git add/commit/push` de sa branche, `gh pr create/view/review…`, `pnpm/npm/uv install` | **interdit** : `git push --force`, push sur `main`, `gh pr merge/close`, `git reset/clean` |
 | **Confiance des dossiers** | `jarvis task` pré-accepte chaque nouveau worktree (Claude : `~/.claude.json`, Codex : `~/.codex/config.toml`) | — |
@@ -252,11 +389,17 @@ Un agent que workmux ne suit pas encore (souvent Codex avant la fin de son premi
 - **Santé** : toutes les 5 minutes, le démon vérifie la mémoire, le disque, Docker, la batterie et la présence d'un **redémarrage Windows en attente** (le signe qu'une mise à jour risque de redémarrer le PC pendant la nuit). Tu es prévenu sur Telegram quand un indicateur se dégrade. Jarvis ne modifie jamais ton système lui-même.
 - **Dépôt abîmé** par un arrêt brutal (`bad object`, objets vides) : `jarvis reparer-git <projet>`. Le chef peut aussi le lancer.
 - Les fenêtres des agents terminés se ferment seules au bout d'une heure : la capacité n'est jamais bloquée par de vieilles fenêtres.
+- **Capacité adaptée au PC** : `max_agents` est un plafond. Jarvis le réduit quand la mémoire libre ne permet pas un agent de plus (1,2 Go par agent, 1,5 Go gardés pour le reste), et ne lance rien sur batterie faible, disque presque plein ou processeur saturé. Le cockpit dit pourquoi.
+- **Batterie critique** : sous 12 % sans secteur, les agents reçoivent l'ordre de committer leur travail, Jarvis se met en pause et te prévient. La pause se lève quand tu rebranches. Le niveau est relu toutes les deux minutes sur batterie, toutes les dix sur secteur.
+- **Chiens de garde** : le démon est relancé s'il plante ; le chef est relancé s'il s'arrête alors qu'il reste du travail (jamais s'il n'avait pas été lancé) ; un agent qui n'affiche plus rien depuis 45 minutes ou travaille depuis 4 heures est signalé au chef ; un lancement interrompu avant le démarrage de l'agent rend son élément au plan. Le cockpit affiche un voyant par service.
 
 ## Sécurité et coûts
 
 - Dépôt **public** : aucun secret ici. Le jeton Telegram reste dans `~/.config/jarvis/settings.toml`.
 - Le chef a des règles **deny** dans Claude Code : pas d'écriture dans tes projets ni dans les fichiers de Jarvis, pas de fusion, pas de push, pas de lecture des `.env`, pas d'accès direct à `workmux add` ni à Python.
+- Le chef **propose** les changements du catalogue des modèles, avec leur source ; lui seul ne peut pas les appliquer.
+- `jarvis livrer` n'envoie que vers **ta** conversation Telegram, et seulement des fichiers qui vivent réellement dans le dossier des livrables. Rien n'est publié ni envoyé à un tiers par l'usine. C'est le chef qui livre, après contrôle et contre-relecture ; un agent qui s'y essaie est refusé. Comme pour les approbations, c'est un garde-fou contre l'erreur, pas une barrière étanche : chef et agents tournent sous ton compte.
+- Le tableau de bord web écoute sur `127.0.0.1`, refuse les requêtes qui ne visent pas ce PC, n'affiche aucun secret et n'accepte aucune action. Il ne sert que des fichiers revérifiés à chaque lecture comme de vrais livrables ; un document écrit par un agent se télécharge, il ne s'ouvre jamais comme une page.
 - Approuver un plan et modifier les réglages exigent un **terminal interactif** (ou le cockpit, ou Telegram) : un agent ne peut pas s'auto-approuver.
 - Telegram n'accepte que **ta** conversation privée appairée ; les groupes sont refusés.
 - Les messages tapés au chef attendent en file si une demande de permission est affichée : une touche Entrée ne valide jamais une permission à ta place.
@@ -273,4 +416,5 @@ python3 -m unittest discover -s tests -v
 - [x] Phase 1 : installation, configurations, CLI `jarvis`, protocole Linear
 - [x] Phase 2 : chef d'orchestre, plans approuvés, cockpit, démon, Telegram, plan de nuit
 - [x] Phase 2.5 : reprise après redémarrage, démarrage automatique, santé du PC, battement du chef, images Telegram
-- [ ] Phase 3 : tableau de rentabilité (PR fusionnées par jour, temps d'agent utilisé par abonnement)
+- [x] Phase 3 : l'usine — rôles spécialisés, routeur de modèles, secours, registre des tâches et bilan, studio vidéo et livrables, cockpit par ateliers, tableau de bord web, prévision des jetons, capacité adaptée au PC, chiens de garde
+- [ ] Phase 4 : PR fusionnées par jour et par projet dans le bilan, voix off et sous-titres dans le studio, approbation des plans depuis le tableau de bord web

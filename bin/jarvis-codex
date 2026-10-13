@@ -8,7 +8,9 @@
 #  - --ask-for-approval never : aucune demande, une action non prévue échoue proprement ;
 #  - accès réseau dans le bac à sable (tests, API, gh) ;
 #  - outils MCP déjà configurés (Linear…) approuvés d'avance : sinon « never » les refuse ;
-#  - git push et gh pr passent par ~/.codex/rules/jarvis.rules (config/codex/jarvis.rules).
+#  - git push et gh pr passent par ~/.codex/rules/jarvis.rules (config/codex/jarvis.rules) ;
+#  - modèle et effort de raisonnement : ceux de la tâche enregistrée pour ce worktree (routeur) ;
+#  - dossier des livrables de la tâche ouvert en écriture ($JARVIS_LIVRABLES).
 # Mode « complet » : sans bac à sable (dernier recours). Les règles « forbidden » restent actives.
 #
 # Utilisé par le profil workmux « cx » (config/workmux/config.yaml).
@@ -17,6 +19,7 @@
 set -euo pipefail
 
 JARVIS_HOME="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")/.." && pwd)"
+export JARVIS_HOME
 CODEX_CFG="${CODEX_HOME:-$HOME/.codex}/config.toml"
 
 mode="$(PYTHONPATH="$JARVIS_HOME/lib" python3 -m jarvis reglage-lire codex.mode 2>/dev/null || true)"
@@ -44,6 +47,20 @@ if [[ -f "$CODEX_CFG" ]]; then
     [[ "$approuves" == *" $name "* ]] || continue
     mcp+=(-c "mcp_servers.$name.default_tools_approval_mode=\"approve\"")
   done < <(sed -n 's/^[[:space:]]*\[mcp_servers\.\("\{0,1\}\)\([A-Za-z0-9_-]\{1,\}\)\1\][[:space:]]*$/\2/p' "$CODEX_CFG" | sort -u)
+fi
+
+# Modèle, effort et variables du poste : fiche de la tâche de ce worktree (aucune hors Jarvis).
+modele=()
+if [[ "${1:-}" != --tester-commit* ]]; then
+  while IFS=$'\t' read -r kind val; do
+    case "$kind" in
+      arg) modele+=("$val") ;;
+      env) export "${val?}" ;;
+    esac
+  done < <(PYTHONPATH="$JARVIS_HOME/lib" python3 -m jarvis lancement-args codex 2>/dev/null || true)
+  if [[ -n "${JARVIS_LIVRABLES:-}" ]]; then
+    mkdir -p "$JARVIS_LIVRABLES" 2>/dev/null && add_root "$JARVIS_LIVRABLES"
+  fi
 fi
 
 sandbox=(--sandbox workspace-write --ask-for-approval never
@@ -86,4 +103,4 @@ if [[ "${1:-}" == "--tester-commit-dedans" ]]; then
   exit 0
 fi
 
-exec codex "${sandbox[@]}" ${mcp[@]+"${mcp[@]}"} "$@"
+exec codex "${sandbox[@]}" ${mcp[@]+"${mcp[@]}"} ${modele[@]+"${modele[@]}"} "$@"

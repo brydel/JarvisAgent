@@ -18,6 +18,7 @@ STATUS_LABELS = {"working": "travaille", "waiting": "attend", "done": "terminé"
 BUSY = ("working", "waiting", "untracked")
 IDLE_AFTER = 20 * 60
 WINDOW_PREFIX = "wm-"
+NON_AGENTS = (config.CHEF_WINDOW, "daemon", "cockpit", "reprise")
 
 
 def tmux_agent_windows() -> list[dict]:
@@ -65,14 +66,17 @@ def status_all() -> tuple[list[dict] | None, str]:
         return None, "réponse JSON illisible de workmux status"
     agents = []
     for a in data.get("agents", []) or []:
-        if a.get("window_name") == config.CHEF_WINDOW:
+        if a.get("window_name") in NON_AGENTS:
             # Le chef est une session Claude suivie par les hooks workmux comme les autres :
             # ce n'est pas un agent. Sinon chaque fin de tour du chef le réveillerait lui-même (boucle).
+            # Même règle pour les fenêtres de service de Jarvis (démon, cockpit).
             continue
         agents.append({
             "worktree": a.get("worktree") or "?",
             "branch": a.get("branch") or "",
-            "project": a.get("project") or config.project_for_path(a.get("workdir") or "") or "?",
+            # Le nom du registre de Jarvis d'abord (par le dossier) : workmux, lui, nomme le projet
+            # d'après le dossier du dépôt, qui peut différer.
+            "project": config.project_for_path(a.get("workdir") or "") or a.get("project") or "?",
             "status": a.get("status") or "?",
             "elapsed": int(a.get("elapsed_secs") or 0),
             "title": (a.get("title") or "").strip(),
@@ -221,8 +225,25 @@ def tmux_windows(session: str = config.SESSION) -> list[str]:
     return res.stdout.split() if res.returncode == 0 else []
 
 
+SHELLS = ("bash", "sh", "zsh", "fish", "dash")
+
+
 def chef_running() -> bool:
-    return config.CHEF_WINDOW in tmux_windows()
+    """Vrai si la fenêtre du chef existe ET qu'un programme y tourne.
+
+    Quand Claude Code s'arrête, la fenêtre reste ouverte sur un shell (pour lire l'erreur) : y taper
+    un message exécuterait son texte comme une commande. Ce n'est plus un chef.
+    """
+    if not shutil.which("tmux"):
+        return False
+    try:
+        res = _run(["tmux", "list-panes", "-t", _chef_win(), "-F", "#{pane_current_command}"], timeout=5)
+    except (subprocess.TimeoutExpired, OSError):
+        return False
+    if res.returncode != 0:
+        return False
+    commandes = [c.strip() for c in res.stdout.splitlines() if c.strip()]
+    return bool(commandes) and not all(c in SHELLS for c in commandes)
 
 
 def chef_idle_secs() -> int | None:
@@ -327,6 +348,12 @@ def select_window(session: str, window: str) -> bool:
         return res.returncode == 0
     except (subprocess.TimeoutExpired, OSError):
         return False
+
+
+def window_idle() -> dict[str, int]:
+    """{fenêtre d'agent: secondes depuis sa dernière sortie à l'écran}."""
+    now = time.time()
+    return {w["window"]: max(0, int(now - w["activity"])) for w in tmux_agent_windows() if w["activity"]}
 
 
 def fmt_elapsed(secs: int) -> str:

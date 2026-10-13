@@ -31,6 +31,9 @@ ICONS = {
     "note": "📝",
     "systeme": "⚙",
     "erreur": "⚠",
+    "livrable": "🎬",
+    "agent_bloque": "🧱",
+    "modele": "🧬",
 }
 
 

@@ -7,16 +7,14 @@ agent: cc
 merge_strategy: rebase
 window_prefix: "wm-"
 
-# Profils d'agents utilisables avec `-a <nom>`. Les deux travaillent sans te solliciter :
-#  - Claude en mode « auto » : un classifieur valide les actions sûres et bloque les risquées ;
+# Profils d'agents utilisables avec `-a <nom>`. Les deux travaillent sans te solliciter, avec
+# le modèle et l'effort choisis par le routeur pour leur tâche :
+#  - Claude via bin/jarvis-claude : mode « auto » (un classifieur valide les actions sûres) ;
 #  - Codex via bin/jarvis-codex : bac à sable + aucune demande + règles config/codex/jarvis.rules.
 agents:
   cc:
     type: claude
-    command: claude
-    args:
-      - --permission-mode
-      - auto
+    command: jarvis-claude
   cx:
     type: codex
     command: jarvis-codex

@@ -17,6 +17,10 @@ AIDE = (
     "/etat — état des agents et des plans\n"
     "/plans — plans à valider (avec boutons)\n"
     "/jetons — consommation Claude et Codex (5 h et semaine)\n"
+    "/usine — les ateliers : quel spécialiste travaille sur quoi\n"
+    "/livrables — vidéos, visuels et rapports produits\n"
+    "/modeles — catalogue des modèles et propositions à valider\n"
+    "/bilan — ce que l'usine a produit cette semaine\n"
     "/sante — état du PC (mémoire, disque, Docker, batterie)\n"
     "/pause — bloque tout nouveau lancement\n"
     "/reprendre — lève la pause\n"
@@ -53,18 +57,77 @@ def watch_once(first: bool = False) -> list[dict]:
         for key in prev.keys() - cur.keys():
             events.append(("agent_gone", f"{key.replace(':', '/')} n'est plus suivi", None))
 
+    from . import taches, usage
+    try:
+        closes = taches.synchroniser(agents, usage.task_tokens)
+        _lancements_avortes([t for t in closes if t.get("jamais_demarre")], agents)
+    except Exception as exc:  # noqa: BLE001 — le registre est un plus : la surveillance continue sans lui
+        store.feed_add("erreur", f"registre des tâches : {exc}")
+    fiches = taches.toutes()
     chef_up = ag.chef_running()
-    for kind, msg, a in events:
+    for i, (kind, msg, a) in enumerate(events):
+        fiche = taches.pour_agent(a["project"], a["worktree"], fiches, a.get("workdir", "")) if a else None
+        if fiche:
+            msg = _avec_role(msg, fiche)
+            events[i] = (kind, msg, a)
         store.feed_add(kind, msg, agent=(ag.target(a) if a else None))
         if kind in ("agent_done", "agent_waiting") and a:
+            suite = _suite_pour_chef(fiche) if kind == "agent_done" else ""
             injected = chef_up and ag.chef_inject(
                 f"[JARVIS événement] {msg}. Cible workmux : {ag.target(a)}. "
-                "Lis sa sortie (jarvis voir) et son issue Linear, puis décide de la suite.")
+                "Lis sa sortie (jarvis voir) et son issue Linear, puis décide de la suite." + suite)
             if not injected and kind == "agent_waiting":
                 # Personne pour lui répondre : on prévient l'humain directement.
                 notify.alert("question", f"{msg} et le chef n'est pas lancé", windows=True)
     store.write_json(WATCH_STATE, {k: {"status": a["status"]} for k, a in cur.items()})
     return [{"type": k, "texte": m} for k, m, _ in events]
+
+
+def _lancements_avortes(fiches: list[dict], agents: list[dict]) -> None:
+    """Un lancement interrompu avant l'apparition de l'agent (commande coupée, délai dépassé) ne doit pas
+    consommer son élément de plan en silence : il est rendu relançable et le chef est prévenu."""
+    fenetres = {a["worktree"] for a in agents}
+    for t in fiches:
+        if t["worktree"] in fenetres:
+            continue  # une fenêtre porte ce nom : on ne libère rien, au risque de lancer deux fois
+        libere = False
+        if t.get("plan"):
+            try:
+                plans.release(t["plan"], t["projet"], t["issue"], t["agent"])
+                libere = True
+            except plans.PlanError:
+                pass
+        msg = (f"{t['projet']} {t['issue']} ({t['agent']}) n'a jamais démarré"
+               + (f" : l'élément est de nouveau lançable dans {t['plan']}" if libere else ""))
+        store.feed_add("erreur", msg)
+        ag.chef_inject(f"[JARVIS] {msg}. Vérifie « jarvis etat », puis relance-le si le plan est encore valide.")
+
+
+def _avec_role(msg: str, fiche: dict) -> str:
+    from . import modeles, roles
+    r = roles.ou_defaut(fiche["role"])
+    return f"{r['emoji']} {r['titre']} — {msg} [{modeles.libelle(fiche['agent'], fiche['modele'], fiche['effort'])}]"
+
+
+def _suite_pour_chef(fiche: dict | None) -> str:
+    """Ce que le chef doit faire d'une tâche terminée, selon son rôle : c'est la porte qualité de l'usine."""
+    if not fiche:
+        return ""
+    from . import livrables, roles
+    r = roles.ou_defaut(fiche["role"])
+    autre = "codex" if fiche["agent"] == "claude" else "claude"
+    if fiche.get("revue") or r["nom"] == "revue":
+        return (f" C'est une contre-relecture : lis son verdict, puis enregistre-le avec « jarvis verdict "
+                f"{fiche['projet']} {fiche['issue']} pret|corrections \"résumé\" ».")
+    suite = ""
+    if r["livrable"] != "pr":
+        d = livrables.dossier(fiche["projet"], fiche["issue"], creer=False)
+        suite += (f" Ses livrables sont dans {d} : contrôle chaque fichier (jarvis studio verifier, regarde la "
+                  f"planche-contact), puis envoie ce qui est bon avec « jarvis livrer ».")
+    if r["revue"] == "croisee":
+        suite += (f" Travail produit par {fiche['agent']} : prévois sa contre-relecture par {autre} "
+                  f"(élément {fiche['projet']}:{fiche['issue']}:{autre}@revue) avant de le déclarer prêt.")
+    return suite
 
 
 BUDGET_STATE = "budget.json"
@@ -136,6 +199,190 @@ def budget_check() -> list[str]:
     return events
 
 
+PREVISION_STATE = "prevision.json"
+PREVISION_SEUIL_MIN = 45  # prévenir quand l'épuisement est prévu dans moins de N minutes
+
+
+def prevision_check(now: float | None = None) -> list[str]:
+    """Prévient avant l'épuisement : au rythme actuel, un abonnement tombera avant sa remise à zéro."""
+    from . import usage
+    now = now or time.time()
+    s = usage.summary(now)
+    usage.enregistrer_historique(s, now)
+    st = store.read_json(PREVISION_STATE, {})
+    events = []
+    for p in usage.PROVIDERS:
+        u = s[p]
+        prev = u.get("prevision") or {}
+        reset = (u.get("5h") or {}).get("resets_at") or 0
+        proche = (prev.get("avant_reset") and prev.get("minutes") is not None
+                  and prev["minutes"] <= PREVISION_SEUIL_MIN and u["niveau"] != "epuise")
+        if not proche:
+            continue
+        if st.get(p) == reset:
+            continue  # déjà signalé pour cette fenêtre
+        st[p] = reset
+        name = p.capitalize()
+        events.append(f"{name} prévision")
+        texte = (f"Au rythme actuel ({prev['rythme']:.0f} %/h), {name} atteindra son seuil d'arrêt dans "
+                 f"{usage.fmt_duree(prev['minutes'])}, avant sa remise à zéro ({usage.fmt_reset(reset)}).")
+        notify.alert("question", texte, title="JARVIS · jetons")
+        ag.chef_inject(f"[JARVIS jetons] {texte} Ne lui confie plus de nouvelle tâche d'ici là et bascule ce qui "
+                       f"peut l'être vers l'autre fournisseur.")
+    store.write_json(PREVISION_STATE, st)
+    return events
+
+
+BLOCAGE_STATE = "blocage.json"
+
+
+def blocage_check(now: float | None = None) -> list[str]:
+    """Signale au chef les agents qui « travaillent » sans rien afficher, ou depuis trop longtemps."""
+    cfg = config.settings()["general"]
+    silence_max = int(cfg.get("blocage_min", 45)) * 60
+    duree_max = int(cfg.get("duree_max_min", 240)) * 60
+    if silence_max <= 0 and duree_max <= 0:
+        return []
+    found, _ = ag.status_all()
+    if found is None:
+        return []
+    idle = ag.window_idle()
+    st = store.read_json(BLOCAGE_STATE, {})
+    encore: dict[str, list[str]] = {}
+    events = []
+    for a in found:
+        if a["status"] != "working":
+            continue
+        key = ag.target(a)
+        deja = st.get(key, [])
+        motifs = []
+        silence = idle.get(a["window"])
+        if silence_max > 0 and silence is not None and silence >= silence_max:
+            motifs.append(("silence", f"n'affiche plus rien depuis {ag.fmt_elapsed(silence)}"))
+        if duree_max > 0 and a["elapsed"] >= duree_max:
+            motifs.append(("duree", f"travaille depuis {ag.fmt_elapsed(a['elapsed'])}"))
+        encore[key] = [m for m, _ in motifs]
+        nouveaux = [texte for m, texte in motifs if m not in deja]
+        if not nouveaux:
+            continue
+        msg = f"{a['project']}/{a['worktree']} ({ag.kind_label(a['kind'])}) {' et '.join(nouveaux)}"
+        events.append(key)
+        store.feed_add("agent_bloque", msg, agent=key)
+        if not ag.chef_inject(f"[JARVIS blocage] {msg}. Cible workmux : {key}. Lis sa sortie (jarvis voir) : s'il "
+                              f"tourne en rond ou est figé, donne-lui une consigne corrective ; après deux échecs, "
+                              f"demande-lui de s'arrêter et préviens ton humain."):
+            notify.alert("question", f"{msg} et le chef n'est pas lancé")
+    store.write_json(BLOCAGE_STATE, encore)
+    return events
+
+
+CHEF_STATE = "chef_garde.json"
+CHEF_RELANCES_MAX = 3  # par heure : au-delà, c'est une panne à montrer à l'humain, pas à masquer
+# Le chef a-t-il tourné sous les yeux de CE démon ? En mémoire, pas sur disque : après un redémarrage
+# du PC ou un « jarvis start » sans « jarvis chef », personne ne doit lancer le chef à ta place.
+_chef_vu = False
+
+
+def chef_check(now: float | None = None) -> str | None:
+    """Relance le chef s'il s'est arrêté alors qu'il reste du travail. Renvoie l'action faite."""
+    import subprocess
+    global _chef_vu
+    now = now or time.time()
+    if ag.chef_running():
+        _chef_vu = True
+        return None
+    if not _chef_vu:
+        return None  # jamais vu tourner par ce démon : ce n'est pas une panne
+    found, _ = ag.status_all()
+    occupes = sum(1 for a in found or [] if a["status"] in ag.BUSY)
+    restant = sum(1 for p in plans.active() for i in p["items"] if not i["lance"])
+    if not occupes and not restant and not plans.pending():
+        _chef_vu = False  # arrêté sans rien laisser en cours : arrêt normal
+        return None
+    st = store.read_json(CHEF_STATE, {"relances": [], "alerte": 0})
+    st["relances"] = [t for t in st.get("relances", []) if now - t < 3600]
+    auto = config.settings()["general"].get("chef_relance_auto", True) and not store.paused()
+    if auto and len(st["relances"]) < CHEF_RELANCES_MAX:
+        st["relances"].append(now)
+        store.write_json(CHEF_STATE, st)
+        try:
+            res = subprocess.run([str(config.JARVIS_HOME / "bin" / "jarvis"), "chef-lancer"],
+                                 capture_output=True, text=True, timeout=120)
+            ok = res.returncode == 0
+        except (subprocess.TimeoutExpired, OSError):
+            ok = False
+        if ok:
+            notify.alert("systeme", f"Le chef s'était arrêté ({occupes} agent(s) en cours, {restant} tâche(s) à "
+                                    "lancer) : je l'ai relancé.", title="JARVIS · chef", windows=False)
+            return "relance"
+    if now - st.get("alerte", 0) > 3600:
+        st["alerte"] = now
+        store.write_json(CHEF_STATE, st)
+        notify.alert("erreur", f"Le chef est arrêté alors qu'il reste du travail ({occupes} agent(s) en cours, "
+                               f"{restant} tâche(s) approuvée(s) à lancer). Sur ton PC : jarvis chef",
+                     title="JARVIS · chef")
+        return "alerte"
+    return None
+
+
+MODELES_STATE = "modeles_garde.json"
+_verif_en_cours = threading.Lock()
+
+
+def modeles_check(now: float | None = None) -> bool:
+    """Essaie les modèles du catalogue quand c'est dû (jamais essayés, ou essai trop ancien).
+
+    Dans un fil à part : un essai prend plusieurs secondes par modèle. Renvoie True s'il est lancé.
+    """
+    from . import modeles, usage
+    dus = modeles.a_verifier(now)
+    if not dus or not _verif_en_cours.acquire(blocking=False):
+        return False
+    tous = len(dus) == sum(1 for m in modeles.catalogue().values() if m["actif"] and m["id"])
+
+    def _run():
+        try:
+            avant = {k: (v or {}).get("ok") for k, v in modeles.etat_verif().items() if not k.startswith("_")}
+            res = modeles.verifier(None if tous else dus, usage_resume=usage.summary())
+            perdus = [n for n, r in res.items() if r["ok"] is False and avant.get(n) is not False]
+            gagnes = [n for n, r in res.items() if r["ok"] is True and avant.get(n) is not True]
+            if gagnes:
+                store.feed_add("modele", f"modèles disponibles avec tes abonnements : {', '.join(gagnes)}")
+            if perdus:
+                notify.alert("question", f"Modèle(s) indisponible(s) avec tes abonnements : {', '.join(perdus)}. "
+                                         "Le routeur utilise les autres. Détail : jarvis modele",
+                             title="JARVIS · modèles", windows=False)
+                ag.chef_inject(f"[JARVIS modèles] Indisponible(s) : {', '.join(perdus)}. Le routeur les ignore ; "
+                               f"profite de ta prochaine veille des modèles pour proposer leur remplaçant.")
+        except Exception as exc:  # noqa: BLE001
+            store.feed_add("erreur", f"essai des modèles : {exc}")
+        finally:
+            _verif_en_cours.release()
+
+    threading.Thread(target=_run, name="modeles", daemon=True).start()
+    return True
+
+
+def veille_modeles_check(now: float | None = None) -> bool:
+    """Rappelle au chef la veille des modèles (nouveautés Claude et Codex) quand elle est due."""
+    days = int(config.settings()["veille"].get("modeles_jours", 14))
+    if days <= 0 or not ag.chef_running():
+        return False
+    now = now or time.time()
+    st = store.read_json(VEILLE_STATE, {"fait": {}, "dernier_rappel": 0})
+    if now - st.get("modeles", 0) < days * 86400:
+        return False
+    from . import usage
+    if usage.summary()["claude"]["niveau"] != "ok":
+        return False  # la veille consomme des jetons Claude : seulement quand il y a de la marge
+    ag.chef_inject("[JARVIS veille] Veille des modèles due. Applique la procédure « Veille des modèles » de ton "
+                   "rôle : nouveautés de Claude Code et de Codex (sources officielles), puis « jarvis modele "
+                   "proposer » pour chaque changement utile au catalogue.")
+    store.update_json(VEILLE_STATE, {"fait": {}, "dernier_rappel": 0}, lambda d: d.__setitem__("modeles", now))
+    store.feed_add("chef", "veille des modèles demandée")
+    return True
+
+
 def veille_check(now: float | None = None) -> str | None:
     """Rappelle au chef la veille concurrentielle d'un projet quand elle est due. Renvoie le projet."""
     days = int(config.settings()["veille"].get("jours", 7))
@@ -196,8 +443,8 @@ def battement_check(now: float | None = None) -> bool:
     if found is None:
         return False
     busy = sum(1 for a in found if a["status"] in ag.BUSY)
-    limit = int(config.settings()["general"].get("max_agents", 3))
-    from . import usage
+    from . import poste, usage
+    limit = poste.capacite(busy)["max"]
     s = usage.summary()
     if busy >= limit or s["claude"]["niveau"] == "epuise" or \
             all(s[p]["niveau"] == "epuise" for p in usage.PROVIDERS):
@@ -263,11 +510,65 @@ def sante_check(now: float | None = None) -> list[str]:
     return events
 
 
+BATTERIE_MSG = ("[JARVIS] La batterie du PC est presque vide et il n'est pas branché. Termine l'étape en cours, "
+                "committe ton travail (préfixe WIP si c'est inachevé), pousse ta branche, puis arrête-toi : "
+                "le PC peut s'éteindre d'une minute à l'autre.")
+
+
+BATTERIE_STATE = "batterie.json"
+
+
+def batterie_check(now: float | None = None) -> list[str]:
+    """Batterie critique : les agents mettent leur travail à l'abri et Jarvis se met en pause.
+
+    Appelé chaque minute par le fil de santé, avec une mesure fraîche (deux minutes au plus sur batterie).
+    """
+    if not config.settings()["sante"].get("active", True):
+        return []
+    from . import poste
+    now = now or time.time()
+    st = store.read_json(BATTERIE_STATE, {"pause": ""})
+    pct = poste.batterie_critique(now, rafraichir=True)
+    if pct is not None and not st.get("pause"):
+        found, _ = ag.status_all()
+        for a in found or []:
+            if a["status"] in ("working", "untracked"):
+                ag.send(ag.target(a), BATTERIE_MSG)
+        deja = store.paused()
+        if not deja:
+            store.set_paused(True)
+        st["pause"] = "humain" if deja else "jarvis"
+        store.write_json(BATTERIE_STATE, st)
+        notify.alert("erreur", f"Batterie à {pct} % et PC non branché : les agents committent leur travail et "
+                               "Jarvis se met en pause. Branche le PC.", title="JARVIS · batterie")
+        ag.chef_inject(f"[JARVIS santé] Batterie à {pct} % : pause. Les agents ont reçu l'ordre de committer. "
+                       "Ne lance plus rien tant que le PC n'est pas rebranché.")
+        return ["batterie"]
+    if pct is None and st.get("pause"):
+        b = poste.batterie(now)
+        if b and b["secteur"]:
+            # Seule la pause posée par Jarvis est levée : celle de l'humain lui appartient.
+            if st["pause"] == "jarvis" and store.paused():
+                store.set_paused(False)
+                notify.alert("plan_ok", "PC rebranché : fin de la pause batterie.", title="JARVIS · batterie")
+                ag.chef_inject("[JARVIS santé] PC rebranché : pause levée, reprends ta boucle.")
+            store.write_json(BATTERIE_STATE, {"pause": ""})
+            return ["batterie rétablie"]
+    return []
+
+
+def battement_demon() -> None:
+    """Preuve de vie du démon, lue par le cockpit et « jarvis etat »."""
+    import os
+    store.write_json(report.DEMON_FILE, {"ts": time.time(), "pid": os.getpid()})
+
+
 def watch_loop(stop: threading.Event) -> None:
     first = True
     while not stop.is_set():
-        for step in (lambda: watch_once(first=first), ag.chef_flush_queue, budget_check, veille_check,
-                     menage_check, battement_check):
+        for step in (battement_demon, lambda: watch_once(first=first), ag.chef_flush_queue, budget_check,
+                     prevision_check, blocage_check, chef_check, modeles_check, veille_check,
+                     veille_modeles_check, menage_check, battement_check):
             try:
                 step()
             except Exception as exc:  # noqa: BLE001 — le démon ne doit jamais mourir sur une erreur ponctuelle
@@ -279,10 +580,11 @@ def watch_loop(stop: threading.Event) -> None:
 def sante_loop(stop: threading.Event) -> None:
     """Fil séparé : PowerShell et Docker peuvent mettre des secondes à répondre."""
     while not stop.is_set():
-        try:
-            sante_check()
-        except Exception as exc:  # noqa: BLE001
-            store.feed_add("erreur", f"santé du poste : {exc}")
+        for step in (batterie_check, sante_check):
+            try:
+                step()
+            except Exception as exc:  # noqa: BLE001
+                store.feed_add("erreur", f"santé du poste : {exc}")
         stop.wait(60)
 
 
@@ -299,6 +601,21 @@ def handle_update(bot: Bot, chat_id: str, upd: dict) -> None:
             bot.answer(cb["id"], "Accès refusé")
             return
         action, _, plan_id = (cb.get("data") or "").partition(":")
+        if action in ("mok", "mnon"):
+            from . import modeles
+            try:
+                item = modeles.decider(plan_id, action == "mok", par="Telegram")
+                verdict = "✅ Accepté" if item["statut"] == "acceptee" else "✋ Refusé"
+                bot.answer(cb["id"], verdict)
+                msg = cb.get("message", {})
+                if msg.get("message_id"):
+                    bot.edit(owner, msg["message_id"], f"{msg.get('text', '')}\n\n{verdict}")
+            except modeles.RoutageError as exc:
+                bot.answer(cb["id"], str(exc))
+            return
+        if action not in ("ok", "non"):
+            bot.answer(cb["id"], "Bouton inconnu")
+            return
         try:
             plan = plans.decide(plan_id, action == "ok", par="Telegram")
             verdict = "✅ Approuvé" if plan["statut"] == "approuve" else "✋ Refusé"
@@ -333,12 +650,29 @@ def handle_update(bot: Bot, chat_id: str, upd: dict) -> None:
     elif cmd in ("/sante", "/santé"):
         from . import poste
         bot.send(owner, "Santé du PC\n\n" + poste.texte())
+    elif cmd == "/usine":
+        bot.send(owner, report.usine())
+    elif cmd == "/livrables":
+        from . import livrables
+        bot.send(owner, "Livrables\n\n" + livrables.texte())
+    elif cmd in ("/modeles", "/modèles"):
+        from . import modeles
+        bot.send(owner, "Modèles\n\n" + modeles.texte())
+        for i in modeles.propositions():
+            bot.send(owner, modeles.format_proposition(i), notify.proposition_buttons(i["id"]))
+    elif cmd == "/bilan":
+        from . import taches
+        bot.send(owner, taches.texte_bilan())
     elif cmd == "/plans":
         pend = plans.pending()
-        if not pend:
+        from . import modeles
+        props = modeles.propositions()
+        if not pend and not props:
             bot.send(owner, "Aucun plan à valider.")
         for p in pend:
             bot.send(owner, plans.format_plan(p), notify.plan_buttons(p["id"]))
+        for i in props:
+            bot.send(owner, modeles.format_proposition(i), notify.proposition_buttons(i["id"]))
     elif cmd == "/pause":
         store.set_paused(True)
         store.feed_add("systeme", "pause activée depuis Telegram")
@@ -431,11 +765,18 @@ def run() -> None:
         threading.Thread(target=telegram_loop, args=(stop,), name="telegram", daemon=True),
         threading.Thread(target=sante_loop, args=(stop,), name="sante", daemon=True),
     ]
+    web_cfg = config.settings()["web"]
+    if web_cfg.get("actif", True):
+        from . import web
+        threads.append(threading.Thread(target=web.serve, args=(stop, int(web_cfg.get("port", 7717))),
+                                        name="web", daemon=True))
     for t in threads:
         t.start()
     store.feed_add("systeme", "démon Jarvis démarré")
     tg = "configuré" if config.settings()["telegram"].get("chat_id") else "non configuré (jarvis telegram config)"
     print(f"JARVIS · démon actif — surveillance toutes les {config.settings()['general']['poll_seconds']} s, Telegram {tg}.")
+    if web_cfg.get("actif", True):
+        print(f"Tableau de bord : http://localhost:{int(web_cfg.get('port', 7717))} (lecture seule, ce PC uniquement)")
     print("Laisse cette fenêtre ouverte. Ctrl+C pour arrêter.")
     try:
         while True:

@@ -3,20 +3,24 @@
 # Cible : Ubuntu sous WSL2 (fonctionne aussi sur Ubuntu natif).
 # Idempotent : tu peux le relancer sans risque, il saute ce qui est déjà fait.
 #
-# Usage :  ./install.sh            installation complète
-#          ./install.sh --no-mcp   sans brancher Linear aux agents
+# Usage :  ./install.sh              installation complète (studio vidéo compris)
+#          ./install.sh --no-mcp     sans brancher Linear aux agents
+#          ./install.sh --no-studio  sans le studio vidéo (ffmpeg, Playwright, Chromium)
 
 set -euo pipefail
 
 JARVIS_HOME="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 LINEAR_MCP_URL="https://mcp.linear.app/mcp"
 WITH_MCP=1
+WITH_STUDIO=1
 
 for arg in "$@"; do
   case "$arg" in
     --no-mcp) WITH_MCP=0 ;;
+    --no-studio) WITH_STUDIO=0 ;;
+    --studio) WITH_STUDIO=1 ;;
     -h|--help)
-      sed -n '2,7p' "$0" | sed 's/^# \{0,1\}//'
+      sed -n '2,8p' "$0" | sed 's/^# \{0,1\}//'
       exit 0 ;;
     *) echo "Option inconnue : $arg" >&2; exit 2 ;;
   esac
@@ -219,6 +223,47 @@ case "$sl_rc" in
   *) warn "Barre d'état non installée : $sl_out" ;;
 esac
 
+# --- 9 ter. Studio : vidéo de produit, visuels, montage ------------------------
+step "Compétences des agents (skills)"
+# Claude Code lit ~/.claude/skills, Codex lit ~/.agents/skills : même dossier, deux liens.
+link "$JARVIS_HOME/skills/jarvis-studio" "$HOME/.claude/skills/jarvis-studio"
+link "$JARVIS_HOME/skills/jarvis-studio" "$HOME/.agents/skills/jarvis-studio"
+
+if ((WITH_STUDIO)); then
+  step "Studio (ffmpeg, Playwright, Chromium)"
+  STUDIO_PKGS=()
+  for p in ffmpeg fonts-inter fonts-noto-color-emoji; do dpkg -s "$p" >/dev/null 2>&1 || STUDIO_PKGS+=("$p"); done
+  if ((${#STUDIO_PKGS[@]})); then
+    sudo apt-get update -y >/dev/null || true
+    for p in "${STUDIO_PKGS[@]}"; do
+      sudo apt-get install -y "$p" >/dev/null 2>&1 && ok "$p installé" || warn "$p non installé (le studio fonctionne sans, sauf ffmpeg)"
+    done
+  else
+    ok "ffmpeg et polices déjà là"
+  fi
+  if NODE_PATH="$(npm root -g 2>/dev/null)" node -e 'require("playwright")' >/dev/null 2>&1; then
+    ok "Playwright déjà présent"
+  elif npm install -g playwright >/dev/null 2>&1; then
+    hash -r
+    ok "Playwright installé"
+  else
+    warn "Playwright non installé : relance ./install.sh quand le réseau est disponible."
+  fi
+  if compgen -G "${PLAYWRIGHT_BROWSERS_PATH:-$HOME/.cache/ms-playwright}/chromium-*" >/dev/null; then
+    ok "Chromium du studio déjà là"
+  elif has playwright; then
+    # --with-deps installe aussi les bibliothèques système de Chromium (demande sudo).
+    if playwright install --with-deps chromium >/dev/null 2>&1; then
+      ok "Chromium du studio prêt"
+    else
+      warn "Chromium du studio non installé."
+      TODO+=("Pour le studio vidéo : playwright install --with-deps chromium")
+    fi
+  fi
+else
+  warn "Studio non installé (--no-studio) : les rôles vidéo et marketing ne pourront pas produire de vidéo."
+fi
+
 # --- 10. Superagent ---------------------------------------------------------
 step "Superagent (chef d'orchestre, cockpit, Telegram)"
 if python3 -c 'import sys; sys.exit(sys.version_info < (3, 11))' 2>/dev/null; then
@@ -233,6 +278,9 @@ else
 fi
 if [[ -z "$(PYTHONPATH="$JARVIS_HOME/lib" python3 -m jarvis reglage-lire telegram.chat_id 2>/dev/null)" ]]; then
   TODO+=("Relie ton téléphone : jarvis telegram config")
+fi
+if PYTHONPATH="$JARVIS_HOME/lib" python3 -m jarvis modele liste 2>/dev/null | grep -q "pas encore essayé"; then
+  TODO+=("Une fois connecté à Claude Code et Codex : jarvis modele verifier (essaie chaque modèle avec tes abonnements ; le démon le refait seul chaque semaine).")
 fi
 if [[ -n "${WSL_DISTRO_NAME:-}" ]] && ! "$JARVIS_HOME/bin/jarvis" autostart etat 2>/dev/null | grep -q actif; then
   TODO+=("Pour que Jarvis reparte seul après un redémarrage de Windows : jarvis autostart installer")
@@ -256,4 +304,5 @@ Ensuite :
   2. jarvis doctor     → vérifie que tout est vert
   3. jarvis start      → ouvre le cockpit (et le démon en arrière-plan)
   4. jarvis chef       → lance le chef d'orchestre
+  5. http://localhost:7717 → le plan de l'usine dans ton navigateur
 EOF

@@ -1,0 +1,39 @@
+{
+  "largeur": 1600,
+  "hauteur": 1000,
+  "etapes": [
+    {
+      "aller": "http://localhost:3000/"
+    },
+    {
+      "masquer": ".email"
+    },
+    {
+      "attendre": 900
+    },
+    {
+      "capture": "captures/tableau.png"
+    },
+    {
+      "survoler": ".card:nth-child(2)"
+    },
+    {
+      "attendre": 500
+    },
+    {
+      "ecrire": {
+        "dans": "#poste",
+        "texte": "Développeur React"
+      }
+    },
+    {
+      "attendre": 300
+    },
+    {
+      "cliquer": "#go"
+    },
+    {
+      "attendre": 1800
+    }
+  ]
+}

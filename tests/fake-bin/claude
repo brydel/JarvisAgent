@@ -1,0 +1,22 @@
+#!/usr/bin/env bash
+# Faux Claude Code pour les tests.
+#  - « claude -p … --model X » (essai d'un modèle) : échoue si X est dans $FAKE_MODELES_KO,
+#    répond « limite » si X est dans $FAKE_MODELES_FLOU, réussit sinon ;
+#  - sinon : affiche ses arguments (un par ligne) puis les variables JARVIS_* reçues.
+set -euo pipefail
+modele=""; essai=0
+args=("$@")
+for ((i = 0; i < ${#args[@]}; i++)); do
+  case "${args[i]}" in
+    -p) essai=1 ;;
+    --model) modele="${args[i + 1]:-}" ;;
+  esac
+done
+if ((essai)); then
+  printf '%s\n' "$modele" >>"${FAKE_CLI_LOG:-/dev/null}"
+  [[ ",${FAKE_MODELES_KO:-}," == *",$modele,"* ]] && { echo "API Error: model: $modele not found" >&2; exit 1; }
+  [[ ",${FAKE_MODELES_FLOU:-}," == *",$modele,"* ]] && { echo "Usage limit reached, try again later" >&2; exit 1; }
+  echo "ok"; exit 0
+fi
+for a in "$@"; do echo "$a"; done
+env | grep '^JARVIS_\(HOME\|PROJET\|ISSUE\|METIER\|LIVRABLES\)=' | sort

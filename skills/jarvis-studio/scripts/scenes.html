@@ -1,0 +1,322 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<title>Jarvis Studio — scènes</title>
+<!--
+  Scènes animées du studio Jarvis. Cette page ne se lit pas en direct : rendre.cjs la pilote image
+  par image. Toute animation est une fonction du temps (window.jarvis.aller(ms)), ce qui donne une
+  vidéo fluide et identique à chaque rendu, quelle que soit la charge du PC.
+
+  Le storyboard arrive dans window.STORYBOARD (injecté par rendre.cjs). Format : voir SKILL.md.
+-->
+<style>
+  :root {
+    --fond: #0B0D12; --texte: #F4F6FA; --accent: #5B8CFF; --doux: rgba(244, 246, 250, .62);
+    --u: calc(min(100vw, 100vh) / 100);   /* unité : 1 % du petit côté, pour tenir en 16:9, 9:16 et 1:1 */
+    --police: "Inter", "Segoe UI", system-ui, -apple-system, "Helvetica Neue", Arial, sans-serif;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { width: 100%; height: 100%; overflow: hidden; background: var(--fond); }
+  body { font-family: var(--police); color: var(--texte); -webkit-font-smoothing: antialiased; }
+
+  /* Fond : deux halos qui dérivent lentement, pour que l'image ne soit jamais tout à fait immobile.
+     Des dégradés et non un flou CSS : un grand flou coûte dix fois plus cher à chaque image rendue. */
+  .halo { position: absolute; border-radius: 50%; }
+  .halo.a { width: 110vmax; height: 110vmax; left: -42vmax; top: -52vmax;
+            background: radial-gradient(closest-side, color-mix(in oklab, var(--accent) 46%, transparent), transparent); }
+  .halo.b { width: 96vmax; height: 96vmax; right: -40vmax; bottom: -50vmax;
+            background: radial-gradient(closest-side, color-mix(in oklab, color-mix(in oklab, var(--accent) 55%, #ff5bd1) 30%, transparent), transparent); }
+  .grain { position: absolute; inset: 0; opacity: .5;
+           background: radial-gradient(ellipse at center, transparent 40%, rgba(0, 0, 0, .55) 100%); }
+
+  .scene { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center;
+           justify-content: center; padding: calc(var(--u) * 9) calc(var(--u) * 10); visibility: hidden;
+           text-align: center; gap: calc(var(--u) * 3.2); }
+  .sur { font-size: calc(var(--u) * 2.5); font-weight: 600; letter-spacing: .16em; text-transform: uppercase;
+         color: var(--accent); }
+  .titre { font-size: calc(var(--u) * 11); font-weight: 750; line-height: 1.04; letter-spacing: -.035em;
+           max-width: 16ch; text-wrap: balance; }
+  .titre.moyen { font-size: calc(var(--u) * 7.4); max-width: 20ch; }
+  .titre .mot { display: inline-block; white-space: pre; }
+  .sous { font-size: calc(var(--u) * 3.9); line-height: 1.3; color: var(--doux); max-width: 30ch; text-wrap: balance; }
+
+  /* Capture du produit dans un cadre de navigateur. */
+  .scene.capture { flex-direction: row; text-align: left; gap: calc(var(--u) * 6); padding: calc(var(--u) * 7); }
+  .scene.capture .texte { flex: 0 0 30%; display: flex; flex-direction: column; gap: calc(var(--u) * 2.4); }
+  .scene.capture.seule .texte { display: none; }
+  .scene.capture .titre { font-size: calc(var(--u) * 5.8); max-width: 13ch; }
+  .scene.capture .sous { font-size: calc(var(--u) * 3); }
+  .cadre { flex: 1 1 auto; min-width: 0; max-height: 100%; border-radius: calc(var(--u) * 1.6); overflow: hidden;
+           background: #11141b; border: 1px solid rgba(255, 255, 255, .12);
+           box-shadow: 0 calc(var(--u) * 4) calc(var(--u) * 12) rgba(0, 0, 0, .55), 0 0 0 calc(var(--u) * .12) rgba(255, 255, 255, .04);
+           display: flex; flex-direction: column; }
+  .barre { flex: 0 0 auto; height: calc(var(--u) * 4.4); display: flex; align-items: center; gap: calc(var(--u) * .8);
+           padding: 0 calc(var(--u) * 1.6); background: #191d27; border-bottom: 1px solid rgba(255, 255, 255, .08); }
+  .barre i { width: calc(var(--u) * 1.15); height: calc(var(--u) * 1.15); border-radius: 50%; background: #3a4050; }
+  .barre .adresse { margin-left: calc(var(--u) * 1.6); flex: 1; max-width: 46%; height: calc(var(--u) * 2.5);
+                    border-radius: calc(var(--u) * 1.25); background: #0f1218; color: rgba(244, 246, 250, .55);
+                    font-size: calc(var(--u) * 1.35); display: flex; align-items: center; padding: 0 calc(var(--u) * 1.3);
+                    white-space: nowrap; overflow: hidden; }
+  .vue { position: relative; overflow: hidden; background: #fff; }
+  .vue .plan { position: absolute; inset: 0; transform-origin: 50% 50%; }
+  .vue img { display: block; width: 100%; height: 100%; object-fit: cover; object-position: top center; }
+  .repere { position: absolute; transform: translate(-50%, -50%); }
+  /* Un anneau, pas un disque plein : le repère entoure ce qu'il montre sans le cacher. */
+  .repere .point { width: calc(var(--u) * 7); height: calc(var(--u) * 7); border-radius: 50%;
+                   border: calc(var(--u) * .5) solid var(--accent); background: color-mix(in oklab, var(--accent) 10%, transparent);
+                   box-shadow: 0 0 0 calc(var(--u) * .25) rgba(255, 255, 255, .85), 0 calc(var(--u) * .6) calc(var(--u) * 2.4) rgba(0, 0, 0, .28); }
+  .repere .onde { position: absolute; inset: 0; border-radius: 50%; border: calc(var(--u) * .35) solid var(--accent); }
+  .repere .bulle { position: absolute; left: 50%; top: calc(100% + var(--u) * 1.2); transform: translateX(-50%);
+                   white-space: nowrap; background: #0d1017; color: #fff; font-weight: 600; font-size: calc(var(--u) * 2.1);
+                   padding: calc(var(--u) * .9) calc(var(--u) * 1.6); border-radius: calc(var(--u) * 1.1);
+                   border: 1px solid rgba(255, 255, 255, .16); box-shadow: 0 calc(var(--u) * 1) calc(var(--u) * 3) rgba(0, 0, 0, .45); }
+  .repere.haut .bulle { top: auto; bottom: calc(100% + var(--u) * 1.2); }
+  /* Près d'un bord, la bulle s'aligne sur le repère au lieu de sortir du cadre. */
+  .repere.gauche .bulle { left: 0; transform: none; }
+  .repere.droite .bulle { left: auto; right: 0; transform: none; }
+
+  /* Liste d'arguments. */
+  .scene.points .bloc { display: flex; flex-direction: column; align-items: flex-start; text-align: left;
+                        gap: calc(var(--u) * 3.4); max-width: 100%; }
+  .liste { display: flex; flex-direction: column; gap: calc(var(--u) * 3); margin-top: calc(var(--u) * 1.2); }
+  .ligne { display: flex; align-items: center; gap: calc(var(--u) * 2.6); font-size: calc(var(--u) * 4.7); font-weight: 560;
+           letter-spacing: -.01em; }
+  .coche { flex: 0 0 auto; width: calc(var(--u) * 6); height: calc(var(--u) * 6); border-radius: 50%;
+           background: color-mix(in oklab, var(--accent) 22%, transparent); display: grid; place-items: center; }
+  .coche svg { width: 54%; height: 54%; stroke: var(--accent); stroke-width: 3.2; fill: none; stroke-linecap: round;
+               stroke-linejoin: round; }
+
+  /* Chiffre clé. */
+  .nombre { font-size: calc(var(--u) * 26); font-weight: 800; line-height: .95; letter-spacing: -.05em;
+            font-variant-numeric: tabular-nums;
+            background: linear-gradient(180deg, var(--texte) 30%, color-mix(in oklab, var(--accent) 80%, var(--texte)));
+            -webkit-background-clip: text; background-clip: text; color: transparent; }
+
+  /* Écran de fin. */
+  .logo { height: calc(var(--u) * 10); max-width: 50%; object-fit: contain; }
+  .nom { font-size: calc(var(--u) * 4.2); font-weight: 700; letter-spacing: -.02em; }
+  .bouton { font-size: calc(var(--u) * 3.3); font-weight: 650; padding: calc(var(--u) * 2) calc(var(--u) * 4.4);
+            border-radius: 100vmax; background: var(--accent); color: #fff;
+            box-shadow: 0 calc(var(--u) * 1.6) calc(var(--u) * 5) color-mix(in oklab, var(--accent) 55%, transparent); }
+  .lien { font-size: calc(var(--u) * 2.8); color: var(--doux); letter-spacing: .01em; }
+
+  /* Formats verticaux et carrés : le texte passe au-dessus de la capture. */
+  body.portrait .scene.capture, body.carre .scene.capture { flex-direction: column; text-align: center;
+           padding: calc(var(--u) * 8) calc(var(--u) * 6); gap: calc(var(--u) * 5); }
+  body.portrait .scene.capture .texte, body.carre .scene.capture .texte { flex: 0 0 auto; align-items: center; }
+  body.portrait .scene.capture .titre, body.carre .scene.capture .titre { max-width: 16ch; font-size: calc(var(--u) * 6.6); }
+  body.portrait .scene.capture .sous { font-size: calc(var(--u) * 3.6); }
+  body.portrait .cadre, body.carre .cadre { flex: 0 1 auto; width: 100%; }
+  body.portrait .titre { font-size: calc(var(--u) * 12.5); max-width: 9ch; }
+  body.portrait .titre.moyen { font-size: calc(var(--u) * 9); max-width: 11ch; }
+  body.portrait .sous { font-size: calc(var(--u) * 4.6); max-width: 20ch; }
+  body.portrait .sur { font-size: calc(var(--u) * 3.2); }
+  body.portrait .ligne { font-size: calc(var(--u) * 5.2); }
+  body.portrait .bouton { font-size: calc(var(--u) * 4.4); }
+  body.portrait .lien { font-size: calc(var(--u) * 3.6); }
+</style>
+</head>
+<body>
+<div class="halo a"></div><div class="halo b"></div><div class="grain"></div>
+<div id="scenes"></div>
+<script>
+(() => {
+  const SB = window.STORYBOARD || { scenes: [] };
+  const marque = SB.marque || {};
+  const racine = document.documentElement.style;
+  if (marque.fond) racine.setProperty('--fond', marque.fond);
+  if (marque.texte) { racine.setProperty('--texte', marque.texte); racine.setProperty('--doux', `color-mix(in oklab, ${marque.texte} 62%, transparent)`); }
+  if (marque.accent) racine.setProperty('--accent', marque.accent);
+  if (marque.police) racine.setProperty('--police', `"${marque.police}", "Inter", "Segoe UI", system-ui, sans-serif`);
+  const ratio = innerWidth / innerHeight;
+  document.body.classList.add(ratio < 0.8 ? 'portrait' : ratio < 1.2 ? 'carre' : 'paysage');
+
+  const DOUX = 'cubic-bezier(0.16, 1, 0.3, 1)';   // sortie « expo » : rapide puis posée
+  const anims = [];            // toutes les animations, en pause, pilotées par aller(t)
+  const majs = [];             // mises à jour qui ne sont pas des animations CSS (chiffres, images de clip)
+  const fenetres = [];         // [élément de scène, début ms, fin ms]
+
+  const el = (tag, cls, html) => { const e = document.createElement(tag); if (cls) e.className = cls; if (html != null) e.innerHTML = html; return e; };
+  const texte = (s) => String(s ?? '').replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]));
+  const anim = (e, images, opts) => { const a = e.animate(images, { fill: 'both', easing: DOUX, ...opts }); a.pause(); anims.push(a); return a; };
+  // Entrée type : glisse de quelques pour cent vers le haut en apparaissant.
+  const entree = (e, quand, duree = 700, dy = 4) => anim(e, [
+    { opacity: 0, transform: `translateY(calc(var(--u) * ${dy}))` }, { opacity: 1, transform: 'translateY(0)' }],
+    { delay: quand, duration: duree });
+
+  function titreMots(parent, contenu, quand, classe = 'titre') {
+    const h = el('div', classe);
+    String(contenu || '').split(/\s+/).filter(Boolean).forEach((mot, i, tous) => {
+      const s = el('span', 'mot', texte(mot) + (i < tous.length - 1 ? ' ' : ''));
+      h.appendChild(s);
+      entree(s, quand + i * 85, 800, 5);
+    });
+    parent.appendChild(h);
+    return quand + String(contenu || '').split(/\s+/).length * 85;
+  }
+
+  const fabriques = {
+    titre(sc, s, t0) {
+      let q = t0 + 150;
+      if (s.sur_titre) { const e = el('div', 'sur', texte(s.sur_titre)); sc.appendChild(e); entree(e, q, 600, 2); q += 180; }
+      q = titreMots(sc, s.titre, q);
+      if (s.sous_titre) { const e = el('div', 'sous', texte(s.sous_titre)); sc.appendChild(e); entree(e, q + 200, 800, 3); }
+    },
+
+    capture(sc, s, t0, d) {
+      sc.classList.add('capture');
+      const bloc = el('div', 'texte');
+      if (s.titre || s.sous_titre) {
+        if (s.sur_titre) { const e = el('div', 'sur', texte(s.sur_titre)); bloc.appendChild(e); entree(e, t0 + 150, 600, 2); }
+        const q = titreMots(bloc, s.titre, t0 + 250);
+        if (s.sous_titre) { const e = el('div', 'sous', texte(s.sous_titre)); bloc.appendChild(e); entree(e, q + 150, 700, 3); }
+        sc.appendChild(bloc);
+      } else sc.classList.add('seule');
+      const cadre = el('div', 'cadre');
+      const barre = el('div', 'barre', '<i></i><i></i><i></i>');
+      if (s.url) barre.appendChild(el('div', 'adresse', texte(s.url)));
+      const vue = el('div', 'vue');
+      const [l, h] = s.proportions || [16, 10];
+      vue.style.aspectRatio = `${l} / ${h}`;
+      const plan = el('div', 'plan');
+      const img = el('img');
+      plan.appendChild(img);
+      vue.appendChild(plan);
+      cadre.append(barre, vue);
+      sc.appendChild(cadre);
+      anim(cadre, [{ opacity: 0, transform: 'translateY(calc(var(--u) * 6)) scale(.96)' }, { opacity: 1, transform: 'none' }],
+           { delay: t0 + 100, duration: 900 });
+
+      if (s.images_clip) {
+        // Clip du produit : rendre.cjs en a extrait les images ; on affiche celle de l'instant demandé.
+        const { dossier, nombre, ips } = s.images_clip;
+        const nom = (i) => `${dossier}/${String(Math.max(1, Math.min(nombre, i + 1))).padStart(5, '0')}.jpg`;
+        img.src = nom(0);
+        let courant = 0;
+        majs.push((t) => {
+          const i = Math.floor(Math.max(0, t - t0) / 1000 * ips);
+          const voulu = Math.max(0, Math.min(nombre - 1, i));
+          if (voulu === courant) return null;
+          courant = voulu;
+          img.src = nom(voulu);
+          return img.decode().catch(() => null);
+        });
+      } else if (s.image) {
+        img.src = s.image;
+        const z = s.zoom || { de: 1, a: 1.06 };
+        const [vx, vy] = z.vers || [50, 50];
+        plan.style.transformOrigin = `${vx}% ${vy}%`;
+        anim(plan, [{ transform: `scale(${z.de ?? 1})` }, { transform: `scale(${z.a ?? 1.06})` }],
+             { delay: t0 + (z.depart ?? 0.6) * 1000, duration: Math.max(500, d - (z.depart ?? 0.6) * 1000 - 300), easing: 'cubic-bezier(.45, 0, .2, 1)' });
+      }
+      (s.reperes || []).forEach((r, i) => {
+        const rep = el('div', 'repere' + (r.y > 62 ? ' haut' : '') + (r.x < 28 ? ' gauche' : r.x > 72 ? ' droite' : ''));
+        rep.style.left = `${r.x}%`; rep.style.top = `${r.y}%`;
+        const onde = el('div', 'onde');
+        const point = el('div', 'point');
+        rep.append(onde, point);
+        if (r.texte) rep.appendChild(el('div', 'bulle', texte(r.texte)));
+        // Les repères suivent le zoom de l'image : ils vivent dans le même plan.
+        plan.appendChild(rep);
+        const q = t0 + (r.a ?? 1.4 + i * 0.9) * 1000;
+        anim(rep, [{ opacity: 0, transform: 'translate(-50%, -50%) scale(.4)' }, { opacity: 1, transform: 'translate(-50%, -50%) scale(1)' }],
+             { delay: q, duration: 520, easing: 'cubic-bezier(.34, 1.56, .64, 1)' });
+        anim(onde, [{ opacity: .9, transform: 'scale(1)' }, { opacity: 0, transform: 'scale(3.2)' }],
+             { delay: q + 200, duration: 1300, iterations: Math.max(1, Math.floor((t0 + d - q) / 1300)), easing: 'ease-out' });
+      });
+    },
+
+    points(sc, s, t0) {
+      sc.classList.add('points');
+      const bloc = el('div', 'bloc');   // bloc centré dans l'image, texte aligné à gauche à l'intérieur
+      sc.appendChild(bloc);
+      sc = bloc;
+      let q = t0 + 150;
+      if (s.sur_titre) { const e = el('div', 'sur', texte(s.sur_titre)); sc.appendChild(e); entree(e, q, 600, 2); q += 150; }
+      q = titreMots(sc, s.titre, q, 'titre moyen') + 250;
+      const liste = el('div', 'liste');
+      (s.points || []).forEach((p, i) => {
+        const ligne = el('div', 'ligne');
+        ligne.appendChild(el('div', 'coche', '<svg viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>'));
+        ligne.appendChild(el('span', '', texte(p)));
+        liste.appendChild(ligne);
+        anim(ligne, [{ opacity: 0, transform: 'translateX(calc(var(--u) * -4))' }, { opacity: 1, transform: 'none' }],
+             { delay: q + i * 380, duration: 750 });
+      });
+      sc.appendChild(liste);
+    },
+
+    chiffre(sc, s, t0) {
+      const n = el('div', 'nombre');
+      sc.appendChild(n);
+      entree(n, t0 + 150, 900, 6);
+      const cible = Number(s.valeur) || 0;
+      const decimales = (String(s.valeur).split('.')[1] || '').length;
+      const format = (v) => (s.prefixe || '') + v.toLocaleString('fr-FR', { minimumFractionDigits: decimales, maximumFractionDigits: decimales }) + (s.suffixe || '');
+      n.textContent = format(0);
+      majs.push((t) => {
+        const p = Math.max(0, Math.min(1, (t - t0 - 250) / 1400));
+        n.textContent = format(cible * (1 - Math.pow(1 - p, 4)));   // compte vite puis ralentit
+        return null;
+      });
+      if (s.libelle) { const e = el('div', 'sous', texte(s.libelle)); sc.appendChild(e); entree(e, t0 + 700, 800, 3); }
+    },
+
+    fin(sc, s, t0) {
+      let q = t0 + 150;
+      if (marque.logo) { const e = el('img', 'logo'); e.src = marque.logo; sc.appendChild(e); entree(e, q, 800, 4); q += 200; }
+      else if (marque.nom) { const e = el('div', 'nom', texte(marque.nom)); sc.appendChild(e); entree(e, q, 800, 4); q += 200; }
+      q = titreMots(sc, s.titre, q, 'titre moyen');
+      if (s.bouton) {
+        const e = el('div', 'bouton', texte(s.bouton)); sc.appendChild(e);
+        anim(e, [{ opacity: 0, transform: 'scale(.86)' }, { opacity: 1, transform: 'scale(1)' }],
+             { delay: q + 250, duration: 700, easing: 'cubic-bezier(.34, 1.56, .64, 1)' });
+      }
+      if (s.url) { const e = el('div', 'lien', texte(s.url)); sc.appendChild(e); entree(e, q + 500, 800, 2); }
+    },
+  };
+
+  let t = 0;
+  const conteneur = document.getElementById('scenes');
+  (SB.scenes || []).forEach((s, i, toutes) => {
+    const d = Math.max(0.8, Number(s.duree) || 3) * 1000;
+    const sc = el('section', 'scene');
+    conteneur.appendChild(sc);
+    if (!fabriques[s.type]) throw new Error(`type de scène inconnu : ${s.type}`);
+    fabriques[s.type](sc, s, t, d);
+    // Sortie : la scène s'efface en montant légèrement (sauf la dernière, qui reste à l'écran).
+    if (i < toutes.length - 1) {
+      anim(sc, [{ opacity: 1, transform: 'none' }, { opacity: 0, transform: 'translateY(calc(var(--u) * -2.5))' }],
+           { delay: t + d - 380, duration: 380, easing: 'cubic-bezier(.4, 0, 1, 1)' });
+    }
+    fenetres.push([sc, t, t + d]);
+    t += d;
+  });
+  const total = t;
+  // Dérive lente du fond sur toute la durée.
+  const [ha, hb] = document.querySelectorAll('.halo');
+  anim(ha, [{ transform: 'translate(0, 0) scale(1)' }, { transform: 'translate(14vmax, 9vmax) scale(1.18)' }], { duration: Math.max(1, total), easing: 'ease-in-out' });
+  anim(hb, [{ transform: 'translate(0, 0) scale(1)' }, { transform: 'translate(-12vmax, -8vmax) scale(1.22)' }], { duration: Math.max(1, total), easing: 'ease-in-out' });
+
+  async function aller(ms) {
+    const dernier = fenetres.length - 1;
+    fenetres.forEach(([sc, a, b], i) => { sc.style.visibility = (ms >= a && (ms < b || i === dernier)) ? 'visible' : 'hidden'; });
+    for (const a of anims) a.currentTime = ms;
+    const attentes = majs.map((f) => f(ms)).filter(Boolean);
+    if (attentes.length) await Promise.all(attentes);
+  }
+
+  async function pret() {
+    await document.fonts.ready;
+    await Promise.all([...document.images].map((i) => (i.complete ? null : new Promise((ok) => { i.onload = i.onerror = ok; }))));
+    const cassees = [...document.images].filter((i) => !i.naturalWidth).map((i) => i.getAttribute('src'));
+    await aller(0);
+    return { duree: total, scenes: fenetres.length, images_introuvables: cassees };
+  }
+
+  window.jarvis = { aller, pret, duree: total };
+})();
+</script>
+</body>
+</html>
