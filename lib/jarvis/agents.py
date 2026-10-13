@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 import shutil
 import subprocess
 import time
@@ -18,6 +19,7 @@ STATUS_LABELS = {"working": "travaille", "waiting": "attend", "done": "terminé"
 BUSY = ("working", "waiting", "untracked")
 IDLE_AFTER = 20 * 60
 WINDOW_PREFIX = "wm-"
+NON_AGENTS = (config.CHEF_WINDOW, "daemon", "cockpit", "reprise")
 
 
 def tmux_agent_windows() -> list[dict]:
@@ -65,14 +67,17 @@ def status_all() -> tuple[list[dict] | None, str]:
         return None, "réponse JSON illisible de workmux status"
     agents = []
     for a in data.get("agents", []) or []:
-        if a.get("window_name") == config.CHEF_WINDOW:
+        if a.get("window_name") in NON_AGENTS:
             # Le chef est une session Claude suivie par les hooks workmux comme les autres :
             # ce n'est pas un agent. Sinon chaque fin de tour du chef le réveillerait lui-même (boucle).
+            # Même règle pour les fenêtres de service de Jarvis (démon, cockpit).
             continue
         agents.append({
             "worktree": a.get("worktree") or "?",
             "branch": a.get("branch") or "",
-            "project": a.get("project") or config.project_for_path(a.get("workdir") or "") or "?",
+            # Le nom du registre de Jarvis d'abord (par le dossier) : workmux, lui, nomme le projet
+            # d'après le dossier du dépôt, qui peut différer.
+            "project": config.project_for_path(a.get("workdir") or "") or a.get("project") or "?",
             "status": a.get("status") or "?",
             "elapsed": int(a.get("elapsed_secs") or 0),
             "title": (a.get("title") or "").strip(),
@@ -221,8 +226,86 @@ def tmux_windows(session: str = config.SESSION) -> list[str]:
     return res.stdout.split() if res.returncode == 0 else []
 
 
+SHELLS = ("bash", "sh", "zsh", "fish", "dash")
+
+
+def _arbre() -> dict[int, list[tuple[int, str]]] | None:
+    """{pid parent: [(pid, nom)]} d'après /proc, ou None si /proc est illisible."""
+    enfants: dict[int, list[tuple[int, str]]] = {}
+    try:
+        entrees = os.listdir("/proc")
+    except OSError:
+        return None
+    for e in entrees:
+        if not e.isdigit():
+            continue
+        try:
+            with open(f"/proc/{e}/stat", encoding="utf-8", errors="replace") as fh:
+                stat = fh.read()
+        except OSError:
+            continue  # processus terminé entre-temps
+        # « pid (nom) état ppid … » : le nom peut contenir des espaces ou des parenthèses.
+        nom = stat[stat.find("(") + 1:stat.rfind(")")]
+        reste = stat[stat.rfind(")") + 2:].split()
+        if len(reste) >= 2 and reste[1].isdigit():
+            enfants.setdefault(int(reste[1]), []).append((int(e), nom))
+    return enfants
+
+
+def programme_actif(pane_pid: int, arbre: dict | None = None) -> bool | None:
+    """Vrai si autre chose qu'un shell tourne dans le volet (le volet lui-même ou un descendant).
+
+    On ne peut pas se fier à #{pane_current_command} : quand tmux lance « claude …; exec bash »,
+    il rapporte le shell parent, pas Claude Code. None si /proc est illisible.
+    """
+    arbre = _arbre() if arbre is None else arbre
+    if arbre is None:
+        return None
+    try:
+        with open(f"/proc/{pane_pid}/comm", encoding="utf-8", errors="replace") as fh:
+            if fh.read().strip() not in SHELLS:
+                return True
+    except OSError:
+        return False  # le volet n'a plus de processus
+    a_voir = [pane_pid]
+    while a_voir:
+        for pid, nom in arbre.get(a_voir.pop(), []):
+            if nom not in SHELLS:
+                return True
+            a_voir.append(pid)
+    return False
+
+
+def chef_etat() -> str:
+    """« actif », « absent » (pas de fenêtre) ou « eteint » (fenêtre ouverte sur un simple shell)."""
+    if not shutil.which("tmux"):
+        return "absent"
+    try:
+        res = _run(["tmux", "list-panes", "-t", _chef_win(), "-F", "#{pane_pid}\t#{pane_current_command}"], timeout=5)
+    except (subprocess.TimeoutExpired, OSError):
+        return "absent"
+    if res.returncode != 0:
+        return "absent"
+    volets = [ln.split("\t", 1) for ln in res.stdout.splitlines() if "\t" in ln]
+    if not volets:
+        return "absent"
+    arbre = _arbre()
+    for pid, commande in volets:
+        actif = programme_actif(int(pid), arbre) if pid.isdigit() else None
+        if actif is None:  # sans /proc : on se contente de ce que dit tmux
+            actif = commande.strip() not in SHELLS
+        if actif:
+            return "actif"
+    return "eteint"
+
+
 def chef_running() -> bool:
-    return config.CHEF_WINDOW in tmux_windows()
+    """Vrai si la fenêtre du chef existe ET que Claude Code (ou un autre programme) y tourne.
+
+    Quand Claude Code s'arrête, la fenêtre reste ouverte sur un shell (pour lire l'erreur) : y taper
+    un message exécuterait son texte comme une commande. Ce n'est plus un chef.
+    """
+    return chef_etat() == "actif"
 
 
 def chef_idle_secs() -> int | None:
@@ -327,6 +410,12 @@ def select_window(session: str, window: str) -> bool:
         return res.returncode == 0
     except (subprocess.TimeoutExpired, OSError):
         return False
+
+
+def window_idle() -> dict[str, int]:
+    """{fenêtre d'agent: secondes depuis sa dernière sortie à l'écran}."""
+    now = time.time()
+    return {w["window"]: max(0, int(now - w["activity"])) for w in tmux_agent_windows() if w["activity"]}
 
 
 def fmt_elapsed(secs: int) -> str:

@@ -1,0 +1,310 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Usine Jarvis</title>
+<style>
+  /* Plan d'atelier : un bleu de plan technique, des traits clairs, et la couleur réservée aux
+     postes occupés. Tout ce qui est éteint est en trait fin ; tout ce qui travaille est allumé. */
+  :root {
+    --plan: #0f2436; --plan-fonce: #0a1a28; --trait: #e6edf2; --trait-doux: rgba(230, 237, 242, .26);
+    --trait-fin: rgba(230, 237, 242, .12); --ambre: #f5c451; --rouge: #f2705d; --vert: #62d49b;
+    --cyan: #58cdf2; --magenta: #f089c8; --yellow: #f5c451; --red: #f2705d; --green: #62d49b;
+    --blue: #7bb0ff; --white: #e6edf2;
+    --titre: "Bahnschrift", "DIN Alternate", "Barlow Condensed", "Roboto Condensed", "Arial Narrow", sans-serif;
+    --texte: "Segoe UI Variable Text", "Segoe UI", system-ui, -apple-system, "Helvetica Neue", Arial, sans-serif;
+  }
+  * { box-sizing: border-box; }
+  html { background: var(--plan-fonce); }
+  body {
+    margin: 0; min-height: 100vh; color: var(--trait); font: 15px/1.45 var(--texte);
+    background-color: var(--plan);
+    /* Quadrillage de plan : mailles de 24 px, une ligne plus marquée toutes les 5 mailles. */
+    background-image:
+      linear-gradient(var(--trait-fin) 1px, transparent 1px), linear-gradient(90deg, var(--trait-fin) 1px, transparent 1px),
+      linear-gradient(rgba(230, 237, 242, .05) 1px, transparent 1px), linear-gradient(90deg, rgba(230, 237, 242, .05) 1px, transparent 1px);
+    background-size: 120px 120px, 120px 120px, 24px 24px, 24px 24px;
+  }
+  h1, h2, h3, .chiffre { font-family: var(--titre); font-stretch: 85%; font-weight: 600; letter-spacing: .01em; margin: 0; }
+  a { color: inherit; }
+  :focus-visible { outline: 2px solid var(--cyan); outline-offset: 2px; }
+
+  .page { max-width: 1560px; margin: 0 auto; padding: 20px 24px 40px; }
+
+  /* Cartouche : le bandeau d'identification en haut du plan. */
+  .cartouche { display: grid; grid-template-columns: auto 1fr auto; align-items: stretch; border: 1.5px solid var(--trait);
+               background: var(--plan); }
+  .cartouche > div { padding: 12px 18px; border-right: 1.5px solid var(--trait); display: flex; flex-direction: column; justify-content: center; }
+  .cartouche > div:last-child { border-right: 0; }
+  .cartouche h1 { font-size: 30px; line-height: 1; }
+  .cartouche .sous { color: var(--trait-doux); font-size: 13px; margin-top: 4px; color: rgba(230, 237, 242, .62); }
+  .compteurs { flex-direction: row !important; gap: 28px; align-items: center; justify-content: flex-start !important; flex-wrap: wrap; }
+  .compteur .chiffre { font-size: 30px; line-height: 1; }
+  .compteur .nom { font-size: 12.5px; color: rgba(230, 237, 242, .62); }
+  .compteur.alerte .chiffre { color: var(--ambre); }
+  .voyants { gap: 5px; font-size: 13px; min-width: 150px; }
+  .voyant { display: flex; align-items: center; gap: 8px; }
+  .lampe { width: 9px; height: 9px; border-radius: 50%; border: 1.5px solid var(--trait-doux); flex: 0 0 auto; }
+  .lampe.ok { background: var(--vert); border-color: var(--vert); }
+  .lampe.ko { background: transparent; border-color: var(--rouge); }
+  .heure { font-family: var(--titre); font-size: 20px; margin-top: 4px; font-variant-numeric: tabular-nums; }
+
+  .bandeau { margin-top: 12px; padding: 10px 16px; border: 1.5px solid var(--ambre); color: var(--ambre); font-weight: 600; display: none; }
+  .bandeau.visible { display: block; }
+  .bandeau.grave { border-color: var(--rouge); color: var(--rouge); }
+
+  /* Réservoirs de jetons. */
+  .reservoirs { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 12px; }
+  .reservoir { border: 1.5px solid var(--trait-doux); padding: 12px 16px 14px; background: rgba(10, 26, 40, .55); }
+  .reservoir h2 { font-size: 19px; display: flex; align-items: baseline; gap: 10px; }
+  .reservoir h2 small { font: 13px var(--texte); color: rgba(230, 237, 242, .62); }
+  .reservoir.epuise { border-color: var(--rouge); }
+  .jauge { display: grid; grid-template-columns: 74px 1fr 52px; align-items: center; gap: 12px; margin-top: 9px; font-size: 13px; }
+  .jauge .nom { color: rgba(230, 237, 242, .72); }
+  .jauge .pct { text-align: right; font-family: var(--titre); font-size: 17px; font-variant-numeric: tabular-nums; }
+  .tube { position: relative; height: 14px; border: 1.5px solid var(--trait-doux); }
+  .tube i { position: absolute; left: 0; top: 0; bottom: 0; background: var(--vert); }
+  .tube.alerte i { background: var(--ambre); } .tube.arret i { background: var(--rouge); }
+  .tube b { position: absolute; top: -4px; bottom: -4px; width: 0; border-left: 1.5px dashed var(--trait); opacity: .55; }
+  .note { margin-top: 8px; font-size: 13px; color: rgba(230, 237, 242, .72); min-height: 19px; }
+  .note.alerte { color: var(--ambre); }
+
+  .corps { display: grid; grid-template-columns: minmax(0, 1fr) 380px; gap: 16px; margin-top: 16px; align-items: start; }
+
+  /* Le plan : une travée par équipe, un poste par spécialité. */
+  .plan { display: grid; grid-template-columns: repeat(auto-fill, minmax(330px, 1fr)); gap: 14px; }
+  .travee { border: 1.5px dashed var(--trait-doux); padding: 12px 14px 14px; position: relative; background: rgba(10, 26, 40, .35); }
+  .travee h2 { font-size: 20px; display: flex; justify-content: space-between; align-items: baseline; }
+  .travee h2 span { font: 13px var(--texte); color: rgba(230, 237, 242, .62); }
+  .postes { display: grid; gap: 8px; margin-top: 10px; }
+  .poste { border: 1.5px solid var(--trait-fin); padding: 8px 12px; position: relative; display: grid;
+           grid-template-columns: 46px 1fr; column-gap: 12px; align-items: center; min-height: 44px; }
+  .poste .sigle { font-family: var(--titre); font-size: 17px; text-align: center; padding: 3px 0; border: 1.5px solid var(--trait-doux);
+                  color: rgba(230, 237, 242, .6); }
+  .poste .metier { color: rgba(230, 237, 242, .6); }
+  .poste.occupe { border-color: var(--couleur); background: color-mix(in srgb, var(--couleur) 9%, transparent); align-items: start; padding: 10px 12px; }
+  .poste.occupe .sigle { background: var(--couleur); border-color: var(--couleur); color: var(--plan-fonce); font-weight: 700; }
+  .poste.occupe .metier { color: var(--couleur); font-weight: 600; }
+  .poste .tache { font-family: var(--titre); font-size: 18px; line-height: 1.2; margin-top: 1px; overflow-wrap: anywhere; }
+  .poste .detail { font-size: 13px; color: rgba(230, 237, 242, .78); margin-top: 3px; overflow-wrap: anywhere; }
+  .poste .ligne { display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: 13px; margin-top: 6px; align-items: center; }
+  .etat { display: inline-flex; align-items: center; gap: 7px; font-weight: 600; }
+  .etat .lampe { width: 10px; height: 10px; }
+  .etat.working .lampe { background: var(--couleur); border-color: var(--couleur); animation: pouls 1.6s ease-in-out infinite; }
+  .etat.waiting { color: var(--ambre); } .etat.waiting .lampe { background: var(--ambre); border-color: var(--ambre); }
+  .etat.done { color: var(--vert); } .etat.done .lampe { background: var(--vert); border-color: var(--vert); }
+  @keyframes pouls { 50% { opacity: .25; } }
+  @media (prefers-reduced-motion: reduce) { .etat.working .lampe { animation: none; } }
+  .modele { border: 1px solid var(--trait-doux); padding: 0 7px; }
+
+  /* Colonne de droite. */
+  .cote { display: grid; gap: 14px; }
+  .bloc { border: 1.5px solid var(--trait-doux); background: rgba(10, 26, 40, .55); }
+  .bloc h2 { font-size: 19px; padding: 10px 14px; border-bottom: 1.5px solid var(--trait-doux); display: flex; justify-content: space-between; align-items: baseline; }
+  .bloc h2 span { font: 13px var(--texte); color: rgba(230, 237, 242, .62); }
+  .bloc .contenu { padding: 10px 14px 12px; }
+  .vide { color: rgba(230, 237, 242, .6); font-size: 14px; }
+  .plan-item { padding: 8px 0; border-bottom: 1px solid var(--trait-fin); }
+  .plan-item:last-child { border-bottom: 0; padding-bottom: 0; } .plan-item:first-child { padding-top: 0; }
+  .plan-item h3 { font-size: 17px; }
+  .plan-item p { margin: 3px 0 6px; font-size: 13px; color: rgba(230, 237, 242, .72); }
+  .plan-item ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; font-size: 13.5px; }
+  .plan-item li { display: grid; grid-template-columns: 40px 1fr; gap: 8px; align-items: baseline; }
+  .plan-item li .sigle { font-family: var(--titre); font-size: 13px; text-align: center; background: var(--couleur, var(--trait-doux)); color: var(--plan-fonce); font-weight: 700; }
+  .consigne { margin-top: 10px; font-size: 13px; color: var(--ambre); }
+  .livrable { padding: 10px 0; border-bottom: 1px solid var(--trait-fin); }
+  .livrable:last-child { border-bottom: 0; padding-bottom: 0; } .livrable:first-child { padding-top: 0; }
+  .livrable h3 { font-size: 17px; overflow-wrap: anywhere; }
+  .livrable p { margin: 2px 0 8px; font-size: 13px; color: rgba(230, 237, 242, .72); }
+  .livrable video, .livrable img { display: block; width: 100%; background: #000; border: 1px solid var(--trait-doux); }
+  .fil { font-size: 13px; display: grid; gap: 5px; max-height: 330px; overflow: auto; }
+  .fil div { display: grid; grid-template-columns: 42px 1fr; gap: 8px; }
+  .fil time { color: rgba(230, 237, 242, .55); font-variant-numeric: tabular-nums; }
+  .fil .erreur { color: var(--rouge); } .fil .question, .fil .agent_bloque { color: var(--ambre); }
+  table { width: 100%; border-collapse: collapse; font-size: 13.5px; }
+  th { text-align: left; font-weight: 400; color: rgba(230, 237, 242, .62); padding: 0 0 4px; }
+  td { padding: 4px 0; border-top: 1px solid var(--trait-fin); font-variant-numeric: tabular-nums; }
+  td:not(:first-child), th:not(:first-child) { text-align: right; }
+
+  @media (max-width: 1080px) {
+    .corps { grid-template-columns: 1fr; }
+    .cartouche { grid-template-columns: 1fr; } .cartouche > div { border-right: 0; border-bottom: 1.5px solid var(--trait); }
+    .cartouche > div:last-child { border-bottom: 0; }
+    .reservoirs { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+<div class="page">
+  <header class="cartouche">
+    <div><h1>Usine Jarvis</h1><div class="sous">Plan des ateliers, en lecture seule</div></div>
+    <div class="compteurs" id="compteurs"></div>
+    <div class="voyants" id="voyants"></div>
+  </header>
+  <div class="bandeau" id="bandeau" role="status"></div>
+  <section class="reservoirs" id="reservoirs" aria-label="Jetons des abonnements"></section>
+  <div class="corps">
+    <main class="plan" id="plan" aria-label="Ateliers"></main>
+    <aside class="cote">
+      <section class="bloc"><h2>À valider <span id="nb-plans"></span></h2><div class="contenu" id="plans"></div></section>
+      <section class="bloc"><h2>Livrables <span id="nb-livrables"></span></h2><div class="contenu" id="livrables"></div></section>
+      <section class="bloc"><h2>Sept derniers jours</h2><div class="contenu" id="bilan"></div></section>
+      <section class="bloc"><h2>Fil d'activité</h2><div class="contenu"><div class="fil" id="fil"></div></div></section>
+    </aside>
+  </div>
+</div>
+<script>
+(() => {
+  const $ = (id) => document.getElementById(id);
+  // Tout texte venu des agents est échappé : un titre de tâche ne doit jamais devenir du HTML.
+  const t = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  const COULEURS = ['cyan', 'magenta', 'yellow', 'red', 'green', 'blue', 'white'];
+  const couleur = (c) => `var(--${COULEURS.includes(c) ? c : 'white'})`;
+  const duree = (s) => (s < 60 ? `${s} s` : s < 3600 ? `${Math.floor(s / 60)} min` : `${Math.floor(s / 3600)} h ${String(Math.floor((s % 3600) / 60)).padStart(2, '0')}`);
+  const deux = (n) => String(n).padStart(2, '0');
+  const heure = (ts) => { const d = new Date(ts * 1000); return `${deux(d.getHours())}:${deux(d.getMinutes())}`; };
+  const maj = (v) => (v ? v.charAt(0).toUpperCase() + v.slice(1) : '');
+  const affectation = (a) => [maj(a.fournisseur), a.modele && !a.modele.endsWith('-defaut') ? a.modele : '', a.effort].filter(Boolean).join(' · ');
+  const ETATS = { working: 'travaille', waiting: 'attend une réponse', done: 'terminé', untracked: 'démarre', idle: 'inactif' };
+  const jetons = (n) => (n >= 1e6 ? `${(n / 1e6).toFixed(1)} M` : n >= 1000 ? `${Math.round(n / 1000)} k` : String(n));
+  let cleLivrables = '';
+
+  function cartouche(e) {
+    const attend = e.agents.filter((a) => a.statut === 'waiting').length;
+    const aValider = e.plans.length + e.propositions.length;
+    const c = [
+      [`${e.occupes}/${e.capacite}`, 'agents au travail', e.capacite < e.capacite_base],
+      [attend, attend > 1 ? 'attendent une réponse' : 'attend une réponse', attend > 0],
+      [aValider, 'à valider', aValider > 0],
+      [e.livrables.length, e.livrables.length > 1 ? 'livrables récents' : 'livrable récent', false],
+    ];
+    $('compteurs').innerHTML = c.map(([n, nom, alerte]) => `<div class="compteur${alerte ? ' alerte' : ''}"><div class="chiffre">${t(n)}</div><div class="nom">${t(nom)}</div></div>`).join('');
+    const v = [['Démon', e.demon], ['Chef d\'orchestre', e.chef], ['Telegram', e.telegram]];
+    $('voyants').innerHTML = v.map(([nom, ok]) => `<div class="voyant"><span class="lampe ${ok ? 'ok' : 'ko'}"></span>${t(nom)}${ok ? '' : ' arrêté'}</div>`).join('')
+      + `<div class="heure">${heure(Date.now() / 1000)}:${deux(new Date().getSeconds())}</div>`;
+    const messages = [];
+    if (e.pause) messages.push(['Pause : aucun nouveau lancement tant qu\'elle n\'est pas levée (cockpit, touche P, ou /reprendre sur Telegram).', true]);
+    if (!e.demon) messages.push(['Le démon est arrêté : plus rien n\'est surveillé. Relance-le avec « jarvis start ».', true]);
+    if (e.agents_erreur) messages.push([`État des agents illisible : ${e.agents_erreur}`, true]);
+    if (e.capacite < e.capacite_base) messages.push([`Capacité réduite de ${e.capacite_base} à ${e.capacite} agents : ${e.capacite_raisons.join(' ; ')}.`, false]);
+    const b = $('bandeau');
+    b.className = 'bandeau' + (messages.length ? ' visible' : '') + (messages.some((m) => m[1]) ? ' grave' : '');
+    b.innerHTML = messages.map((m) => `<div>${t(m[0])}</div>`).join('');
+  }
+
+  function reservoirs(e) {
+    const { alerte, arret } = e.seuils;
+    $('reservoirs').innerHTML = ['claude', 'codex'].map((nom) => {
+      const u = e.jetons[nom];
+      if (!u) return '';
+      const noms = { '5h': '5 heures', semaine: 'Semaine' };
+      const jauges = Object.entries(u.fenetres).map(([k, f]) => {
+        const classe = f.pct >= arret ? 'arret' : f.pct >= alerte ? 'alerte' : '';
+        return `<div class="jauge"><span class="nom">${noms[k]}</span>
+          <span class="tube ${classe}" title="Remise à zéro : ${t(f.reset || 'inconnue')}"><i style="width:${Math.min(100, f.pct)}%"></i><b style="left:${alerte}%"></b><b style="left:${arret}%"></b></span>
+          <span class="pct">${Math.round(f.pct)} %</span></div>`;
+      }).join('') || `<div class="vide" style="margin-top:8px">${t(u.source || 'Aucune donnée')}</div>`;
+      let note = '', classe = '';
+      const p = u.prevision;
+      if (u.niveau === 'epuise') { note = `Épuisé${u.reprise ? ` jusqu'à ${u.reprise}` : ''} : ses agents ont committé et se sont arrêtés.`; classe = 'alerte'; }
+      else if (p && p.minutes != null && p.avant_reset) { note = `Au rythme actuel (${Math.round(p.rythme)} % par heure), arrêt dans ${duree(Math.round(p.minutes * 60))}, avant la remise à zéro.`; classe = 'alerte'; }
+      else if (p && p.minutes != null) note = `Rythme : ${Math.round(p.rythme)} % par heure. Tient jusqu'à la remise à zéro.`;
+      const etat = { ok: 'à l\'aise', alerte: 'en alerte', epuise: 'épuisé', inconnu: 'sans données' }[u.niveau] || '';
+      return `<div class="reservoir ${u.niveau === 'epuise' ? 'epuise' : ''}"><h2>${maj(nom)} <small>${etat}</small></h2>${jauges}<div class="note ${classe}">${t(note)}</div></div>`;
+    }).join('');
+  }
+
+  function poste(role, a) {
+    const c = couleur(role ? role.couleur : 'white');
+    if (!a) return `<div class="poste"><div class="sigle">${t(role.sigle)}</div><div class="metier" title="${t(role.resume)}">${t(role.titre)}</div></div>`;
+    const issue = a.issue ? `${t(a.issue)} ` : '';
+    return `<div class="poste occupe" style="--couleur:${c}">
+      <div class="sigle">${t(role ? role.sigle : '···')}</div>
+      <div>
+        <div class="metier">${t(role ? role.titre : 'Lancé à la main')}</div>
+        <div class="tache">${t(a.projet)} ${issue}</div>
+        <div class="detail">${t(a.titre || a.worktree)}</div>
+        <div class="ligne">
+          <span class="etat ${t(a.statut)}"><span class="lampe"></span>${t(ETATS[a.statut] || a.statut)}</span>
+          <span>${duree(a.duree)}</span>
+          <span class="modele" title="${t(a.raison)}">${t(affectation(a) || '—')}</span>
+        </div>
+      </div></div>`;
+  }
+
+  function plan(e) {
+    const parRole = {};
+    e.agents.forEach((a) => { (parRole[a.role] = parRole[a.role] || []).push(a); });
+    const connus = new Set(e.equipes.flatMap((q) => q.roles.map((r) => r.nom)));
+    let html = e.equipes.map((eq) => {
+      const actifs = eq.roles.reduce((n, r) => n + (parRole[r.nom] || []).filter((a) => a.statut !== 'done' && a.statut !== 'idle').length, 0);
+      const postes = eq.roles.map((r) => ((parRole[r.nom] || []).length ? parRole[r.nom].map((a) => poste(r, a)).join('') : poste(r, null))).join('');
+      return `<section class="travee"><h2>${t(eq.nom)} <span>${actifs ? `${actifs} au travail` : 'au repos'}</span></h2><div class="postes">${postes}</div></section>`;
+    }).join('');
+    const hors = e.agents.filter((a) => !connus.has(a.role));
+    if (hors.length) html += `<section class="travee"><h2>Hors registre <span>lancés à la main</span></h2><div class="postes">${hors.map((a) => poste(null, a)).join('')}</div></section>`;
+    $('plan').innerHTML = html;
+  }
+
+  function plans(e) {
+    const roles = Object.fromEntries(e.equipes.flatMap((q) => q.roles.map((r) => [r.nom, r])));
+    const item = (i) => {
+      const r = roles[i.role];
+      return `<li><span class="sigle" style="--couleur:${couleur(r ? r.couleur : 'white')}">${t(r ? r.sigle : '···')}</span><span>${t(i.projet)} ${t(i.issue)} : ${t(i.affectation)}${i.lance ? ' (lancée)' : ''}</span></li>`;
+    };
+    const bloc = (p) => `<div class="plan-item"><h3>${t(p.id)} ${t(p.titre)}</h3>${p.pourquoi ? `<p>${t(p.pourquoi)}</p>` : ''}<ul>${p.items.map(item).join('')}</ul></div>`;
+    const props = e.propositions.map((i) => `<div class="plan-item"><h3>${t(i.id)} Modèle ${t(i.nom)} (${t(i.fournisseur)})</h3><p>${t(i.pourquoi)}</p></div>`).join('');
+    const n = e.plans.length + e.propositions.length;
+    $('nb-plans').textContent = n ? String(n) : '';
+    let html = e.plans.map(bloc).join('') + props;
+    if (n) html += '<div class="consigne">Approuve ou refuse depuis Telegram, le cockpit (touches o et x) ou le terminal.</div>';
+    else html = '<div class="vide">Rien n\'attend ta décision.</div>';
+    if (e.en_cours.length) html += `<div class="plan-item" style="margin-top:10px"><p>En cours : ${e.en_cours.map((p) => `${t(p.id)} ${t(p.titre)} (${p.items.filter((i) => i.lance).length}/${p.items.length} lancées)`).join(', ')}</p></div>`;
+    $('plans').innerHTML = html;
+  }
+
+  function livrables(e) {
+    $('nb-livrables').textContent = e.livrables.length ? String(e.livrables.length) : '';
+    const cle = e.livrables.map((l) => l.id + l.envoye).join(',');
+    if (cle === cleLivrables) return;   // ne pas recréer les lecteurs vidéo à chaque rafraîchissement
+    cleLivrables = cle;
+    $('livrables').innerHTML = e.livrables.length ? e.livrables.map((l) => {
+      const media = l.genre === 'video' ? `<video controls preload="metadata" src="/livrable/${t(l.id)}"${l.planche ? ` poster="/planche/${t(l.id)}"` : ''}></video>`
+        : l.genre === 'image' ? `<img alt="${t(l.titre)}" loading="lazy" src="/livrable/${t(l.id)}">`
+        : `<a href="/livrable/${t(l.id)}">Ouvrir le document</a>`;
+      const taille = l.octets >= 1e5 ? `${(l.octets / 1e6).toFixed(1)} Mo` : `${Math.max(1, Math.round(l.octets / 1000))} ko`;
+      return `<div class="livrable"><h3>${t(l.id)} ${t(l.titre)}</h3><p>${t(l.projet)} ${t(l.issue)}, ${taille}, ${heure(l.ts)}, ${l.envoye ? 'envoyé sur Telegram' : 'pas encore envoyé'}</p>${media}</div>`;
+    }).join('') : '<div class="vide">Les vidéos, visuels et rapports produits par le studio apparaîtront ici.</div>';
+  }
+
+  function bilan(e) {
+    const b = e.bilan;
+    if (!b || !b.total) { $('bilan').innerHTML = '<div class="vide">Aucune tâche lancée cette semaine.</div>'; return; }
+    const lignes = Object.entries(b.fournisseurs).map(([nom, g]) => `<tr><td>${t(maj(nom))}</td><td>${g.terminees}/${g.taches}</td><td>${g.terminees ? Math.round(g.minutes / g.terminees) + ' min' : '—'}</td><td>${jetons(g.jetons)}</td></tr>`).join('');
+    const sans = b.a_relire.length ? `<div class="consigne">${b.a_relire.length} tâche(s) terminée(s) sans contre-relecture.</div>` : '';
+    $('bilan').innerHTML = `<table><tr><th>Fournisseur</th><th>Terminées</th><th>Durée moyenne</th><th>Jetons</th></tr>${lignes}</table>${sans}`;
+  }
+
+  function fil(e) {
+    $('fil').innerHTML = e.fil.slice().reverse().map((x) => `<div><time>${heure(x.ts)}</time><span class="${t(x.type)}">${t(x.texte)}</span></div>`).join('');
+  }
+
+  async function rafraichir() {
+    try {
+      const rep = await fetch('/api/etat', { cache: 'no-store' });
+      const e = await rep.json();
+      if (e.erreur) throw new Error(e.erreur);
+      cartouche(e); reservoirs(e); plan(e); plans(e); livrables(e); bilan(e); fil(e);
+    } catch (err) {
+      const b = $('bandeau');
+      b.className = 'bandeau visible grave';
+      b.textContent = `Le tableau de bord ne répond plus (${err.message}). Vérifie que le démon tourne : jarvis start.`;
+    }
+  }
+  rafraichir();
+  setInterval(rafraichir, 3000);
+})();
+</script>
+</body>
+</html>

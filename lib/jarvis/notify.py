@@ -87,6 +87,10 @@ def plan_buttons(plan_id: str) -> list[list[tuple[str, str]]]:
     return [[("✅ Approuver", f"ok:{plan_id}"), ("✋ Refuser", f"non:{plan_id}")]]
 
 
+def proposition_buttons(prop_id: str) -> list[list[tuple[str, str]]]:
+    return [[("✅ Accepter", f"mok:{prop_id}"), ("✋ Refuser", f"mnon:{prop_id}")]]
+
+
 def alert(kind: str, text: str, *, buttons=None, title: str = "JARVIS", windows: bool = True, **extra) -> dict:
     """Événement important pour l'humain : fil + Telegram + toast Windows."""
     event = store.feed_add(kind, text, **extra)

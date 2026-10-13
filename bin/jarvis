@@ -23,36 +23,55 @@ py() { PYTHONPATH="$JARVIS_HOME/lib${PYTHONPATH:+:$PYTHONPATH}" python3 -m jarvi
 
 usage() {
   cat <<EOF
-${C_CYAN}jarvis${C_OFF} — poste de pilotage des agents IA
+${C_CYAN}jarvis${C_OFF} — l'usine : des agents IA spécialisés, pilotés par un chef d'orchestre
 
 ${C_CYAN}Pilotage${C_OFF}
   jarvis start [--fond]                 Ouvre la session « $SESSION » : cockpit + démon
                                         (après un redémarrage : reprend les agents et le chef)
   jarvis chef                           Lance (ou rejoint) le chef d'orchestre
-  jarvis cockpit                        Interface plein écran (agents, plans, fil)
-  jarvis etat                           État des agents, plans et projets
-  jarvis jetons                         Consommation Claude et Codex (5 h et semaine)
-  jarvis veille [fait <projet>]         Veille concurrentielle par projet
+  jarvis cockpit                        Interface plein écran (ateliers, plans, livrables, fil)
+  jarvis web                            Tableau de bord dans le navigateur (lecture seule)
+  jarvis etat · jarvis usine            État complet · les ateliers : qui travaille sur quoi
   jarvis plan liste|voir|ok|non         Plans proposés par le chef
   jarvis fil [n]                        Derniers événements
 
 ${C_CYAN}Agents${C_OFF}
-  jarvis task [--projet P] <ISSUE> <claude|codex> [desc] [--consignes fichier.md]
-                                        Lance un agent sur une issue Linear, dans son worktree
+  jarvis task [--projet P] <ISSUE> <claude|codex|auto> [desc] [--role R] [--taille S|M|L]
+              [--modele M] [--consignes fichier.md] [--revue N°PR]
+                                        Lance un agent spécialisé sur une issue Linear, dans son worktree
   jarvis voir <projet:worktree>         Sortie récente d'un agent (même non suivi par workmux)
   jarvis fermer <projet:worktree>|--termines
                                         Ferme la fenêtre d'agents terminés (worktree conservé)
   jarvis reprendre [--essai]            Relance les agents interrompus par un redémarrage
-  jarvis board                          Tableau de bord workmux
-  jarvis status                         Tâches et état des agents (projet courant)
+  jarvis tache [n] · jarvis bilan       Registre des tâches · ce que l'usine a produit
+  jarvis verdict <projet> <ISSUE> pret|corrections [note]
+                                        Verdict d'une contre-relecture
+  jarvis board · jarvis status          Tableau de bord workmux · tâches du projet courant
+
+${C_CYAN}Rôles et modèles${C_OFF}
+  jarvis role [voir <nom>]              Les spécialités de l'usine (DevOps, front-end, vidéo…)
+  jarvis modele                         Catalogue des modèles et leur disponibilité
+  jarvis modele choisir --role R [--taille M]
+                                        Ce que le routeur choisirait, et pourquoi
+  jarvis modele verifier                Essaie chaque modèle avec tes abonnements
+  jarvis modele ok|non M-0001           Accepter ou refuser une proposition du chef
+  jarvis jetons                         Consommation Claude et Codex, rythme et prévision
+
+${C_CYAN}Studio${C_OFF}
+  jarvis studio verifier <fichier>      Contrôle technique d'une vidéo + planche-contact
+  jarvis livrer <fichier> [--titre T] [--legende L]
+                                        Contrôle un livrable puis te l'envoie sur Telegram
+  jarvis livrables [<projet> <ISSUE>]   Livrables récents, ou dossier d'une issue
 
 ${C_CYAN}Réglages${C_OFF}
   jarvis projet ajouter <nom> <chemin> [--linear X] [--priorite 1] [--description "…"]
   jarvis projet liste
   jarvis telegram config|test           Relier Jarvis à ton téléphone
   jarvis regler <clé> <valeur>          ex. general.max_agents 3
+  jarvis veille [fait <projet>]         Veille concurrentielle par projet
   jarvis init-project [dossier]         Ajoute AGENTS.md + CLAUDE.md (protocole Linear)
   jarvis doctor                         Vérifie que tout est installé et connecté
+  jarvis relancer [--chef]              Après une mise à jour : relance démon et cockpit (et le chef)
 
 ${C_CYAN}Poste${C_OFF}
   jarvis sante                          Mémoire, disque, Docker, batterie, redémarrage Windows
@@ -61,7 +80,7 @@ ${C_CYAN}Poste${C_OFF}
   jarvis reparer-git <projet>           Répare le dépôt après un arrêt brutal (sauvegarde d'abord)
 
 Exemples :
-  jarvis task --projet repriceo BIS-82 claude auth-avancee
+  jarvis task --projet repriceo BIS-82 auto auth-avancee --role backend --taille L
   jarvis plan ok P-0003
 EOF
 }
@@ -103,7 +122,8 @@ ensure_session() {
   # et brouillent la lecture de son écran : désactivées pour toutes les fenêtres Jarvis.
   tmux set-environment -g CLAUDE_CODE_ENABLE_PROMPT_SUGGESTION false
   ensure_window cockpit "$jarvis cockpit; exec bash"
-  ensure_window daemon "$jarvis daemon; exec bash"
+  # Le démon est relancé s'il s'arrête sur une erreur ; Ctrl+C (code 0) l'arrête pour de bon.
+  ensure_window daemon "until $jarvis daemon; do echo '⚠ démon arrêté sur une erreur : relance dans 5 s (Ctrl+C pour annuler)'; sleep 5; done; exec bash"
 }
 
 # Après un redémarrage : relance les agents qui travaillaient, puis le chef s'il tournait.
@@ -155,9 +175,60 @@ cmd_chef() {
   attach_to chef
 }
 
+# Après une mise à jour de JarvisAgent (git pull) : relance le démon et le cockpit avec le nouveau
+# code, sans toucher aux agents. Avec --chef, relance aussi le chef (nouveau rôle, nouvelles permissions).
+cmd_relancer() {
+  local avec_chef=0 w
+  [[ "${1:-}" == "--chef" ]] && avec_chef=1
+  has tmux || die "tmux n'est pas installé (lance ./install.sh)."
+  tmux has-session -t "$SESSION" 2>/dev/null || { cmd_start --fond; return 0; }
+  # Les anciennes fenêtres sont renommées, les nouvelles créées, puis les anciennes fermées :
+  # la session ne reste jamais vide, même si elle ne contenait que ces deux fenêtres.
+  for w in daemon cockpit; do
+    tmux rename-window -t "$SESSION:$w" "ancien-$w" 2>/dev/null || true
+  done
+  ensure_session
+  for w in daemon cockpit; do
+    tmux kill-window -t "$SESSION:ancien-$w" 2>/dev/null || true
+  done
+  # Le cockpit reprend la première place : « Ctrl+B puis 1 » y ramène toujours.
+  tmux swap-window -d -s "$SESSION:cockpit" -t "$SESSION:{start}" 2>/dev/null || true
+  ok "Démon et cockpit relancés avec la version installée."
+  if chef_present; then
+    if ((avec_chef)); then
+      tmux kill-window -t "$SESSION:chef"
+      start_chef
+    else
+      py chef-preparer >/dev/null   # permissions à jour ; son rôle, lui, n'est relu qu'au démarrage
+      warn "Le chef garde son ancien rôle jusqu'à son prochain démarrage : jarvis relancer --chef"
+    fi
+  fi
+}
+
+# Lance le chef sans s'y attacher (utilisé par le démon quand le chef s'est arrêté).
+cmd_chef_lancer() {
+  has claude || die "Claude Code n'est pas installé."
+  tmux has-session -t "$SESSION" 2>/dev/null || die "session « $SESSION » fermée (jarvis start)."
+  start_chef
+}
+
+# Vrai si une fenêtre « chef » existe. Si Claude Code s'y est arrêté (il ne reste qu'un shell), la
+# fenêtre est fermée d'abord : y écrire exécuterait les messages comme des commandes.
+chef_present() {
+  local rc=0
+  py chef-etat >/dev/null 2>&1 || rc=$?
+  case "$rc" in
+    0) return 0 ;;
+    2) warn "Le chef s'était arrêté (fenêtre restée sur un shell) : je la referme et je le relance."
+       tmux kill-window -t "$SESSION:chef" 2>/dev/null || true
+       return 1 ;;
+    *) return 1 ;;
+  esac
+}
+
 start_chef() {
   has claude || { warn "Claude Code introuvable : chef non lancé."; return 0; }
-  if ! tmux list-windows -t "$SESSION" -F '#{window_name}' | grep -qx chef; then
+  if ! chef_present; then
     local dir flags="" kickoff mode
     dir="$(py chef-preparer)"
     kickoff="$(py chef-message)"
@@ -179,7 +250,7 @@ start_chef() {
 }
 
 cmd_task() {
-  local projet="" plan="" consignes="" revue=""
+  local projet="" plan="" consignes="" revue="" role="" modele="" taille=""
   local -a pos=()
   while (($#)); do
     case "$1" in
@@ -187,22 +258,24 @@ cmd_task() {
       --plan)      plan="${2:?--plan attend un ID (P-0001)}"; shift 2 ;;
       --consignes) consignes="${2:?--consignes attend un fichier}"; shift 2 ;;
       --revue)     revue="${2:?--revue attend un numéro de PR}"; shift 2 ;;
+      --role)      role="${2:?--role attend un nom (jarvis role liste)}"; shift 2 ;;
+      --modele)    modele="${2:?--modele attend un nom (jarvis modele liste)}"; shift 2 ;;
+      --taille)    taille="${2:?--taille attend S, M ou L}"; shift 2 ;;
       -*)          die "option inconnue : $1" ;;
       *)           pos+=("$1"); shift ;;
     esac
   done
   set -- "${pos[@]+"${pos[@]}"}"
-  [[ $# -ge 2 ]] || die "usage : jarvis task [--projet P] [--plan ID] <ISSUE> <claude|codex> [desc] [--consignes f.md] [--revue N°PR]"
+  [[ $# -ge 2 ]] || die "usage : jarvis task [--projet P] [--plan ID] <ISSUE> <claude|codex|auto> [desc] [--role R] [--taille S|M|L] [--modele M] [--consignes f.md] [--revue N°PR]"
   [[ -z "$revue" || "$revue" =~ ^[0-9]+$ ]] || die "--revue attend un numéro de PR (ex. 123)."
   local issue="$1" who="$2" desc="${3:-}"
   [[ "$issue" =~ ^[A-Za-z]+-[0-9]+$ ]] || die "« $issue » ne ressemble pas à un ID Linear (ex. BIS-82)."
   issue="$(printf '%s' "$issue" | tr '[:lower:]' '[:upper:]')"
-
-  local agent rules
   case "$who" in
-    claude|cc) agent="cc"; rules="CLAUDE.md" ;;
-    codex|cx)  agent="cx"; rules="AGENTS.md" ;;
-    *) die "agent inconnu « $who » : choisis claude ou codex." ;;
+    claude|cc) who="claude" ;;
+    codex|cx)  who="codex" ;;
+    auto)      ;;
+    *) die "agent inconnu « $who » : choisis claude, codex ou auto." ;;
   esac
 
   # Les chemins relatifs se résolvent AVANT d'entrer dans le dossier du projet.
@@ -218,6 +291,7 @@ cmd_task() {
     guarded=1
     [[ -n "$plan" ]] || die "aucun lancement automatique sans plan approuvé : ajoute --plan P-xxxx."
     [[ -n "$projet" ]] || die "avec un plan, précise le projet : --projet <nom>."
+    [[ -z "$role$modele$taille" ]] || warn "--role, --modele et --taille sont ignorés : le plan approuvé fait foi."
   fi
 
   local path=""
@@ -237,40 +311,57 @@ cmd_task() {
   if [[ -n "$path" && "$(readlink -f "$root")" != "$(readlink -f "$path")" ]]; then
     die "le projet « $projet » est enregistré sur $path, mais ce dossier appartient au dépôt $root."
   fi
-  [[ -f "$root/$rules" ]] || warn "$rules absent de ce projet : lance « jarvis init-project » pour ajouter le protocole Linear."
   [[ -n "$projet" ]] || projet="$(basename "$root")"
 
-  # Garde-fous : pause, capacité et appartenance au plan, vérifiés ensemble sous verrou.
+  # Affectation : fournisseur, modèle, effort et rôle.
+  #  - avec un plan : celle que l'humain a validée (pause, capacité, jetons et plan vérifiés sous verrou) ;
+  #  - à la main : le routeur choisit selon le rôle, la taille et les jetons.
+  local fiche
   if ((guarded)); then
-    py plan verifier "$plan" "$projet" "$issue" "$who" || exit 1
+    fiche="$(py plan verifier "$plan" "$projet" "$issue" "$who" ${revue:+--revue})" || exit $?
+  else
+    [[ -n "$revue" && -z "$role" ]] && role="revue"
+    local -a choix=(--shell --agent "$who" --taille "${taille:-M}")
+    [[ -n "$role" ]] && choix+=(--role "$role")
+    [[ -n "$modele" ]] && choix+=(--modele "$modele")
+    [[ -n "$revue" && "$who" == "auto" ]] && choix+=(--relit "$projet:$issue")
+    fiche="$(py modele choisir "${choix[@]}")" || exit 1
   fi
+  local -A F=()
+  local cle valeur
+  while IFS='=' read -r cle valeur; do
+    [[ -n "$cle" ]] && F["$cle"]="$valeur"
+  done <<<"$fiche"
+  who="${F[agent]:-}"
+
+  local agent rules
+  case "$who" in
+    claude) agent="cc"; rules="CLAUDE.md" ;;
+    codex)  agent="cx"; rules="AGENTS.md" ;;
+    *) die "affectation illisible pour $issue (agent « $who »)." ;;
+  esac
+  [[ -f "$root/$rules" ]] || warn "$rules absent de ce projet : lance « jarvis init-project » pour ajouter le protocole Linear."
 
   local branch
   branch="$(slugify "$issue")"
   [[ -n "$desc" ]] && branch="$branch-$(slugify "$desc")"
   [[ -n "$revue" && "$branch" != *revue* ]] && branch="$branch-revue-pr-$revue"
 
-  local prompt_file
+  # Annule proprement un lancement qui n'aboutit pas : la tâche redevient lançable dans son plan.
+  local tache_id="" prompt_file=""
+  abandon() {  # abandon <message>
+    [[ -n "$prompt_file" ]] && rm -f "$prompt_file"
+    [[ -n "$tache_id" ]] && py tache-annuler "$tache_id" || true
+    ((guarded)) && py plan relacher "$plan" "$projet" "$issue" "$who" || true
+    py evenement erreur "échec du lancement de $issue ($who) sur $projet"
+    die "$1"
+  }
+
   prompt_file="$(mktemp --suffix=.md)"
-  {
-    if [[ -n "$revue" ]]; then
-      echo "Mission de RELECTURE uniquement : relis la PR #$revue liée à l'issue Linear $issue."
-      echo "Ne modifie aucun fichier, ne crée aucun commit, n'ouvre aucune PR."
-      echo "Vérifie point par point les critères d'acceptation de l'issue, la sécurité, les tests et la lisibilité."
-      echo "Publie tes remarques avec « gh pr review $revue --comment --body-file <fichier> »,"
-      echo "puis résume ton verdict dans l'issue Linear (commentaire « ✅ REVUE » ou « ❓ REVUE »)."
-    else
-      echo "Traite l'issue Linear $issue. Lis-la en entier via l'outil Linear avant de coder,"
-      echo "puis suis à la lettre le protocole décrit dans $rules (statut, commentaires ❓/✅, PR)."
-      echo "Ne fusionne jamais dans main."
-    fi
-    if [[ -n "$consignes" ]]; then
-      echo
-      echo "## Consignes du chef d'orchestre"
-      echo
-      cat "$consignes"
-    fi
-  } >"$prompt_file"
+  local -a pargs=(--projet "$projet" --issue "$issue" --branche "$branch" --regles "$rules" --role "${F[role]:-}")
+  [[ -n "$revue" ]] && pargs+=(--revue "$revue")
+  [[ -n "$consignes" ]] && pargs+=(--consignes "$consignes")
+  py prompt-construire "${pargs[@]}" >"$prompt_file" || abandon "impossible de préparer le prompt de l'agent."
 
   # Pré-accepter la confiance du futur worktree : l'agent démarre sans poser de question.
   # (Emplacement par défaut de workmux : <projet>/../<projet>__worktrees/<branche>.)
@@ -278,16 +369,25 @@ cmd_task() {
   wt_path="$(dirname "$root")/$(basename "$root")__worktrees/$branch"
   py preparer-worktree "$who" "$wt_path" >/dev/null || warn "impossible de pré-autoriser $wt_path"
 
-  printf '%s▶%s %s → %s (branche %s)\n' "$C_CYAN" "$C_OFF" "$issue" "$who" "$branch"
+  # Fiche du registre : les lanceurs (jarvis-claude, jarvis-codex) y lisent le modèle du worktree,
+  # et le cockpit le rôle de l'agent.
+  local -a targs=(--projet "$projet" --issue "$issue" --agent "$who" --worktree "$branch" --chemin "$wt_path"
+                  --role "${F[role]:-}" --modele "${F[modele]:-}" --modele-id "${F[modele_id]:-}"
+                  --effort "${F[effort]:-}" --repli "${F[repli]:-}" --taille "${F[taille]:-M}"
+                  --plan "$plan" --revue "$revue" --raison "${F[raison]:-}")
+  [[ "${F[par_secours]:-0}" == "1" ]] && targs+=(--secours)
+  tache_id="$(py tache-enregistrer "${targs[@]}")" || abandon "impossible d'enregistrer la tâche."
+
+  local affiche="$who"
+  [[ -n "${F[modele]:-}" && "${F[modele]}" != *-defaut ]] && affiche+=" · ${F[modele]}"
+  [[ -n "${F[effort]:-}" ]] && affiche+=" · ${F[effort]}"
+  printf '%s▶%s %s → %s [%s] (branche %s)\n' "$C_CYAN" "$C_OFF" "$issue" "$affiche" "${F[role]:-generaliste}" "$branch"
+  [[ "${F[par_secours]:-0}" == "1" ]] && warn "lancé avec le secours : le fournisseur prévu est épuisé."
   if ! workmux add "$branch" -a "$agent" -b -P "$prompt_file"; then
-    rm -f "$prompt_file"
-    # Échec technique : la tâche redevient lançable dans son plan.
-    ((guarded)) && py plan relacher "$plan" "$projet" "$issue" "$who" || true
-    py evenement erreur "échec du lancement de $issue ($who) sur $projet"
-    die "workmux add a échoué."
+    abandon "workmux add a échoué."
   fi
   # Le fichier de prompt reste dans /tmp : workmux peut le relire au démarrage de l'agent.
-  py evenement task "$projet $issue lancé → $who${plan:+ ($plan)}"
+  py evenement task "$projet $issue lancé → $affiche [${F[role]:-generaliste}]${plan:+ ($plan)}"
   ok "Agent lancé en arrière-plan. Suis-le dans le cockpit (jarvis cockpit)."
 }
 
@@ -408,6 +508,21 @@ cmd_doctor() {
     esac
   fi
 
+  printf '\n%sModèles%s\n' "$C_CYAN" "$C_OFF"
+  py modele liste 2>/dev/null | sed 's/^/  /' || true
+  if py modele liste 2>/dev/null | grep -q "pas encore essayé"; then
+    warn "des modèles n'ont pas encore été essayés : jarvis modele verifier (le démon le fait aussi tout seul)"
+  fi
+
+  printf '\n%sStudio (vidéo)%s\n' "$C_CYAN" "$C_OFF"
+  if has ffmpeg && has ffprobe; then ok "ffmpeg présent"; else warn "ffmpeg manquant : ./install.sh --studio"; fi
+  if node -e 'require("playwright")' >/dev/null 2>&1 \
+     || NODE_PATH="$(npm root -g 2>/dev/null)" node -e 'require("playwright")' >/dev/null 2>&1; then
+    ok "Playwright présent (enregistrement et rendu des scènes)"
+  else
+    warn "Playwright manquant : ./install.sh --studio"
+  fi
+
   printf '\n%sPoste%s\n' "$C_CYAN" "$C_OFF"
   py sante 2>/dev/null | sed 's/^/  /' || true
   if [[ -n "${WSL_DISTRO_NAME:-}" ]]; then cmd_autostart etat || true; fi
@@ -436,8 +551,10 @@ main() {
     chef)         cmd_chef "$@" ;;
     task|t)       cmd_task "$@" ;;
     cockpit|etat|plan|fil|projet|telegram|regler|capacite|demander|note|journal|daemon|voir|jetons|veille|\
-    fermer|reprendre|sante|reparer-git)
+    fermer|reprendre|sante|reparer-git|role|modele|tache|verdict|bilan|usine|studio|livrer|livrables|web)
                   py "$cmd" "$@" ;;
+    chef-lancer)  cmd_chef_lancer "$@" ;;
+    relancer)     cmd_relancer "$@" ;;
     board|b)      cmd_board "$@" ;;
     status|s|ls)  cmd_status "$@" ;;
     init-project) cmd_init_project "$@" ;;

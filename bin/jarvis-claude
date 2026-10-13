@@ -1,0 +1,25 @@
+#!/usr/bin/env bash
+# jarvis-claude — lance Claude Code pour un agent Jarvis, avec le modèle choisi par le routeur.
+#
+#  - mode « auto » : un classifieur valide les actions sûres et bloque les risquées ;
+#  - modèle, modèles de repli et effort : ceux de la tâche enregistrée pour ce worktree
+#    (plan approuvé ou « jarvis task »). Sans fiche, Claude Code garde ses réglages par défaut ;
+#  - variables du poste : $JARVIS_HOME, $JARVIS_LIVRABLES, $JARVIS_PROJET, $JARVIS_ISSUE, $JARVIS_METIER.
+#
+# Utilisé par le profil workmux « cc » (config/workmux/config.yaml). La reprise après un
+# redémarrage (workmux open --continue) repasse par ici : l'agent retrouve le même modèle.
+
+set -euo pipefail
+
+JARVIS_HOME="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")/.." && pwd)"
+export JARVIS_HOME
+
+args=(--permission-mode auto)
+while IFS=$'\t' read -r kind val; do
+  case "$kind" in
+    arg) args+=("$val") ;;
+    env) export "${val?}" ;;
+  esac
+done < <(PYTHONPATH="$JARVIS_HOME/lib" python3 -m jarvis lancement-args claude 2>/dev/null || true)
+
+exec claude "${args[@]}" "$@"

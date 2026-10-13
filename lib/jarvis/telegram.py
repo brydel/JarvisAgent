@@ -3,12 +3,18 @@
 from __future__ import annotations
 
 import json
+import mimetypes
 import os
 import urllib.error
 import urllib.request
+import uuid
 
 API_BASE = os.environ.get("JARVIS_TELEGRAM_API", "https://api.telegram.org")
 MAX_LEN = 3900  # limite Telegram : 4096 caractères par message
+MAX_LEGENDE = 1000  # limite Telegram : 1024 caractères par légende
+MAX_ENVOI = 50 * 1024 * 1024  # limite d'envoi de l'API Bot : 50 Mo par fichier
+ENVOIS = {"video": ("sendVideo", "video"), "photo": ("sendPhoto", "photo"),
+          "document": ("sendDocument", "document"), "animation": ("sendAnimation", "animation")}
 
 
 class TelegramError(RuntimeError):
@@ -35,7 +41,8 @@ class Bot:
             except Exception:  # noqa: BLE001 — on veut juste un message lisible
                 detail = ""
             raise TelegramError(f"{method} : HTTP {exc.code} {detail}".strip()) from exc
-        except (urllib.error.URLError, TimeoutError, OSError) as exc:
+        except (urllib.error.URLError, TimeoutError, OSError, ValueError) as exc:
+            # ValueError : réponse qui n'est pas du JSON (proxy, page d'erreur)
             raise TelegramError(f"{method} : {exc}") from exc
         if not data.get("ok"):
             raise TelegramError(f"{method} : {data.get('description', 'erreur inconnue')}")
@@ -78,6 +85,54 @@ class Bot:
         with open(tmp, "wb") as fh:
             fh.write(data)
         os.replace(tmp, dest)
+
+    def send_file(self, chat_id, path, kind: str = "document", caption: str = "", extra: dict | None = None,
+                  http_timeout: int = 600) -> dict:
+        """Envoie un fichier local (vidéo, image ou document) : requête multipart, sans dépendance."""
+        if kind not in ENVOIS:
+            raise TelegramError(f"type d'envoi inconnu : {kind}")
+        method, field = ENVOIS[kind]
+        path = os.fspath(path)
+        try:
+            size = os.path.getsize(path)
+            if size > MAX_ENVOI:
+                raise TelegramError("fichier trop gros pour Telegram (50 Mo maximum)")
+            with open(path, "rb") as fh:
+                content = fh.read()
+        except OSError as exc:
+            raise TelegramError(f"lecture du fichier : {exc}") from exc
+        boundary = "----jarvis" + uuid.uuid4().hex
+        fields = {"chat_id": str(chat_id)}
+        if caption:
+            fields["caption"] = caption[:MAX_LEGENDE]
+        fields.update({k: str(v) for k, v in (extra or {}).items() if v is not None})
+        parts = []
+        for key, val in fields.items():
+            parts.append(f'--{boundary}\r\nContent-Disposition: form-data; name="{key}"\r\n\r\n{val}\r\n'.encode())
+        name = os.path.basename(path).replace('"', "")
+        ctype = mimetypes.guess_type(name)[0] or "application/octet-stream"
+        parts.append(f'--{boundary}\r\nContent-Disposition: form-data; name="{field}"; filename="{name}"\r\n'
+                     f"Content-Type: {ctype}\r\n\r\n".encode())
+        parts.append(content)
+        parts.append(f"\r\n--{boundary}--\r\n".encode())
+        body = b"".join(parts)
+        req = urllib.request.Request(f"{self.base}/bot{self.token}/{method}", data=body, headers={
+            "Content-Type": f"multipart/form-data; boundary={boundary}", "Content-Length": str(len(body))})
+        try:
+            with urllib.request.urlopen(req, timeout=http_timeout) as resp:
+                data = json.loads(resp.read().decode())
+        except urllib.error.HTTPError as exc:
+            try:
+                detail = json.loads(exc.read().decode()).get("description", "")
+            except Exception:  # noqa: BLE001
+                detail = ""
+            raise TelegramError(f"{method} : HTTP {exc.code} {detail}".strip()) from exc
+        except (urllib.error.URLError, TimeoutError, OSError, ValueError) as exc:
+            # ValueError : réponse qui n'est pas du JSON (proxy, page d'erreur)
+            raise TelegramError(f"{method} : {exc}") from exc
+        if not data.get("ok"):
+            raise TelegramError(f"{method} : {data.get('description', 'erreur inconnue')}")
+        return data.get("result") or {}
 
     def answer(self, callback_id: str, text: str = "") -> None:
         self.call("answerCallbackQuery", callback_query_id=callback_id, text=text[:190] or None)

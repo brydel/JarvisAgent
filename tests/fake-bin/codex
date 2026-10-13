@@ -1,0 +1,16 @@
+#!/usr/bin/env bash
+# Faux Codex pour les tests : « codex exec -m X … » suit les mêmes règles que le faux claude ;
+# sinon il affiche ses arguments, un par ligne.
+set -euo pipefail
+modele=""
+args=("$@")
+for ((i = 0; i < ${#args[@]}; i++)); do
+  [[ "${args[i]}" == "-m" || "${args[i]}" == "--model" ]] && modele="${args[i + 1]:-}"
+done
+if [[ "${1:-}" == "exec" ]]; then
+  printf '%s\n' "$modele" >>"${FAKE_CLI_LOG:-/dev/null}"
+  [[ ",${FAKE_MODELES_KO:-}," == *",$modele,"* ]] && { echo "error: model $modele does not exist" >&2; exit 1; }
+  [[ ",${FAKE_MODELES_FLOU:-}," == *",$modele,"* ]] && { echo "rate limit reached" >&2; exit 1; }
+  echo "ok"; exit 0
+fi
+for a in "$@"; do echo "$a"; done
