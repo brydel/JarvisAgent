@@ -79,6 +79,8 @@ cmd_task() {
 
   local root
   root="$(git rev-parse --show-toplevel)"
+  [[ "$(readlink -f "$root")" != "$(readlink -f "$JARVIS_HOME")" ]] \
+    || die "tu es dans le dépôt JarvisAgent. Va d'abord dans ton projet (ex. cd ~/projets/repriceo)."
   [[ -f "$root/$rules" ]] || warn "$rules absent de ce projet : lance « jarvis init-project » pour ajouter le protocole Linear."
 
   local branch
