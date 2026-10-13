@@ -277,6 +277,15 @@ class JarvisTest(unittest.TestCase):
         # Aucun changement → aucun événement
         self.assertEqual(daemon.watch_once(), [])
 
+    def test_chef_is_never_treated_as_an_agent(self):
+        set_status(chef="working")
+        daemon.watch_once(first=True)
+        set_status(chef="done")
+        events = daemon.watch_once()
+        self.assertFalse(any("chef" in e["texte"] for e in events))  # pas d'auto-réveil en boucle
+        found, _ = agents.status_all()
+        self.assertNotIn("chef", [a["worktree"] for a in found])
+
     def test_watch_fails_closed_when_workmux_breaks(self):
         Path(os.environ["FAKE_WORKMUX_STATUS"]).write_text("pas du json")
         self.assertEqual(daemon.watch_once(), [])

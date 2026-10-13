@@ -19,7 +19,10 @@
     {"worktree": "jp-12-onboarding", "branch": "jp-12-onboarding", "project": "jobpilot-ia",
      "project_path": "/home/brydel/projets/jobpilot-ia", "status": "working", "elapsed_secs": 1830,
      "title": "Parcours d'inscription candidat", "pane_id": "%7", "workdir": "/home/brydel/projets/jobpilot-ia__worktrees/jp-12-onboarding",
-     "agent_kind": "claude", "session": "jarvis", "window_name": "wm-jp-12-onboarding", "updated_ts": 1760321200}
+     "agent_kind": "claude", "session": "jarvis", "window_name": "wm-jp-12-onboarding", "updated_ts": 1760321200},
+    {"worktree": "chef", "branch": "", "project": null, "project_path": null, "status": "done", "elapsed_secs": 540,
+     "title": "Prochaine vague d'agents Jarvis", "pane_id": "%3", "workdir": "/home/brydel/.local/share/jarvis/chef",
+     "agent_kind": "claude", "session": "jarvis", "window_name": "chef", "updated_ts": 1760321300}
   ],
   "target_errors": []
 }

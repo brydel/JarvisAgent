@@ -61,6 +61,10 @@ def status_all() -> tuple[list[dict] | None, str]:
         return None, "réponse JSON illisible de workmux status"
     agents = []
     for a in data.get("agents", []) or []:
+        if a.get("window_name") == config.CHEF_WINDOW:
+            # Le chef est une session Claude suivie par les hooks workmux comme les autres :
+            # ce n'est pas un agent. Sinon chaque fin de tour du chef le réveillerait lui-même (boucle).
+            continue
         agents.append({
             "worktree": a.get("worktree") or "?",
             "branch": a.get("branch") or "",

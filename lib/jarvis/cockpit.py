@@ -169,6 +169,8 @@ class Cockpit:
         room = w - x - (1 if y == h - 1 else 0)  # la dernière case de l'écran ne s'écrit pas
         if maxw is not None:
             room = min(room, maxw)
+        # Un retour à la ligne dans un texte (ex. un bilan) déborderait sur les panneaux voisins.
+        text = " ".join(str(text).replace("\t", " ").splitlines())
         try:
             self.scr.addstr(y, x, cut(text, room), attr)
         except curses.error:
