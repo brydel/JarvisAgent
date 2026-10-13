@@ -12,7 +12,8 @@ ok()   { printf '  %s✓%s %s\n' "$C_GREEN" "$C_OFF" "$1"; }
 warn() { printf '  %s!%s %s\n' "$C_YELLOW" "$C_OFF" "$1"; }
 bad()  { printf '  %s✗%s %s\n' "$C_RED" "$C_OFF" "$1"; }
 die()  { printf '%sErreur :%s %s\n' "$C_RED" "$C_OFF" "$1" >&2; exit 1; }
-has()  { command -v "$1" >/dev/null 2>&1; }
+# Sous WSL, ignorer les programmes Windows (/mnt/c/...) : ils ne marchent pas dans Linux.
+has()  { local p; p="$(command -v "$1" 2>/dev/null)" || return 1; [[ "$p" != /mnt/* ]]; }
 
 usage() {
   cat <<EOF
@@ -122,6 +123,8 @@ cmd_doctor() {
     if has "$t"; then
       if [[ "$t" == tmux ]]; then v="$(tmux -V 2>/dev/null || true)"; else v="$("$t" --version 2>/dev/null | head -1 || true)"; fi
       ok "${v:-$t}"
+    elif [[ "$(command -v "$t" 2>/dev/null)" == /mnt/* ]]; then
+      bad "$t pointe vers la version Windows ($(command -v "$t")) : relance ./install.sh"; errors=$((errors + 1))
     else
       bad "$t manquant"; errors=$((errors + 1))
     fi

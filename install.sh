@@ -28,7 +28,10 @@ step() { printf '\n%s▶ %s%s\n' "$C_CYAN" "$1" "$C_OFF"; }
 ok()   { printf '  %s✓%s %s\n' "$C_GREEN" "$C_OFF" "$1"; }
 warn() { printf '  %s!%s %s\n' "$C_YELLOW" "$C_OFF" "$1"; }
 fail() { printf '  %s✗%s %s\n' "$C_RED" "$C_OFF" "$1" >&2; exit 1; }
-has()  { command -v "$1" >/dev/null 2>&1; }
+# Sous WSL, le PATH contient aussi les programmes Windows (/mnt/c/...).
+# Un « codex » ou « claude » installé côté Windows ne marche pas dans Linux :
+# on ne compte donc que les programmes Linux.
+has()  { local p; p="$(command -v "$1" 2>/dev/null)" || return 1; [[ "$p" != /mnt/* ]]; }
 
 TODO=()   # actions manuelles à faire à la fin
 
@@ -89,7 +92,7 @@ fi
 if [[ "$(npm config get prefix)" != "$HOME/.npm-global" ]]; then
   npm config set prefix "$HOME/.npm-global"
 fi
-if has pnpm; then ok "pnpm déjà présent"; else npm install -g pnpm >/dev/null && ok "pnpm installé"; fi
+if has pnpm; then ok "pnpm déjà présent"; else npm install -g pnpm >/dev/null && hash -r && ok "pnpm installé"; fi
 
 # --- 4. Agents : Claude Code + Codex ----------------------------------------
 step "Claude Code"
@@ -97,7 +100,8 @@ if has claude; then
   ok "Claude Code déjà installé ($(claude --version 2>/dev/null | head -1))"
 else
   curl -fsSL https://claude.ai/install.sh | bash
-  ok "Claude Code installé"
+  hash -r
+  ok "Claude Code installé (version Linux)"
   TODO+=("Lance « claude », choisis le thème sombre puis « Claude account with subscription ».")
 fi
 
@@ -106,7 +110,8 @@ if has codex; then
   ok "Codex déjà installé ($(codex --version 2>/dev/null | head -1))"
 else
   npm install -g @openai/codex >/dev/null
-  ok "Codex installé"
+  hash -r
+  ok "Codex installé (version Linux)"
   TODO+=("Lance « codex » et choisis « Sign in with ChatGPT ».")
 fi
 
