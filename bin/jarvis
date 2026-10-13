@@ -215,15 +215,15 @@ cmd_chef_lancer() {
 # Vrai si une fenêtre « chef » existe. Si Claude Code s'y est arrêté (il ne reste qu'un shell), la
 # fenêtre est fermée d'abord : y écrire exécuterait les messages comme des commandes.
 chef_present() {
-  tmux list-windows -t "$SESSION" -F '#{window_name}' 2>/dev/null | grep -qx chef || return 1
-  local cmd
-  cmd="$(tmux list-panes -t "$SESSION:chef" -F '#{pane_current_command}' 2>/dev/null | head -1)"
-  case "$cmd" in
-    bash|sh|zsh|fish|dash)
-      tmux kill-window -t "$SESSION:chef" 2>/dev/null || true
-      return 1 ;;
+  local rc=0
+  py chef-etat >/dev/null 2>&1 || rc=$?
+  case "$rc" in
+    0) return 0 ;;
+    2) warn "Le chef s'était arrêté (fenêtre restée sur un shell) : je la referme et je le relance."
+       tmux kill-window -t "$SESSION:chef" 2>/dev/null || true
+       return 1 ;;
+    *) return 1 ;;
   esac
-  return 0
 }
 
 start_chef() {

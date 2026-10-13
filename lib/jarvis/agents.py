@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 import shutil
 import subprocess
 import time
@@ -228,22 +229,83 @@ def tmux_windows(session: str = config.SESSION) -> list[str]:
 SHELLS = ("bash", "sh", "zsh", "fish", "dash")
 
 
+def _arbre() -> dict[int, list[tuple[int, str]]] | None:
+    """{pid parent: [(pid, nom)]} d'après /proc, ou None si /proc est illisible."""
+    enfants: dict[int, list[tuple[int, str]]] = {}
+    try:
+        entrees = os.listdir("/proc")
+    except OSError:
+        return None
+    for e in entrees:
+        if not e.isdigit():
+            continue
+        try:
+            with open(f"/proc/{e}/stat", encoding="utf-8", errors="replace") as fh:
+                stat = fh.read()
+        except OSError:
+            continue  # processus terminé entre-temps
+        # « pid (nom) état ppid … » : le nom peut contenir des espaces ou des parenthèses.
+        nom = stat[stat.find("(") + 1:stat.rfind(")")]
+        reste = stat[stat.rfind(")") + 2:].split()
+        if len(reste) >= 2 and reste[1].isdigit():
+            enfants.setdefault(int(reste[1]), []).append((int(e), nom))
+    return enfants
+
+
+def programme_actif(pane_pid: int, arbre: dict | None = None) -> bool | None:
+    """Vrai si autre chose qu'un shell tourne dans le volet (le volet lui-même ou un descendant).
+
+    On ne peut pas se fier à #{pane_current_command} : quand tmux lance « claude …; exec bash »,
+    il rapporte le shell parent, pas Claude Code. None si /proc est illisible.
+    """
+    arbre = _arbre() if arbre is None else arbre
+    if arbre is None:
+        return None
+    try:
+        with open(f"/proc/{pane_pid}/comm", encoding="utf-8", errors="replace") as fh:
+            if fh.read().strip() not in SHELLS:
+                return True
+    except OSError:
+        return False  # le volet n'a plus de processus
+    a_voir = [pane_pid]
+    while a_voir:
+        for pid, nom in arbre.get(a_voir.pop(), []):
+            if nom not in SHELLS:
+                return True
+            a_voir.append(pid)
+    return False
+
+
+def chef_etat() -> str:
+    """« actif », « absent » (pas de fenêtre) ou « eteint » (fenêtre ouverte sur un simple shell)."""
+    if not shutil.which("tmux"):
+        return "absent"
+    try:
+        res = _run(["tmux", "list-panes", "-t", _chef_win(), "-F", "#{pane_pid}\t#{pane_current_command}"], timeout=5)
+    except (subprocess.TimeoutExpired, OSError):
+        return "absent"
+    if res.returncode != 0:
+        return "absent"
+    volets = [ln.split("\t", 1) for ln in res.stdout.splitlines() if "\t" in ln]
+    if not volets:
+        return "absent"
+    arbre = _arbre()
+    for pid, commande in volets:
+        actif = programme_actif(int(pid), arbre) if pid.isdigit() else None
+        if actif is None:  # sans /proc : on se contente de ce que dit tmux
+            actif = commande.strip() not in SHELLS
+        if actif:
+            return "actif"
+    return "eteint"
+
+
 def chef_running() -> bool:
-    """Vrai si la fenêtre du chef existe ET qu'un programme y tourne.
+    """Vrai si la fenêtre du chef existe ET que Claude Code (ou un autre programme) y tourne.
 
     Quand Claude Code s'arrête, la fenêtre reste ouverte sur un shell (pour lire l'erreur) : y taper
     un message exécuterait son texte comme une commande. Ce n'est plus un chef.
     """
-    if not shutil.which("tmux"):
-        return False
-    try:
-        res = _run(["tmux", "list-panes", "-t", _chef_win(), "-F", "#{pane_current_command}"], timeout=5)
-    except (subprocess.TimeoutExpired, OSError):
-        return False
-    if res.returncode != 0:
-        return False
-    commandes = [c.strip() for c in res.stdout.splitlines() if c.strip()]
-    return bool(commandes) and not all(c in SHELLS for c in commandes)
+    return chef_etat() == "actif"
 
 
 def chef_idle_secs() -> int | None:

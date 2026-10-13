@@ -888,7 +888,7 @@ def cmd_chef_preparer(a) -> int:
                 "Bash(jarvis modele ok *)", "Bash(jarvis modele non *)", "Bash(jarvis modele verifier)",
                 "Bash(jarvis modele verifier *)", "Bash(jarvis livrer * --forcer*)", "Bash(jarvis livrer --forcer*)",
                 "Bash(jarvis tache-enregistrer *)", "Bash(jarvis tache-annuler *)", "Bash(jarvis lancement-args *)",
-                "Bash(jarvis prompt-construire *)", "Bash(jarvis chef-lancer)", "Bash(jarvis chef-lancer *)",
+                "Bash(jarvis prompt-construire *)", "Bash(jarvis chef-lancer)", "Bash(jarvis chef-lancer *)", "Bash(jarvis chef-etat)",
                 "Bash(jarvis web)", "Bash(jarvis web *)", "Bash(jarvis relancer)", "Bash(jarvis relancer *)",
                 # Contournements de « jarvis task » et accès directs au noyau.
                 "Bash(workmux add *)", "Bash(workmux run *)", "Bash(python *)", "Bash(python3 *)",
@@ -904,6 +904,13 @@ def cmd_chef_preparer(a) -> int:
                                                         encoding="utf-8")
     print(chef_dir)
     return 0
+
+
+def cmd_chef_etat(a) -> int:
+    """Pour bin/jarvis : 0 = le chef tourne, 1 = pas de fenêtre, 2 = fenêtre ouverte sur un simple shell."""
+    etat = ag.chef_etat()
+    print(etat)
+    return {"actif": 0, "absent": 1}.get(etat, 2)
 
 
 def cmd_chef_message(a) -> int:
@@ -1042,6 +1049,7 @@ def build_parser() -> argparse.ArgumentParser:
     s.set_defaults(fn=cmd_evenement)
     sub.add_parser("chef-preparer", help=argparse.SUPPRESS).set_defaults(fn=cmd_chef_preparer)
     sub.add_parser("chef-message", help=argparse.SUPPRESS).set_defaults(fn=cmd_chef_message)
+    sub.add_parser("chef-etat", help=argparse.SUPPRESS).set_defaults(fn=cmd_chef_etat)
 
     # --- Rôles, modèles, registre des tâches ---
     role = sub.add_parser("role", help="rôles spécialisés de l'usine")

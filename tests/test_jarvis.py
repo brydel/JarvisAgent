@@ -1831,5 +1831,33 @@ class JarvisTest(unittest.TestCase):
         self.assertLess(contraste(d / "flou.png"), 60)                     # la zone est restée floutée après la navigation
 
 
+    def test_running_chef_is_seen_even_behind_its_launch_shell(self):
+        # Le chef est lancé comme « env … claude …; exec bash » : tmux ne rapporte que le shell parent.
+        # Il doit quand même être vu actif, et « jarvis chef » ne doit jamais refermer un chef vivant.
+        env = dict(os.environ, JARVIS_SESSION="jtest2", PYTHONPATH=str(ROOT / "lib"))
+        tmux("new-session", "-d", "-s", "jtest2", "-n", "cockpit", "sleep 300")
+        tmux("new-window", "-d", "-t", "jtest2:", "-n", "chef", "env JARVIS_ROLE=chef sleep 300; exec bash")
+        time.sleep(0.5)
+        etat = lambda: subprocess.run([sys.executable, "-m", "jarvis", "chef-etat"], capture_output=True, text=True, env=env)
+        try:
+            self.assertIn("bash", tmux("list-panes", "-t", "jtest2:chef", "-F", "#{pane_current_command}"))
+            self.assertEqual((etat().returncode, etat().stdout.strip()), (0, "actif"))
+            avant = tmux("list-windows", "-t", "jtest2", "-F", "#{window_id} #{window_name}")
+            res = subprocess.run([str(ROOT / "bin" / "jarvis"), "chef-lancer"], capture_output=True, text=True, env=env)
+            self.assertEqual(res.returncode, 0, res.stderr)
+            self.assertEqual(tmux("list-windows", "-t", "jtest2", "-F", "#{window_id} #{window_name}"), avant)
+            # Claude Code s'arrête : la fenêtre reste sur un shell, et ce n'est plus un chef.
+            pid = int(tmux("list-panes", "-t", "jtest2:chef", "-F", "#{pane_pid}").strip())
+            enfants = subprocess.run(["pgrep", "-P", str(pid)], capture_output=True, text=True).stdout.split()
+            for e in enfants:
+                os.kill(int(e), 15)
+            time.sleep(0.6)
+            self.assertEqual((etat().returncode, etat().stdout.strip()), (2, "eteint"))
+            tmux("kill-window", "-t", "jtest2:chef")
+            self.assertEqual(etat().returncode, 1)
+        finally:
+            tmux("kill-session", "-t", "jtest2")
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)
