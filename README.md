@@ -1,21 +1,25 @@
 # JarvisAgent
 
-Poste de pilotage pour faire travailler plusieurs agents IA de code en parallèle (Claude Code et Codex), en direct dans un terminal noir, avec Linear comme canal de tâches partagé.
+Poste de pilotage pour faire travailler **plusieurs agents IA de code en parallèle** (Claude Code et Codex) sur **plusieurs SaaS à la fois**, dirigés par un **chef d'orchestre** IA qui planifie, lance, surveille, fait contre-relire et se remet en question. Tu valides depuis ton terminal ou depuis ton téléphone (Telegram).
 
 ```
- Toi ⇄ Claude (claude.ai) ─── crée et lit ───▶ Linear (issues, statuts, questions)
-  │                                              ▲            ▲
-  │ jarvis task …                                │            │
-  ▼                                              │            │
-┌─ Ton PC — WSL + tmux, session « jarvis » ──────┼────────────┼─┐
-│  workmux dashboard  ⇄  Agent Claude Code (worktree BIS-82)  │ │
-│                        Agent Codex       (worktree BIS-90) ─┘ │
-└──────────────────────────────┬────────────────────────────────┘
-                               ▼
-                 GitHub — PR ouvertes par les agents, fusionnées par toi
+ Toi ── Telegram / cockpit ──▶ démon Jarvis ──▶ CHEF D'ORCHESTRE (Claude, rôle chef/CLAUDE.md)
+  ▲        ✅ Approuver / ✋ Refuser    │              │ propose des plans → tu valides
+  │                                     │              │ jarvis task --plan …
+  │                                     ▼              ▼
+  │                       surveillance workmux    Agents Claude / Codex (1 worktree + 1 fenêtre tmux chacun)
+  │                                                    │ lisent leur issue Linear, codent, ouvrent une PR
+  └──────────── GitHub : tu relis et tu fusionnes ◀────┘
 ```
 
-Chaque agent travaille dans son propre **worktree git** et sa propre fenêtre **tmux**, géré par [workmux](https://github.com/raine/workmux). Il lit sa tâche dans Linear, y écrit son plan, ses questions (❓) et son résultat (✅), puis ouvre une pull request. Toi seul fusionnes dans `main`.
+## Ce que fait le superagent
+
+- **Planifie** : il lit tes projets (registre Jarvis) et leurs issues Linear, puis prépare des **vagues** de tâches indépendantes.
+- **Se remet en question** : avant chaque plan, il fait une pré-mortem et le fait attaquer par un sous-agent « avocat du diable ». Après chaque vague, il écrit un bilan avec les causes racines dans son journal, qui lui sert de mémoire.
+- **Te demande la permission** : chaque plan t'arrive sur Telegram avec des boutons **Approuver / Refuser**. Il ne peut lancer **que** ce que tu as approuvé, une seule fois par tâche : ce n'est pas une consigne, `jarvis task` le refuse techniquement.
+- **Dirige l'équipe** : il lance les agents avec des consignes précises, répond à leurs questions techniques, les relance s'ils bloquent, et fait relire le travail de Claude par Codex et inversement.
+- **Travaille la nuit** : le **plan de nuit** est une liste ordonnée que tu valides avant de dormir. Il l'exécute au fil des places libres, puis t'envoie un bilan le matin.
+- **Garde-fous** : il ne code pas, ne fusionne pas, ne pousse rien, ne lit pas les `.env`. Il respecte un plafond d'agents simultanés et la **pause** (`/pause` sur Telegram).
 
 ## Installation (Windows + WSL)
 
@@ -25,7 +29,7 @@ Chaque agent travaille dans son propre **worktree git** et sa propre fenêtre **
 wsl --install -d Ubuntu
 ```
 
-Redémarre, puis crée ton utilisateur Ubuntu quand la fenêtre s'ouvre.
+Redémarre, ouvre **Ubuntu** et crée ton utilisateur en minuscules.
 
 **2. Cloner et installer.** Dans Ubuntu :
 
@@ -33,84 +37,165 @@ Redémarre, puis crée ton utilisateur Ubuntu quand la fenêtre s'ouvre.
 sudo apt update && sudo apt install -y git
 mkdir -p ~/projets && cd ~/projets
 git clone https://github.com/brydel/JarvisAgent.git
-cd JarvisAgent
-./install.sh
+cd JarvisAgent && ./install.sh
 ```
 
-Le script installe tmux, gh, Node 22, pnpm, Claude Code, Codex et workmux, lie les configurations, active les statuts des agents et branche Linear. Il est **idempotent** : relance-le autant de fois que tu veux.
+Le script installe tmux, gh, Node 22, Claude Code, Codex et workmux, active le suivi des agents et branche Linear. Il ignore les versions Windows de `claude` et `codex` qui traînent dans le PATH de WSL. Tu peux le relancer autant de fois que tu veux.
 
-**3. Les connexions** (une seule fois). À la fin, le script affiche une liste numérotée « À faire maintenant » : connexion à Claude, à Codex, à GitHub et autorisation Linear dans le navigateur. Fais-les dans l'ordre.
+**3. Les connexions** (une seule fois) : suis la liste « À faire maintenant » affichée à la fin (Claude, Codex, GitHub, Linear).
 
-**4. Vérifier.** Ouvre un nouveau terminal :
+**4. Tes projets** : enregistre chaque SaaS piloté :
 
 ```bash
-jarvis doctor
+jarvis projet ajouter repriceo ~/projets/repriceo --linear "Repriceo" --priorite 1 \
+  --description "Plateforme de trading : sécurité et données financières d'abord"
+jarvis projet ajouter jobpilot-ia ~/projets/jobpilot-ia --linear "JobPilot" --priorite 2
+cd ~/projets/repriceo && jarvis init-project      # protocole Linear des agents
 ```
 
-Tout doit être vert.
+**5. Telegram** (recommandé) :
 
-> Garde tes projets dans Linux (`~/projets/...`), jamais dans `/mnt/c/...` : sur le disque Windows, git et les agents sont beaucoup plus lents.
+```bash
+jarvis telegram config
+```
+
+Suis les étapes : tu crées un bot avec **@BotFather**, tu colles son jeton, puis tu envoies au bot le code à 6 chiffres affiché. Seule **ta** conversation est acceptée ; tout autre expéditeur est refusé.
+
+**6. Vérifier** : `jarvis doctor`. Tout doit être vert.
+
+> Garde tes projets dans Linux (`~/projets/...`), jamais dans `/mnt/c/...`.
 
 ## Utilisation
 
 ```bash
-jarvis start                              # ouvre la session « jarvis »
-cd ~/projets/repriceo
-jarvis init-project                       # une fois par projet : AGENTS.md + CLAUDE.md
-jarvis task BIS-82 claude auth-avancee    # agent Claude sur l'issue BIS-82
-jarvis task BIS-90 codex landing          # agent Codex sur l'issue BIS-90
-jarvis board                              # tableau de bord en direct
+jarvis start      # session « jarvis » : cockpit (fenêtre 1) + démon (fenêtre 2)
+jarvis chef       # lance le chef d'orchestre (fenêtre « chef ») : il propose son premier plan
 ```
+
+Ensuite, tu pilotes depuis le **cockpit** ou depuis **Telegram**.
+
+### Le cockpit
+
+```
+ ◆ J A R V I S  ·  poste de pilotage                                         22:35:08
+ Agents 2/3   ? 1 en attente   ✓ 1 terminés   ◇ 1 plan(s) à valider   ● chef actif   ● Telegram
+╭─ AGENTS ───────────────────────────────────────────────╮╭─ À VALIDER ───────────────────╮
+│ ?  repriceo     bis-71-guardrails-couts  Codex  attend  ││ ◇ P-0002 Nuit : auth [nuit]   │
+│ ▶  jobpilot-ia  jp-12-onboarding         Claude travail…││   repriceo BIS-72 → claude    │
+│ ✓  repriceo     bis-69-adr-architecture  Claude terminé ││   jobpilot-ia JP-14 → codex   │
+╰─────────────────────────────────────────────────────────╯╰───────────────────────────────╯
+╭─ FIL D'ACTIVITÉ ────────────────────────────────────────────────────────────────────────╮
+│ 22:34 ◇ P-0001 proposé : Vague docs architecture (2 tâche(s), vague)                    │
+│ 22:34 ✓ P-0001 approuvé (Telegram)                                                       │
+```
+
+| Touche | Action |
+| --- | --- |
+| **Tab** | Passer du panneau Agents au panneau À valider |
+| **↑ ↓** | Choisir un agent ou un plan |
+| **Entrée** | Ouvrir la fenêtre de l'agent (Ctrl+B puis 1 pour revenir) |
+| **o** / **x** | Approuver / refuser le plan sélectionné |
+| **p** | Aperçu en direct de la sortie de l'agent sélectionné |
+| **m** | Écrire au chef |
+| **e** | Écrire directement à l'agent sélectionné |
+| **c** | Ouvrir la fenêtre du chef |
+| **P** | Pause / reprise : plus aucun nouveau lancement |
+| **q** | Quitter le cockpit |
+
+### Telegram
+
+| Message | Effet |
+| --- | --- |
+| Boutons ✅ / ✋ sous un plan | Approuver ou refuser |
+| `/etat` | Agents et plans en cours |
+| `/plans` | Plans à valider, avec boutons |
+| `/pause` · `/reprendre` | Bloquer ou relancer les lancements |
+| N'importe quel texte | Transmis au chef (« Priorise JobPilot cette nuit ») |
+
+Tu reçois aussi les questions du chef (❓) et ses bilans (📝), avec une notification Windows quand tu es sur ton PC.
+
+### Une journée type
+
+1. **Matin** : lis le bilan de nuit sur Telegram, puis relis et fusionne les PR prêtes.
+2. **Journée** : le chef propose des vagues, tu approuves en un clic, tu réponds à ses questions.
+3. **Soir** : écris « je vais dormir » au chef. Il propose un **plan de nuit**, tu l'approuves, et l'équipe travaille pendant que tu dors.
+
+## Commandes
 
 | Commande | Rôle |
 | --- | --- |
-| `jarvis start` | Ouvre ou rejoint la session tmux `jarvis` |
-| `jarvis task <ISSUE> <claude\|codex> [desc]` | Crée le worktree, la branche et lance l'agent avec le bon prompt |
-| `jarvis board` | Tableau de bord workmux : aperçu en direct, diff, saisie vers l'agent |
-| `jarvis status` | Liste des tâches et état de chaque agent |
-| `jarvis init-project [dossier]` | Copie le protocole Linear dans un projet |
-| `jarvis doctor` | Vérifie outils, configurations et connexions |
+| `jarvis start` | Session `jarvis` : cockpit + démon |
+| `jarvis chef` | Lance ou rejoint le chef d'orchestre |
+| `jarvis cockpit` | Interface plein écran |
+| `jarvis etat` | État complet (agents, plans, projets, capacité) |
+| `jarvis plan liste` · `voir P-1` · `ok P-1` · `non P-1 raison` | Gérer les plans depuis le terminal |
+| `jarvis fil [n]` · `jarvis journal` | Événements récents · journal du chef |
+| `jarvis task [--projet P] [--plan ID] <ISSUE> <claude\|codex> [desc] [--consignes f.md] [--revue N°PR]` | Lancer un agent sur une issue (`--revue` : relecture seule d'une PR). Hors terminal interactif, un plan approuvé est obligatoire |
+| `jarvis projet ajouter\|liste` | Registre des projets |
+| `jarvis telegram config\|test` | Liaison Telegram |
+| `jarvis regler <clé> <valeur>` | Réglages (voir ci-dessous) |
+| `jarvis board` · `jarvis status` | Tableau de bord workmux · tâches du projet courant |
+| `jarvis init-project [dossier]` | Protocole Linear dans un projet |
+| `jarvis doctor` | Diagnostic complet |
+
+### Réglages
+
+| Clé | Défaut | Rôle |
+| --- | --- | --- |
+| `general.max_agents` | `3` | Agents occupés en même temps, au maximum |
+| `general.poll_seconds` | `20` | Fréquence de surveillance du démon |
+| `general.workspace` | `~/projets` | Dossier des projets (le chef n'a pas le droit d'y écrire) |
+| `general.chef_permission_mode` | `auto` | Mode de permission du chef |
+| `general.chef_remote_control` | `false` | `true` : tu peux aussi parler au chef depuis l'app Claude |
+| `notifications.windows` | `true` | Notifications Windows |
+
+Exemple : `jarvis regler general.max_agents 4`. Les réglages vivent dans `~/.config/jarvis/settings.toml` (permissions 600, jamais dans le dépôt).
 
 ### Raccourcis tmux (préfixe Ctrl+B)
 
 | Touches | Action |
 | --- | --- |
-| Ctrl+B puis Ctrl+S | Tableau de bord des agents |
-| Ctrl+B puis Ctrl+T | Barre latérale des statuts |
-| Ctrl+B puis L | Aller à l'agent qui a fini ou qui attend |
-| Ctrl+B puis Tab | Basculer entre les deux derniers agents |
+| Ctrl+B puis 1 | Revenir au cockpit |
+| Ctrl+B puis Ctrl+S | Tableau de bord workmux |
+| Ctrl+B puis L | Agent qui a fini ou qui attend |
 | Ctrl+B puis D | Se détacher sans rien arrêter (`jarvis start` pour revenir) |
-
-Dans le tableau de bord : **1 à 9** pour sauter à un agent, **p** pour jeter un œil, **i** pour écrire à l'agent, **d** pour son diff, **q** pour quitter.
-
-## La boucle avec Claude
-
-1. Tu décris l'objectif à Claude dans claude.ai.
-2. Claude crée ou réécrit les issues Linear avec un brief d'agent précis et l'étiquette `agent:claude` ou `agent:codex`.
-3. Tu lances `jarvis task …` pour chaque issue.
-4. Les agents commentent leur plan, leurs questions et leurs résultats dans Linear.
-5. Tu demandes « fais le point » à Claude : il lit Linear, répond aux questions des agents et prépare la vague suivante.
-6. Tu relis les PR et tu fusionnes.
 
 ## Structure
 
 ```
 install.sh                    Installation complète, idempotente
-bin/jarvis                    La CLI de pilotage
-config/tmux.conf              tmux : souris, look noir/cyan, raccourcis agents
-config/workmux/config.yaml    workmux : profils cc (Claude) et cx (Codex), disposition
-templates/AGENTS.md           Protocole Linear pour Codex
-templates/CLAUDE.md           Protocole Linear pour Claude Code (même contenu)
+bin/jarvis                    Point d'entrée (bash) : start, chef, task, doctor…
+lib/jarvis/                   Superagent en Python (bibliothèque standard uniquement)
+  cockpit.py                  Interface plein écran (curses)
+  daemon.py                   Surveillance des agents + pont Telegram
+  plans.py                    Plans, approbations, verrou « une tâche = un lancement »
+  agents.py                   Lecture workmux, messages au chef (file d'attente si dialogue ouvert)
+  notify.py · telegram.py     Telegram, notifications Windows
+chef/CLAUDE.md                Rôle du chef d'orchestre
+config/                       tmux et workmux
+templates/                    Protocole Linear pour les projets (AGENTS.md / CLAUDE.md)
+tests/                        Tests de bout en bout (faux workmux, faux Telegram, tmux isolé)
 ```
+
+Données locales : `~/.config/jarvis/` (réglages, projets), `~/.local/state/jarvis/` (plans, fil, journal du chef), `~/.local/share/jarvis/chef/` (dossier de travail du chef).
 
 ## Sécurité et coûts
 
-- Ce dépôt est **public** : n'y mets jamais de clé, de jeton ni de `.env`.
-- Garde les permissions par défaut des agents. N'utilise `--dangerously-skip-permissions` ou `--yolo` que dans le bac à sable de workmux.
-- Commence avec **2 agents en parallèle**, 3 au maximum : au-delà, tu atteins les limites des abonnements et tu ne peux plus tout relire.
+- Dépôt **public** : aucun secret ici. Le jeton Telegram reste dans `~/.config/jarvis/settings.toml`.
+- Le chef a des règles **deny** dans Claude Code : pas d'écriture dans tes projets ni dans les fichiers de Jarvis, pas de fusion, pas de push, pas de lecture des `.env`, pas d'accès direct à `workmux add` ni à Python.
+- Approuver un plan et modifier les réglages exigent un **terminal interactif** (ou le cockpit, ou Telegram) : un agent ne peut pas s'auto-approuver.
+- Telegram n'accepte que **ta** conversation privée appairée ; les groupes sont refusés.
+- Les messages tapés au chef attendent en file si une demande de permission est affichée : une touche Entrée ne valide jamais une permission à ta place.
+- Commence avec `max_agents = 2` ou `3`. Au-delà, tu atteins les limites des abonnements, et tu dois pouvoir relire tout ce qui sort.
+
+## Tests
+
+```bash
+python3 -m unittest discover -s tests -v
+```
 
 ## Feuille de route
 
-- [x] Phase 1 — installation, configurations, CLI `jarvis`, protocole Linear
-- [ ] Phase 2 — `jarvis brief` : résumé terminal de l'état Linear de chaque agent
-- [ ] Phase 3 — envoi automatique : surveiller les issues `prêt-pour-agent` et lancer `jarvis task` tout seul
+- [x] Phase 1 : installation, configurations, CLI `jarvis`, protocole Linear
+- [x] Phase 2 : chef d'orchestre, plans approuvés, cockpit, démon, Telegram, plan de nuit
+- [ ] Phase 3 : tableau de rentabilité (PR fusionnées par jour, temps d'agent utilisé par abonnement)

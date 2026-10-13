@@ -2,13 +2,16 @@
 
 ## Projet
 
-JarvisAgent est un poste de pilotage d'agents IA de code : scripts bash pour Ubuntu/WSL, configurations tmux et workmux, et modèles de protocole Linear. Voir `README.md`.
+JarvisAgent est un poste de pilotage d'agents IA de code : scripts bash pour Ubuntu/WSL, configurations tmux et workmux, modèles de protocole Linear, et un superagent (chef d'orchestre, cockpit, démon, pont Telegram) en Python. Voir `README.md`.
 
 - Langue : tout le texte destiné à l'utilisateur (messages, README, commentaires) est en **français**.
 - Shell : bash, `set -euo pipefail`, scripts **idempotents** (relançables sans effet de bord).
+- Python (`lib/jarvis/`) : **bibliothèque standard uniquement**, Python ≥ 3.11. Aucune dépendance pip.
+- `chef/CLAUDE.md` est le rôle du chef d'orchestre : toute modification change son comportement, à relire avec soin.
 - Vérifier avant « TERMINÉ » :
   - `bash -n install.sh bin/jarvis`
   - `shellcheck install.sh bin/jarvis` (si installé)
+  - `python3 -m unittest discover -s tests` (tmux requis)
   - `bin/jarvis help` s'affiche sans erreur
 
 ## Règles

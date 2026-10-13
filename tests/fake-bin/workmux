@@ -1,0 +1,15 @@
+#!/usr/bin/env bash
+# Faux workmux pour les tests : lit l'état dans $FAKE_WORKMUX_STATUS et journalise les appels.
+set -euo pipefail
+log="${FAKE_WORKMUX_LOG:-/dev/null}"
+printf '%s\n' "$*" >>"$log"
+case "${1:-}" in
+  status)
+    cat "${FAKE_WORKMUX_STATUS:?}" ;;
+  capture)
+    for i in $(seq 1 30); do echo "ligne $i de la sortie de $2"; done
+    echo "● Commit, push et PR."
+    echo "✓ PR #12 ouverte" ;;
+  send|add|remove|list|dashboard) exit 0 ;;
+  *) echo "faux workmux : commande $1 non simulée" >&2; exit 1 ;;
+esac

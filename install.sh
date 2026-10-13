@@ -195,6 +195,22 @@ else
   TODO+=("Lance « gh auth login » → GitHub.com → HTTPS → Login with a web browser.")
   warn "gh n'est pas encore connecté"
 fi
+# --- 10. Superagent ---------------------------------------------------------
+step "Superagent (chef d'orchestre, cockpit, Telegram)"
+if python3 -c 'import sys; sys.exit(sys.version_info < (3, 11))' 2>/dev/null; then
+  ok "Python $(python3 -c 'import platform; print(platform.python_version())')"
+else
+  fail "Python 3.11 ou plus est requis pour le superagent."
+fi
+if [[ -z "$("$JARVIS_HOME/bin/jarvis" projet liste 2>/dev/null | grep '^P[0-9]' || true)" ]]; then
+  TODO+=("Enregistre tes projets : jarvis projet ajouter repriceo ~/projets/repriceo --linear \"Repriceo\" --priorite 1")
+else
+  ok "Projets déjà enregistrés"
+fi
+if [[ -z "$(PYTHONPATH="$JARVIS_HOME/lib" python3 -m jarvis reglage-lire telegram.chat_id 2>/dev/null)" ]]; then
+  TODO+=("Relie ton téléphone : jarvis telegram config")
+fi
+
 if [[ -z "$(git config --global user.name || true)" ]]; then
   TODO+=("git config --global user.name \"Ton Nom\" && git config --global user.email \"ton@courriel.com\"")
 fi
@@ -211,5 +227,6 @@ cat <<EOF
 Ensuite :
   1. Ouvre un nouveau terminal (pour charger le PATH)
   2. jarvis doctor     → vérifie que tout est vert
-  3. jarvis start      → ouvre la session de pilotage
+  3. jarvis start      → ouvre le cockpit (et le démon en arrière-plan)
+  4. jarvis chef       → lance le chef d'orchestre
 EOF

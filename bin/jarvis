@@ -15,23 +15,41 @@ die()  { printf '%sErreur :%s %s\n' "$C_RED" "$C_OFF" "$1" >&2; exit 1; }
 # Sous WSL, ignorer les programmes Windows (/mnt/c/...) : ils ne marchent pas dans Linux.
 has()  { local p; p="$(command -v "$1" 2>/dev/null)" || return 1; [[ "$p" != /mnt/* ]]; }
 
+# Guillemets simples sûrs pour une ligne de commande tmux (indépendant de la locale et du shell).
+squote() { printf "'%s'" "${1//\'/\'\\\'\'}"; }
+
+# Sous-commandes écrites en Python (lib/jarvis), bibliothèque standard uniquement.
+py() { PYTHONPATH="$JARVIS_HOME/lib${PYTHONPATH:+:$PYTHONPATH}" python3 -m jarvis "$@"; }
+
 usage() {
   cat <<EOF
 ${C_CYAN}jarvis${C_OFF} — poste de pilotage des agents IA
 
-  jarvis start                          Ouvre (ou rejoint) la session tmux « $SESSION »
-  jarvis task <ISSUE> <claude|codex> [description-courte]
+${C_CYAN}Pilotage${C_OFF}
+  jarvis start                          Ouvre la session « $SESSION » : cockpit + démon
+  jarvis chef                           Lance (ou rejoint) le chef d'orchestre
+  jarvis cockpit                        Interface plein écran (agents, plans, fil)
+  jarvis etat                           État des agents, plans et projets
+  jarvis plan liste|voir|ok|non         Plans proposés par le chef
+  jarvis fil [n]                        Derniers événements
+
+${C_CYAN}Agents${C_OFF}
+  jarvis task [--projet P] <ISSUE> <claude|codex> [desc] [--consignes fichier.md]
                                         Lance un agent sur une issue Linear, dans son worktree
-  jarvis board                          Tableau de bord de tous les agents
-  jarvis status                         Liste des tâches et état des agents
-  jarvis init-project [dossier]         Ajoute AGENTS.md + CLAUDE.md (protocole Linear) à un projet
+  jarvis board                          Tableau de bord workmux
+  jarvis status                         Tâches et état des agents (projet courant)
+
+${C_CYAN}Réglages${C_OFF}
+  jarvis projet ajouter <nom> <chemin> [--linear X] [--priorite 1] [--description "…"]
+  jarvis projet liste
+  jarvis telegram config|test           Relier Jarvis à ton téléphone
+  jarvis regler <clé> <valeur>          ex. general.max_agents 3
+  jarvis init-project [dossier]         Ajoute AGENTS.md + CLAUDE.md (protocole Linear)
   jarvis doctor                         Vérifie que tout est installé et connecté
-  jarvis help                           Cette aide
 
 Exemples :
-  cd ~/projets/repriceo
-  jarvis task BIS-82 claude auth-avancee
-  jarvis task BIS-90 codex landing
+  jarvis task --projet repriceo BIS-82 claude auth-avancee
+  jarvis plan ok P-0003
 EOF
 }
 
@@ -51,17 +69,76 @@ slugify() {
     | sed -e 's/[^a-z0-9]\{1,\}/-/g' -e 's/^-//' -e 's/-$//'
 }
 
-cmd_start() {
+ensure_window() {  # ensure_window <nom> <commande>
+  tmux list-windows -t "$SESSION" -F '#{window_name}' 2>/dev/null | grep -qx "$1" \
+    || tmux new-window -d -t "$SESSION:" -n "$1" "$2"
+}
+
+ensure_session() {
   has tmux || die "tmux n'est pas installé (lance ./install.sh)."
-  if [[ -n "${TMUX:-}" ]]; then
-    echo "Tu es déjà dans tmux. Ctrl+B puis Ctrl+S pour le tableau de bord."
-    return
+  local jarvis="$JARVIS_HOME/bin/jarvis"
+  if ! tmux has-session -t "$SESSION" 2>/dev/null; then
+    tmux new-session -d -s "$SESSION" -n cockpit -c "$HOME" "$jarvis cockpit; exec bash"
   fi
-  exec tmux new-session -A -s "$SESSION"
+  ensure_window cockpit "$jarvis cockpit; exec bash"
+  ensure_window daemon "$jarvis daemon; exec bash"
+}
+
+attach_to() {  # attach_to [fenêtre]
+  local target="$SESSION${1:+:$1}"
+  if [[ -n "${TMUX:-}" ]]; then
+    tmux switch-client -t "$target" 2>/dev/null || tmux select-window -t "$target"
+  else
+    exec tmux attach -t "$target"
+  fi
+}
+
+cmd_start() {
+  ensure_session
+  attach_to cockpit
+}
+
+cmd_chef() {
+  has claude || die "Claude Code n'est pas installé (lance ./install.sh)."
+  ensure_session
+  if ! tmux list-windows -t "$SESSION" -F '#{window_name}' | grep -qx chef; then
+    local dir flags="" kickoff mode
+    dir="$(py chef-preparer)"
+    kickoff="$(py chef-message)"
+    mode="$(py reglage-lire general.chef_permission_mode)"
+    case "$mode" in
+      ""|default|manual|plan|auto|acceptEdits) ;;
+      *) die "general.chef_permission_mode « $mode » refusé : le chef ne peut pas contourner ses permissions." ;;
+    esac
+    [[ -n "$mode" ]] && flags+=" --permission-mode $mode"
+    if [[ "$(py reglage-lire general.chef_remote_control)" == "true" ]]; then
+      flags+=" --remote-control JARVIS-CHEF"
+    fi
+    # JARVIS_ROLE=chef : « jarvis task » exigera alors un plan approuvé.
+    tmux new-window -d -t "$SESSION:" -n chef -c "$dir" \
+      "env JARVIS_ROLE=chef claude$flags $(squote "$kickoff"); exec bash"
+    py evenement chef "chef d'orchestre démarré"
+    ok "Chef lancé dans la fenêtre « chef ». Il va proposer un premier plan."
+  fi
+  attach_to chef
 }
 
 cmd_task() {
-  [[ $# -ge 2 ]] || die "usage : jarvis task <ISSUE> <claude|codex> [description-courte]"
+  local projet="" plan="" consignes="" revue=""
+  local -a pos=()
+  while (($#)); do
+    case "$1" in
+      --projet)    projet="${2:?--projet attend un nom}"; shift 2 ;;
+      --plan)      plan="${2:?--plan attend un ID (P-0001)}"; shift 2 ;;
+      --consignes) consignes="${2:?--consignes attend un fichier}"; shift 2 ;;
+      --revue)     revue="${2:?--revue attend un numéro de PR}"; shift 2 ;;
+      -*)          die "option inconnue : $1" ;;
+      *)           pos+=("$1"); shift ;;
+    esac
+  done
+  set -- "${pos[@]+"${pos[@]}"}"
+  [[ $# -ge 2 ]] || die "usage : jarvis task [--projet P] [--plan ID] <ISSUE> <claude|codex> [desc] [--consignes f.md] [--revue N°PR]"
+  [[ -z "$revue" || "$revue" =~ ^[0-9]+$ ]] || die "--revue attend un numéro de PR (ex. 123)."
   local issue="$1" who="$2" desc="${3:-}"
   [[ "$issue" =~ ^[A-Za-z]+-[0-9]+$ ]] || die "« $issue » ne ressemble pas à un ID Linear (ex. BIS-82)."
   issue="$(printf '%s' "$issue" | tr '[:lower:]' '[:upper:]')"
@@ -73,6 +150,27 @@ cmd_task() {
     *) die "agent inconnu « $who » : choisis claude ou codex." ;;
   esac
 
+  # Les chemins relatifs se résolvent AVANT d'entrer dans le dossier du projet.
+  if [[ -n "$consignes" ]]; then
+    [[ -f "$consignes" ]] || die "fichier de consignes introuvable : $consignes"
+    consignes="$(readlink -f "$consignes")"
+  fi
+
+  # Seul un humain devant un vrai terminal peut lancer hors plan. Un agent (chef compris)
+  # n'a pas de terminal interactif : il lui faut un plan approuvé, quel que soit son environnement.
+  local guarded=0
+  if [[ "${JARVIS_ROLE:-}" == "chef" || ! ( -t 0 && -t 1 ) || -n "$plan" ]]; then
+    guarded=1
+    [[ -n "$plan" ]] || die "aucun lancement automatique sans plan approuvé : ajoute --plan P-xxxx."
+    [[ -n "$projet" ]] || die "avec un plan, précise le projet : --projet <nom>."
+  fi
+
+  local path=""
+  if [[ -n "$projet" ]]; then
+    path="$(py projet chemin "$projet")" || exit 1
+    cd "$path" || die "dossier du projet introuvable : $path"
+  fi
+
   require_git_repo
   has workmux || die "workmux n'est pas installé (lance ./install.sh)."
   [[ -n "${TMUX:-}" ]] || die "lance d'abord « jarvis start », puis cette commande dans la session."
@@ -81,18 +179,55 @@ cmd_task() {
   root="$(git rev-parse --show-toplevel)"
   [[ "$(readlink -f "$root")" != "$(readlink -f "$JARVIS_HOME")" ]] \
     || die "tu es dans le dépôt JarvisAgent. Va d'abord dans ton projet (ex. cd ~/projets/repriceo)."
+  if [[ -n "$path" && "$(readlink -f "$root")" != "$(readlink -f "$path")" ]]; then
+    die "le projet « $projet » est enregistré sur $path, mais ce dossier appartient au dépôt $root."
+  fi
   [[ -f "$root/$rules" ]] || warn "$rules absent de ce projet : lance « jarvis init-project » pour ajouter le protocole Linear."
+  [[ -n "$projet" ]] || projet="$(basename "$root")"
+
+  # Garde-fous : pause, capacité et appartenance au plan, vérifiés ensemble sous verrou.
+  if ((guarded)); then
+    py plan verifier "$plan" "$projet" "$issue" "$who" || exit 1
+  fi
 
   local branch
   branch="$(slugify "$issue")"
   [[ -n "$desc" ]] && branch="$branch-$(slugify "$desc")"
+  [[ -n "$revue" && "$branch" != *revue* ]] && branch="$branch-revue-pr-$revue"
 
-  local prompt
-  prompt="Traite l'issue Linear $issue. Lis-la en entier via l'outil Linear avant de coder, puis suis à la lettre le protocole décrit dans $rules (statut, commentaires ❓/✅, PR). Ne fusionne jamais dans main."
+  local prompt_file
+  prompt_file="$(mktemp --suffix=.md)"
+  {
+    if [[ -n "$revue" ]]; then
+      echo "Mission de RELECTURE uniquement : relis la PR #$revue liée à l'issue Linear $issue."
+      echo "Ne modifie aucun fichier, ne crée aucun commit, n'ouvre aucune PR."
+      echo "Vérifie point par point les critères d'acceptation de l'issue, la sécurité, les tests et la lisibilité."
+      echo "Publie tes remarques avec « gh pr review $revue --comment --body-file <fichier> »,"
+      echo "puis résume ton verdict dans l'issue Linear (commentaire « ✅ REVUE » ou « ❓ REVUE »)."
+    else
+      echo "Traite l'issue Linear $issue. Lis-la en entier via l'outil Linear avant de coder,"
+      echo "puis suis à la lettre le protocole décrit dans $rules (statut, commentaires ❓/✅, PR)."
+      echo "Ne fusionne jamais dans main."
+    fi
+    if [[ -n "$consignes" ]]; then
+      echo
+      echo "## Consignes du chef d'orchestre"
+      echo
+      cat "$consignes"
+    fi
+  } >"$prompt_file"
 
   printf '%s▶%s %s → %s (branche %s)\n' "$C_CYAN" "$C_OFF" "$issue" "$who" "$branch"
-  workmux add "$branch" -a "$agent" -b -p "$prompt"
-  ok "Agent lancé en arrière-plan. Suis-le avec « jarvis board » (ou Ctrl+B, Ctrl+S)."
+  if ! workmux add "$branch" -a "$agent" -b -P "$prompt_file"; then
+    rm -f "$prompt_file"
+    # Échec technique : la tâche redevient lançable dans son plan.
+    ((guarded)) && py plan relacher "$plan" "$projet" "$issue" "$who" || true
+    py evenement erreur "échec du lancement de $issue ($who) sur $projet"
+    die "workmux add a échoué."
+  fi
+  # Le fichier de prompt reste dans /tmp : workmux peut le relire au démarrage de l'agent.
+  py evenement task "$projet $issue lancé → $who${plan:+ ($plan)}"
+  ok "Agent lancé en arrière-plan. Suis-le dans le cockpit (jarvis cockpit)."
 }
 
 cmd_board()  { has workmux || die "workmux n'est pas installé."; exec workmux dashboard "$@"; }
@@ -152,8 +287,27 @@ cmd_doctor() {
     codex mcp get linear >/dev/null 2>&1 && ok "Codex ↔ Linear" || warn "Codex n'a pas Linear (voir README, étape Linear)"
   fi
 
+  printf '\n%sSuperagent%s\n' "$C_CYAN" "$C_OFF"
+  if python3 -c 'import sys; sys.exit(sys.version_info < (3, 11))' 2>/dev/null; then
+    ok "Python $(python3 -c 'import platform; print(platform.python_version())')"
+  else
+    bad "Python 3.11 ou plus requis"; errors=$((errors + 1))
+  fi
+  local nproj
+  nproj="$(py projet liste 2>/dev/null | grep -c '^P[0-9]' || true)"
+  ((nproj > 0)) && ok "$nproj projet(s) enregistré(s)" || warn "aucun projet : jarvis projet ajouter <nom> <chemin>"
+  [[ "$(py reglage-lire telegram.chat_id)" != "" ]] && ok "Telegram relié" || warn "Telegram non relié (jarvis telegram config)"
+
   printf '\n%sSession%s\n' "$C_CYAN" "$C_OFF"
-  if has tmux && tmux has-session -t "$SESSION" 2>/dev/null; then ok "Session « $SESSION » active"; else warn "Session « $SESSION » fermée (jarvis start)"; fi
+  if has tmux && tmux has-session -t "$SESSION" 2>/dev/null; then
+    ok "Session « $SESSION » active"
+    local wins
+    wins="$(tmux list-windows -t "$SESSION" -F '#{window_name}')"
+    grep -qx daemon <<<"$wins" && ok "démon actif" || warn "démon arrêté (jarvis start le relance)"
+    grep -qx chef <<<"$wins" && ok "chef actif" || warn "chef arrêté (jarvis chef)"
+  else
+    warn "Session « $SESSION » fermée (jarvis start)"
+  fi
 
   echo
   if ((errors)); then bad "$errors problème(s) bloquant(s). Relance ./install.sh"; return 1; fi
@@ -165,7 +319,10 @@ main() {
   shift || true
   case "$cmd" in
     start)        cmd_start "$@" ;;
+    chef)         cmd_chef "$@" ;;
     task|t)       cmd_task "$@" ;;
+    cockpit|etat|plan|fil|projet|telegram|regler|capacite|demander|note|journal|daemon)
+                  py "$cmd" "$@" ;;
     board|b)      cmd_board "$@" ;;
     status|s|ls)  cmd_status "$@" ;;
     init-project) cmd_init_project "$@" ;;

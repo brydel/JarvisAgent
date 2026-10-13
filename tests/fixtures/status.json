@@ -1,0 +1,25 @@
+{
+  "context": {"backend": "tmux", "instance": "/tmp/tmux-1000/default"},
+  "scope": {"repository": null, "all": true, "targets": []},
+  "state_files_total": 3,
+  "state_files_invalid": 0,
+  "state_files_invalid_unattributed": 0,
+  "state_files_invalid_matching_context": 0,
+  "state_files_matching_context": 3,
+  "reconciled_agent_count": 3,
+  "agents": [
+    {"worktree": "bis-69-adr-architecture", "branch": "bis-69-adr-architecture", "project": "repriceo",
+     "project_path": "/home/brydel/projets/repriceo", "status": "done", "elapsed_secs": 412,
+     "title": "Issue Linear BIS-69", "pane_id": "%5", "workdir": "/home/brydel/projets/repriceo__worktrees/bis-69-adr-architecture",
+     "agent_kind": "claude", "session": "jarvis", "window_name": "wm-bis-69-adr-architecture", "updated_ts": 1760321000},
+    {"worktree": "bis-71-guardrails-couts", "branch": "bis-71-guardrails-couts", "project": "repriceo",
+     "project_path": "/home/brydel/projets/repriceo", "status": "waiting", "elapsed_secs": 95,
+     "title": "Garde-fous coûts fournisseurs", "pane_id": "%6", "workdir": "/home/brydel/projets/repriceo__worktrees/bis-71-guardrails-couts",
+     "agent_kind": "codex", "session": "jarvis", "window_name": "wm-bis-71-guardrails-couts", "updated_ts": 1760321100},
+    {"worktree": "jp-12-onboarding", "branch": "jp-12-onboarding", "project": "jobpilot-ia",
+     "project_path": "/home/brydel/projets/jobpilot-ia", "status": "working", "elapsed_secs": 1830,
+     "title": "Parcours d'inscription candidat", "pane_id": "%7", "workdir": "/home/brydel/projets/jobpilot-ia__worktrees/jp-12-onboarding",
+     "agent_kind": "claude", "session": "jarvis", "window_name": "wm-jp-12-onboarding", "updated_ts": 1760321200}
+  ],
+  "target_errors": []
+}
