@@ -66,7 +66,8 @@ export PATH="$HOME/.local/bin:$HOME/.npm-global/bin:$JARVIS_HOME/bin:$PATH"
 
 # --- 2. Paquets système -----------------------------------------------------
 step "Paquets système (git, tmux, gh…)"
-PKGS=(git tmux curl unzip build-essential ca-certificates gh jq)
+# bubblewrap : bac à sable de Codex sous Linux/WSL.
+PKGS=(git tmux curl unzip build-essential ca-certificates gh jq bubblewrap)
 MISSING=()
 for p in "${PKGS[@]}"; do dpkg -s "$p" >/dev/null 2>&1 || MISSING+=("$p"); done
 if ((${#MISSING[@]})); then
@@ -146,6 +147,18 @@ link() {  # link <source> <cible>
 link "$JARVIS_HOME/config/tmux.conf" "$HOME/.tmux.conf"
 link "$JARVIS_HOME/config/workmux/config.yaml" "$HOME/.config/workmux/config.yaml"
 chmod +x "$JARVIS_HOME/bin/"* 2>/dev/null || true
+
+# Règles Codex : commits, push de branche et PR sans demande ; fusion et push forcé interdits.
+RULES_DST="$HOME/.codex/rules/jarvis.rules"
+link "$JARVIS_HOME/config/codex/jarvis.rules" "$RULES_DST"
+if has codex; then
+  if codex execpolicy check --rules "$RULES_DST" -- git commit -m test >/dev/null 2>&1; then
+    ok "Règles Codex valides"
+  else
+    rm -f "$RULES_DST"
+    warn "Codex refuse les règles Jarvis (version de Codex ?) : lien retiré, Codex redemandera pour les commits."
+  fi
+fi
 
 # --- 7. Hooks de statut des agents ------------------------------------------
 step "Hooks de statut workmux (🤖 / 💬 / ✅)"

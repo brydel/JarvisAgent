@@ -7,14 +7,19 @@ agent: cc
 merge_strategy: rebase
 window_prefix: "wm-"
 
-# Profils d'agents utilisables avec `-a <nom>`
+# Profils d'agents utilisables avec `-a <nom>`. Les deux travaillent sans te solliciter :
+#  - Claude en mode « auto » : un classifieur valide les actions sûres et bloque les risquées ;
+#  - Codex via bin/jarvis-codex : bac à sable + aucune demande + règles config/codex/jarvis.rules.
 agents:
   cc:
     type: claude
     command: claude
+    args:
+      - --permission-mode
+      - auto
   cx:
     type: codex
-    command: codex
+    command: jarvis-codex
 
 # Fichiers ignorés par git à recopier dans chaque nouveau worktree.
 # Ne mets JAMAIS de secrets de production dans ces fichiers.

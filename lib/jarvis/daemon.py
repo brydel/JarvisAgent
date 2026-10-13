@@ -54,7 +54,7 @@ def watch_once(first: bool = False) -> list[dict]:
         if kind in ("agent_done", "agent_waiting") and a:
             injected = chef_up and ag.chef_inject(
                 f"[JARVIS événement] {msg}. Cible workmux : {ag.target(a)}. "
-                "Lis sa sortie (workmux capture) et son issue Linear, puis décide de la suite.")
+                "Lis sa sortie (jarvis voir) et son issue Linear, puis décide de la suite.")
             if not injected and kind == "agent_waiting":
                 # Personne pour lui répondre : on prévient l'humain directement.
                 notify.alert("question", f"{msg} et le chef n'est pas lancé", windows=True)

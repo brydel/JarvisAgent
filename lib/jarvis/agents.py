@@ -5,10 +5,36 @@ from __future__ import annotations
 import json
 import shutil
 import subprocess
+import time
 
 from . import config
 
-STATUS_LABELS = {"working": "travaille", "waiting": "attend", "done": "terminé"}
+STATUS_LABELS = {"working": "travaille", "waiting": "attend", "done": "terminé", "untracked": "actif ?"}
+# « untracked » : fenêtre d'agent visible dans tmux mais absente de workmux status (ex. Codex
+# avant la fin de son premier tour). Comptée comme occupée : on ne relance jamais par-dessus.
+BUSY = ("working", "waiting", "untracked")
+WINDOW_PREFIX = "wm-"
+
+
+def tmux_agent_windows() -> list[dict]:
+    """Fenêtres d'agents workmux (« wm-… ») dans toutes les sessions tmux."""
+    if not shutil.which("tmux"):
+        return []
+    fmt = "\t".join(["#{session_name}", "#{window_name}", "#{pane_current_path}",
+                     "#{pane_current_command}", "#{window_activity}"])
+    try:
+        res = _run(["tmux", "list-windows", "-a", "-F", fmt], timeout=5)
+    except (subprocess.TimeoutExpired, OSError):
+        return []
+    out = []
+    for line in res.stdout.splitlines():
+        parts = line.split("\t")
+        if len(parts) != 5 or not parts[1].startswith(WINDOW_PREFIX):
+            continue
+        session, window, path, command, activity = parts
+        out.append({"session": session, "window": window, "path": path, "command": command,
+                    "activity": int(activity) if activity.isdigit() else 0})
+    return out
 
 
 def _run(cmd: list[str], timeout: int = 20, input_text: str | None = None) -> subprocess.CompletedProcess:
@@ -48,8 +74,30 @@ def status_all() -> tuple[list[dict] | None, str]:
             "pane": a.get("pane_id") or "",
             "workdir": a.get("workdir") or "",
         })
-    order = {"waiting": 0, "working": 1, "done": 2}
-    agents.sort(key=lambda a: (order.get(a["status"], 3), a["project"], a["worktree"]))
+    # Agents que workmux ne suit pas (encore) : repérés par leur fenêtre tmux.
+    tracked = {a["window"] for a in agents if a["window"]}
+    now = time.time()
+    for w in tmux_agent_windows():
+        if w["window"] in tracked:
+            continue
+        cmd = w["command"].lower()
+        kind = "codex" if "codex" in cmd else ("claude" if "claude" in cmd else "")
+        idle = max(0, int(now - w["activity"])) if w["activity"] else 0
+        agents.append({
+            "worktree": w["window"][len(WINDOW_PREFIX):],
+            "branch": "",
+            "project": config.project_for_path(w["path"]) or "?",
+            "status": "untracked",
+            "elapsed": idle,
+            "title": f"non suivi par workmux · dernière activité il y a {fmt_elapsed(idle)}",
+            "kind": kind,
+            "session": w["session"],
+            "window": w["window"],
+            "pane": "",
+            "workdir": w["path"],
+        })
+    order = {"waiting": 0, "untracked": 1, "working": 2, "done": 3}
+    agents.sort(key=lambda a: (order.get(a["status"], 4), a["project"], a["worktree"]))
     return agents, ""
 
 
@@ -58,11 +106,27 @@ def target(agent: dict) -> str:
 
 
 def capture(handle: str, lines: int = 60) -> str:
-    try:
-        res = _run(["workmux", "capture", handle, "-n", str(lines)], timeout=15)
-    except (subprocess.TimeoutExpired, OSError) as exc:
-        return f"(aperçu indisponible : {exc})"
-    return res.stdout if res.returncode == 0 else f"(aperçu indisponible : {(res.stderr or '').strip()})"
+    """Sortie récente d'un agent. Passe par tmux si workmux ne connaît pas l'agent."""
+    err = ""
+    if shutil.which("workmux"):
+        try:
+            res = _run(["workmux", "capture", handle, "-n", str(lines)], timeout=15)
+            if res.returncode == 0:
+                return res.stdout
+            err = (res.stderr or "").strip()
+        except (subprocess.TimeoutExpired, OSError) as exc:
+            err = str(exc)
+    worktree = handle.split(":", 1)[-1]
+    for w in tmux_agent_windows():
+        if w["window"] == WINDOW_PREFIX + worktree:
+            try:
+                res = _run(["tmux", "capture-pane", "-p", "-J", "-t", f"{w['session']}:{w['window']}",
+                            "-S", f"-{lines}"], timeout=10)
+            except (subprocess.TimeoutExpired, OSError) as exc:
+                return f"(aperçu indisponible : {exc})"
+            if res.returncode == 0:
+                return res.stdout
+    return f"(aperçu indisponible : {err or 'agent introuvable'})"
 
 
 def send(handle: str, text: str) -> tuple[bool, str]:

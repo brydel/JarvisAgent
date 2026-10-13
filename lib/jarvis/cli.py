@@ -104,7 +104,7 @@ def cmd_plan_verifier(a) -> int:
     agents, err = ag.status_all()
     if agents is None:
         return _err(f"impossible de compter les agents ({err})", 2)
-    busy = sum(1 for x in agents if x["status"] in ("working", "waiting"))
+    busy = sum(1 for x in agents if x["status"] in ag.BUSY)
     limit = int(config.settings()["general"].get("max_agents", 3))
     try:
         plans.authorize_launch(a.id, a.projet, a.issue, a.agent, busy=busy,
@@ -127,7 +127,7 @@ def cmd_capacite(a) -> int:
     agents, err = ag.status_all()
     if agents is None:
         return _err(f"impossible de compter les agents ({err})", 2)
-    busy = sum(1 for x in agents if x["status"] in ("working", "waiting"))
+    busy = sum(1 for x in agents if x["status"] in ag.BUSY)
     limit = int(config.settings()["general"].get("max_agents", 3))
     if busy >= limit:
         return _err(f"{busy}/{limit} agents déjà occupés : attends qu'un agent termine.", 1)
@@ -304,7 +304,23 @@ def cmd_regler(a) -> int:
 def cmd_reglage_lire(a) -> int:
     section, _, key = a.cle.partition(".")
     value = config.settings().get(section, {}).get(key, "")
+    if (section, key) == ("telegram", "token"):
+        value = "configuré" if value else ""  # le jeton ne s'affiche jamais
     print(str(value).lower() if isinstance(value, bool) else value)
+    return 0
+
+
+def cmd_voir(a) -> int:
+    """Sortie récente d'un agent, même s'il n'est pas (encore) suivi par workmux."""
+    print(ag.capture(a.cible, lines=a.lignes))
+    return 0
+
+
+def cmd_preparer_worktree(a) -> int:
+    from . import trust
+    done = trust.prepare(a.agent, a.chemin)
+    if done:
+        print(", ".join(done))
     return 0
 
 
@@ -364,6 +380,7 @@ def cmd_chef_preparer(a) -> int:
                 "Bash(jarvis plan nouveau *)", "Bash(jarvis plan liste *)", "Bash(jarvis plan liste)",
                 "Bash(jarvis plan voir *)", "Bash(jarvis task *)", "Bash(jarvis capacite)",
                 "Bash(jarvis demander *)", "Bash(jarvis note *)", "Bash(jarvis journal *)", "Bash(jarvis journal)",
+                "Bash(jarvis voir *)",
                 "Bash(workmux status)", "Bash(workmux status *)", "Bash(workmux capture *)",
                 "Bash(workmux send *)", "Bash(workmux wait *)",
                 "Bash(gh pr view *)", "Bash(gh pr diff *)", "Bash(gh pr checks *)", "Bash(gh pr list *)",
@@ -373,6 +390,7 @@ def cmd_chef_preparer(a) -> int:
                 # Décisions et réglages réservés à l'humain.
                 "Bash(jarvis plan ok *)", "Bash(jarvis plan non *)", "Bash(jarvis plan verifier *)",
                 "Bash(jarvis plan relacher *)", "Bash(jarvis regler *)", "Bash(jarvis telegram *)",
+                "Bash(jarvis reglage-lire *)", "Bash(jarvis preparer-worktree *)", "Bash(jarvis chef-preparer *)",
                 # Contournements de « jarvis task » et accès directs au noyau.
                 "Bash(workmux add *)", "Bash(workmux run *)", "Bash(python *)", "Bash(python3 *)",
                 "Bash(env *)", "Bash(script *)",
@@ -481,6 +499,14 @@ def build_parser() -> argparse.ArgumentParser:
     s.add_argument("valeur")
     s.set_defaults(fn=cmd_regler)
 
+    s = sub.add_parser("voir", help="sortie récente d'un agent (projet:worktree)")
+    s.add_argument("cible")
+    s.add_argument("-n", "--lignes", type=int, default=80)
+    s.set_defaults(fn=cmd_voir)
+    s = sub.add_parser("preparer-worktree", help=argparse.SUPPRESS)
+    s.add_argument("agent")
+    s.add_argument("chemin")
+    s.set_defaults(fn=cmd_preparer_worktree)
     s = sub.add_parser("reglage-lire", help=argparse.SUPPRESS)
     s.add_argument("cle")
     s.set_defaults(fn=cmd_reglage_lire)

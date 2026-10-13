@@ -29,6 +29,8 @@ os.environ.update({
     "JARVIS_SESSION": "jtest",
     "FAKE_WORKMUX_STATUS": str(TMP / "status.json"),
     "FAKE_WORKMUX_LOG": str(TMP / "wm.log"),
+    "CODEX_HOME": str(TMP / "codexhome"),
+    "CLAUDE_CONFIG_DIR": str(TMP / "claudecfg"),
     "PATH": f"{TMP / 'bin'}:{ROOT / 'tests' / 'fake-bin'}:{os.environ['PATH']}",
 })
 sys.path.insert(0, str(ROOT / "lib"))
@@ -288,6 +290,62 @@ class JarvisTest(unittest.TestCase):
             self.assertIn(rule, deny)
         self.assertNotIn("Bash(jarvis *)", settings["permissions"]["allow"])
         self.assertTrue(any(str(TMP / "p" / "repriceo") in r for r in deny))
+
+    # --- autonomie et visibilité ---------------------------------------------------
+    def test_worktree_trust_for_claude_and_codex(self):
+        from jarvis import trust
+        cfg = TMP / "claudecfg"
+        cfg.mkdir(exist_ok=True)
+        (cfg / ".claude.json").write_text(json.dumps({"numStartups": 3, "projects": {"/autre": {"x": 1}}}))
+        wt = str(TMP / "p" / "repriceo__worktrees" / "bis-1-x")
+        self.assertTrue(trust.trust_claude(wt))
+        self.assertFalse(trust.trust_claude(wt))  # idempotent
+        data = json.loads((cfg / ".claude.json").read_text())
+        self.assertTrue(data["projects"][wt]["hasTrustDialogAccepted"])
+        self.assertEqual(data["numStartups"], 3)          # le reste du fichier est préservé
+        self.assertEqual(data["projects"]["/autre"], {"x": 1})
+
+        codex_cfg = TMP / "codexhome" / "config.toml"
+        codex_cfg.parent.mkdir(exist_ok=True)
+        codex_cfg.write_text('model = "gpt"\n')
+        self.assertTrue(trust.trust_codex(wt))
+        self.assertFalse(trust.trust_codex(wt))
+        import tomllib
+        parsed = tomllib.loads(codex_cfg.read_text())       # reste du TOML valide
+        self.assertEqual(parsed["projects"][wt]["trust_level"], "trusted")
+        self.assertEqual(parsed["model"], "gpt")
+
+    def test_untracked_agent_windows_are_visible_and_capturable(self):
+        set_status()
+        wt_dir = TMP / "p" / "repriceo__worktrees" / "bis-77-revue"
+        wt_dir.mkdir(parents=True, exist_ok=True)
+        tmux("new-window", "-d", "-t", "jtest", "-n", "wm-bis-77-revue", "-c", str(wt_dir),
+             "sh -c 'echo Codex relit la PR 3; exec cat'")
+        time.sleep(0.4)
+        found, _ = agents.status_all()
+        ghost = [a for a in found if a["worktree"] == "bis-77-revue"]
+        self.assertEqual(len(ghost), 1)
+        self.assertEqual(ghost[0]["status"], "untracked")
+        self.assertEqual(ghost[0]["project"], "repriceo")
+        self.assertIn("Codex relit la PR 3", agents.capture("repriceo:bis-77-revue"))
+        # Compté comme occupé : on ne lance rien par-dessus.
+        from jarvis import report
+        self.assertEqual(report.snapshot()["busy"], 3)  # 1 attend + 1 travaille + 1 non suivi
+        tmux("kill-window", "-t", "jtest:wm-bis-77-revue")
+
+    def test_task_pre_trusts_the_new_worktree(self):
+        set_status(**{a["worktree"]: "done" for a in FIXTURE["agents"]})
+        p = plans.create("Confiance", [plans.parse_item("repriceo:BIS-98:codex")])
+        plans.decide(p["id"], True, par="test")
+        res = self.run_jarvis("task", "--plan", p["id"], "--projet", "repriceo", "BIS-98", "codex", "auth")
+        self.assertEqual(res.returncode, 0, res.stderr)
+        expected = str((TMP / "p" / "repriceo__worktrees" / "bis-98-auth").resolve())
+        self.assertIn(f'[projects."{expected}"]', (TMP / "codexhome" / "config.toml").read_text())
+
+    def test_reglage_lire_never_prints_the_token(self):
+        res = subprocess.run([sys.executable, "-m", "jarvis", "reglage-lire", "telegram.token"],
+                             capture_output=True, text=True, env=dict(os.environ, PYTHONPATH=str(ROOT / "lib")))
+        self.assertNotIn("123:ABC", res.stdout)
 
     def test_chef_injection_is_single_line(self):
         agents.chef_inject("ligne un\nligne deux")

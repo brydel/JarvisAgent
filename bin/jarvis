@@ -36,6 +36,7 @@ ${C_CYAN}Pilotage${C_OFF}
 ${C_CYAN}Agents${C_OFF}
   jarvis task [--projet P] <ISSUE> <claude|codex> [desc] [--consignes fichier.md]
                                         Lance un agent sur une issue Linear, dans son worktree
+  jarvis voir <projet:worktree>         Sortie récente d'un agent (même non suivi par workmux)
   jarvis board                          Tableau de bord workmux
   jarvis status                         Tâches et état des agents (projet courant)
 
@@ -217,6 +218,12 @@ cmd_task() {
     fi
   } >"$prompt_file"
 
+  # Pré-accepter la confiance du futur worktree : l'agent démarre sans poser de question.
+  # (Emplacement par défaut de workmux : <projet>/../<projet>__worktrees/<branche>.)
+  local wt_path
+  wt_path="$(dirname "$root")/$(basename "$root")__worktrees/$branch"
+  py preparer-worktree "$who" "$wt_path" >/dev/null || warn "impossible de pré-autoriser $wt_path"
+
   printf '%s▶%s %s → %s (branche %s)\n' "$C_CYAN" "$C_OFF" "$issue" "$who" "$branch"
   if ! workmux add "$branch" -a "$agent" -b -P "$prompt_file"; then
     rm -f "$prompt_file"
@@ -321,7 +328,7 @@ main() {
     start)        cmd_start "$@" ;;
     chef)         cmd_chef "$@" ;;
     task|t)       cmd_task "$@" ;;
-    cockpit|etat|plan|fil|projet|telegram|regler|capacite|demander|note|journal|daemon)
+    cockpit|etat|plan|fil|projet|telegram|regler|capacite|demander|note|journal|daemon|voir)
                   py "$cmd" "$@" ;;
     board|b)      cmd_board "$@" ;;
     status|s|ls)  cmd_status "$@" ;;

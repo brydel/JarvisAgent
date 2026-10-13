@@ -165,6 +165,8 @@ Exemple : `jarvis regler general.max_agents 4`. Les réglages vivent dans `~/.co
 ```
 install.sh                    Installation complète, idempotente
 bin/jarvis                    Point d'entrée (bash) : start, chef, task, doctor…
+bin/jarvis-codex              Codex en mode autonome (bac à sable + règles)
+config/codex/jarvis.rules     Règles d'exécution des agents Codex
 lib/jarvis/                   Superagent en Python (bibliothèque standard uniquement)
   cockpit.py                  Interface plein écran (curses)
   daemon.py                   Surveillance des agents + pont Telegram
@@ -178,6 +180,21 @@ tests/                        Tests de bout en bout (faux workmux, faux Telegram
 ```
 
 Données locales : `~/.config/jarvis/` (réglages, projets), `~/.local/state/jarvis/` (plans, fil, journal du chef), `~/.local/share/jarvis/chef/` (dossier de travail du chef).
+
+## Agents autonomes (aucun « Yes » à cliquer)
+
+Les agents lancés par Jarvis travaillent sans te solliciter, et sans perdre leurs garde-fous.
+
+| | Comment | Ce qui reste bloqué |
+| --- | --- | --- |
+| **Claude Code** | mode `auto` : un classifieur valide les actions sûres | actions jugées risquées, règles `deny` |
+| **Codex** | `bin/jarvis-codex` : bac à sable `workspace-write`, `--ask-for-approval never`, réseau autorisé, caches de paquets inscriptibles | tout ce qui sort du worktree, sauf les commandes autorisées par les règles |
+| **Règles Codex** (`config/codex/jarvis.rules` → `~/.codex/rules/`) | autorisé : `git add/commit/push` de sa branche, `gh pr create/view/review…`, `pnpm/npm/uv install` | **interdit** : `git push --force`, push sur `main`, `gh pr merge/close`, `git reset/clean` |
+| **Confiance des dossiers** | `jarvis task` pré-accepte chaque nouveau worktree (Claude : `~/.claude.json`, Codex : `~/.codex/config.toml`) | — |
+
+Pourquoi Codex demandait sans arrêt : en bac à sable, `.git` est protégé en écriture, y compris le vrai `.git` d'un worktree. Chaque commit sortait donc du bac à sable et déclenchait une demande. Les règles autorisent maintenant d'avance exactement ce dont un agent a besoin.
+
+Un agent que workmux ne suit pas encore (souvent Codex avant la fin de son premier tour) apparaît comme **🌀 actif ?** dans le cockpit et `jarvis etat`. Il compte comme occupé, et `jarvis voir projet:worktree` affiche sa sortie.
 
 ## Sécurité et coûts
 

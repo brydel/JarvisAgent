@@ -1,0 +1,86 @@
+# JarvisAgent — règles d'exécution des agents Codex
+# Installé par install.sh (lien vers ~/.codex/rules/jarvis.rules).
+#
+# Contexte : en sandbox « workspace-write », Codex protège .git en lecture seule
+# (y compris le vrai .git d'un worktree). Chaque commit sortait donc du bac à sable
+# et déclenchait une demande d'autorisation. Ces règles autorisent d'avance le strict
+# nécessaire au travail d'un agent, et interdisent ce qui revient à l'humain.
+#
+# « allow » : exécuté hors du bac à sable, sans demande.
+# « forbidden » : bloqué sans demande. La règle la plus stricte l'emporte.
+
+# --- Autorisé : travail git local sur la branche de l'agent --------------------
+prefix_rule(
+    pattern = ["git", ["add", "commit", "restore", "stash", "switch", "checkout", "fetch", "pull", "rebase", "mv", "rm"]],
+    decision = "allow",
+    justification = "Jarvis : travail git local dans le worktree de l'agent",
+)
+
+# --- Autorisé : publier sa branche et sa PR ------------------------------------
+prefix_rule(
+    pattern = ["git", "push"],
+    decision = "allow",
+    justification = "Jarvis : publier la branche de l'agent pour ouvrir sa PR",
+)
+
+prefix_rule(
+    pattern = ["gh", "pr", ["create", "view", "diff", "checks", "list", "review", "comment", "edit", "status"]],
+    decision = "allow",
+    justification = "Jarvis : ouvrir, relire et commenter les PR",
+)
+
+# --- Autorisé : installer les dépendances (cache hors du worktree) -------------
+prefix_rule(
+    pattern = ["pnpm", ["install", "i", "add"]],
+    decision = "allow",
+    justification = "Jarvis : installation des dépendances du projet",
+)
+
+prefix_rule(
+    pattern = ["npm", ["install", "i", "ci"]],
+    decision = "allow",
+    justification = "Jarvis : installation des dépendances du projet",
+)
+
+prefix_rule(
+    pattern = ["uv", ["sync", "add", "lock"]],
+    decision = "allow",
+    justification = "Jarvis : installation des dépendances du projet",
+)
+
+# --- Interdit : ce qui revient à l'humain --------------------------------------
+prefix_rule(
+    pattern = ["git", "push", ["--force", "-f", "--force-with-lease", "--delete", "-d", "--mirror"]],
+    decision = "forbidden",
+    justification = "Jarvis : jamais de push forcé ni de suppression de branche distante",
+)
+
+prefix_rule(
+    pattern = ["git", "push", "origin", ["main", "master", "HEAD:main", "HEAD:master"]],
+    decision = "forbidden",
+    justification = "Jarvis : seul l'humain modifie main, via une PR",
+)
+
+prefix_rule(
+    pattern = ["git", "push", ["-u", "--set-upstream"], "origin", ["main", "master", "HEAD:main", "HEAD:master"]],
+    decision = "forbidden",
+    justification = "Jarvis : seul l'humain modifie main, via une PR",
+)
+
+prefix_rule(
+    pattern = ["gh", "pr", ["merge", "close"]],
+    decision = "forbidden",
+    justification = "Jarvis : la fusion et la fermeture des PR reviennent à l'humain",
+)
+
+prefix_rule(
+    pattern = ["gh", "repo", ["delete", "edit", "rename", "archive"]],
+    decision = "forbidden",
+    justification = "Jarvis : réglages du dépôt réservés à l'humain",
+)
+
+prefix_rule(
+    pattern = ["git", ["reset", "clean", "filter-branch", "filter-repo"]],
+    decision = "forbidden",
+    justification = "Jarvis : commandes destructrices interdites aux agents",
+)

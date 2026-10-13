@@ -1,0 +1,26 @@
+#!/usr/bin/env bash
+# jarvis-codex — lance Codex en mode autonome pour un agent Jarvis.
+#
+#  - bac à sable « workspace-write » : l'agent écrit seulement dans son worktree ;
+#  - --ask-for-approval never : aucune demande, une action non prévue échoue proprement ;
+#  - accès réseau dans le bac à sable (tests, API, gh) ;
+#  - caches de paquets inscriptibles (pnpm, npm, uv, pip) ;
+#  - git commit/push et gh pr passent par ~/.codex/rules/jarvis.rules (config/codex/jarvis.rules).
+#
+# Utilisé par le profil workmux « cx » (config/workmux/config.yaml).
+
+set -euo pipefail
+
+caches=("$HOME/.cache" "$HOME/.npm" "$HOME/.local/share/pnpm" "$HOME/.cargo/registry")
+roots=""
+for d in "${caches[@]}"; do
+  mkdir -p "$d" 2>/dev/null || continue
+  roots+="${roots:+,}\"$d\""
+done
+
+exec codex \
+  --sandbox workspace-write \
+  --ask-for-approval never \
+  -c sandbox_workspace_write.network_access=true \
+  -c "sandbox_workspace_write.writable_roots=[$roots]" \
+  "$@"

@@ -11,7 +11,7 @@ from . import config, plans, store
 def snapshot() -> dict:
     agents, err = ag.status_all()
     s = config.settings()["general"]
-    busy = [a for a in (agents or []) if a["status"] in ("working", "waiting")]
+    busy = [a for a in (agents or []) if a["status"] in ag.BUSY]
     return {
         "ts": time.time(),
         "agents": agents,
@@ -42,7 +42,7 @@ def text(snap: dict | None = None, detail: bool = True) -> str:
     elif not snap["agents"]:
         out.append("  aucun agent suivi")
     else:
-        icon = {"working": "🤖", "waiting": "💬", "done": "✅"}
+        icon = {"working": "🤖", "waiting": "💬", "done": "✅", "untracked": "🌀"}
         for a in snap["agents"]:
             line = (f"  {icon.get(a['status'], '•')} {a['project']}/{a['worktree']} "
                     f"[{ag.kind_label(a['kind'])}, {ag.STATUS_LABELS.get(a['status'], a['status'])}, "

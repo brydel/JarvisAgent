@@ -26,6 +26,7 @@ STATUS = {  # symbole, libellé, couleur
     "working": ("▶", "travaille", "cyan"),
     "waiting": ("?", "attend", "yellow"),
     "done": ("✓", "terminé", "green"),
+    "untracked": ("~", "actif ?", "magenta"),
 }
 FEED = {  # type d'événement → symbole, couleur
     "agent_done": ("✓", "green"), "agent_waiting": ("?", "yellow"), "agent_working": ("▶", "cyan"),
@@ -346,7 +347,7 @@ class Cockpit:
         self.box(y, x, h, w, "PROJETS", False, f"{len(projs)}")
         counts: dict[str, int] = {}
         for a in self.agents_list(snap):
-            if a["status"] in ("working", "waiting"):
+            if a["status"] in ag.BUSY:
                 counts[a["project"]] = counts.get(a["project"], 0) + 1
         if not projs:
             self.put(y + 1, x + 2, "Aucun projet : jarvis projet ajouter", self.c("dim"), w - 4)
