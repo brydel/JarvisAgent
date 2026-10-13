@@ -66,8 +66,17 @@ if [[ "${1:-}" == "--tester-commit" ]]; then
   exit 0
 fi
 if [[ "${1:-}" == "--tester-commit-dedans" ]]; then
-  if ! codex sandbox linux --help >/dev/null 2>&1; then echo "INCONNU"; exit 0; fi
-  if out="$(timeout 60 codex sandbox linux --full-auto -c "sandbox_workspace_write.writable_roots=[$roots]" \
+  # Récentes versions : « codex sandbox [options] -- commande » ; anciennes : « codex sandbox linux ».
+  if aide="$(codex sandbox linux --help 2>&1)" && [[ "$aide" != *"unrecognized"* ]]; then
+    cmd=(codex sandbox linux)
+  elif aide="$(codex sandbox --help 2>&1)"; then
+    cmd=(codex sandbox)
+  else
+    echo "INCONNU"; exit 0
+  fi
+  [[ "$aide" == *"--full-auto"* ]] && cmd+=(--full-auto)
+  if out="$(timeout 60 "${cmd[@]}" -c 'sandbox_mode="workspace-write"' \
+        -c "sandbox_workspace_write.writable_roots=[$roots]" \
         -c sandbox_workspace_write.exclude_slash_tmp=true -c sandbox_workspace_write.exclude_tmpdir_env_var=true -- \
         git -c user.name=jarvis -c user.email=jarvis@localhost commit -q --allow-empty -m essai 2>&1)"; then
     echo "OK"
