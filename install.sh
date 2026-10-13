@@ -144,7 +144,11 @@ chmod +x "$JARVIS_HOME/bin/"* 2>/dev/null || true
 
 # --- 7. Hooks de statut des agents ------------------------------------------
 step "Hooks de statut workmux (🤖 / 💬 / ✅)"
-if workmux setup; then
+if [[ ! -d "$HOME/.claude" || ! -d "$HOME/.codex" ]]; then
+  # workmux ne détecte un agent qu'après son premier lancement (dossier de config créé)
+  warn "Claude Code ou Codex n'a jamais été lancé : les statuts seront activés après la connexion."
+  TODO+=("Après t'être connecté à Claude Code et Codex, lance « workmux setup » pour activer les statuts 🤖/💬/✅.")
+elif workmux setup; then
   ok "Hooks installés"
 else
   warn "« workmux setup » a échoué. Relance-le après t'être connecté à Claude Code et Codex."
