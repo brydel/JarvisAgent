@@ -460,6 +460,21 @@ class JarvisTest(unittest.TestCase):
         self.assertEqual(report.snapshot()["busy"], 3)  # 1 attend + 1 travaille + 1 non suivi
         tmux("kill-window", "-t", "jtest:wm-bis-77-revue")
 
+    def test_long_idle_untracked_window_frees_its_slot(self):
+        set_status()
+        tmux("new-window", "-d", "-t", "jtest", "-n", "wm-vieux-codex", "cat")
+        time.sleep(0.3)
+        old = agents.IDLE_AFTER
+        agents.IDLE_AFTER = 0  # simule une fenêtre muette depuis longtemps
+        try:
+            found, _ = agents.status_all()
+            ghost = next(a for a in found if a["worktree"] == "vieux-codex")
+            self.assertEqual(ghost["status"], "idle")
+            self.assertNotIn(ghost["status"], agents.BUSY)
+        finally:
+            agents.IDLE_AFTER = old
+            tmux("kill-window", "-t", "jtest:wm-vieux-codex")
+
     def test_task_pre_trusts_the_new_worktree(self):
         set_status(**{a["worktree"]: "done" for a in FIXTURE["agents"]})
         p = plans.create("Confiance", [plans.parse_item("repriceo:BIS-98:codex")])

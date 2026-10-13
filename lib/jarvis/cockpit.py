@@ -27,6 +27,7 @@ STATUS = {  # symbole, libellé, couleur
     "waiting": ("?", "attend", "yellow"),
     "done": ("✓", "terminé", "green"),
     "untracked": ("~", "actif ?", "magenta"),
+    "idle": ("·", "inactif ?", "dim"),
 }
 FEED = {  # type d'événement → symbole, couleur
     "agent_done": ("✓", "green"), "agent_waiting": ("?", "yellow"), "agent_working": ("▶", "cyan"),

@@ -9,10 +9,14 @@ import time
 
 from . import config
 
-STATUS_LABELS = {"working": "travaille", "waiting": "attend", "done": "terminé", "untracked": "actif ?"}
+STATUS_LABELS = {"working": "travaille", "waiting": "attend", "done": "terminé", "untracked": "actif ?",
+                 "idle": "inactif ?"}
 # « untracked » : fenêtre d'agent visible dans tmux mais absente de workmux status (ex. Codex
 # avant la fin de son premier tour). Comptée comme occupée : on ne relance jamais par-dessus.
+# « idle » : même cas, mais sans activité depuis IDLE_AFTER secondes : sans doute fini, la place
+# est libérée (sinon une vieille fenêtre bloquerait la capacité toute la nuit).
 BUSY = ("working", "waiting", "untracked")
+IDLE_AFTER = 20 * 60
 WINDOW_PREFIX = "wm-"
 
 
@@ -91,7 +95,7 @@ def status_all() -> tuple[list[dict] | None, str]:
             "worktree": w["window"][len(WINDOW_PREFIX):],
             "branch": "",
             "project": config.project_for_path(w["path"]) or "?",
-            "status": "untracked",
+            "status": "idle" if idle >= IDLE_AFTER else "untracked",
             "elapsed": idle,
             "title": f"non suivi par workmux · dernière activité il y a {fmt_elapsed(idle)}",
             "kind": kind,
