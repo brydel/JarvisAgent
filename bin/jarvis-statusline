@@ -1,0 +1,39 @@
+#!/usr/bin/env python3
+"""Barre d'état Claude Code pour Jarvis.
+
+Claude Code envoie sur l'entrée standard un JSON qui contient, pour les abonnés Max,
+rate_limits.five_hour / seven_day (pourcentage consommé, remise à zéro). On l'enregistre
+pour que Jarvis surveille les jetons, puis on affiche une ligne courte.
+Installé par install.sh dans ~/.claude/settings.json (statusLine).
+"""
+
+import json
+import os
+import sys
+
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.realpath(__file__)), "..", "lib"))
+
+try:
+    data = json.load(sys.stdin)
+except (json.JSONDecodeError, ValueError):
+    data = {}
+
+try:
+    from jarvis import usage
+    usage.save_claude_snapshot(data)
+except Exception:  # noqa: BLE001 — la barre d'état ne doit jamais casser Claude Code
+    pass
+
+rl = data.get("rate_limits") or {}
+parts = ["◆ JARVIS"]
+for key, label in (("five_hour", "5h"), ("seven_day", "sem")):
+    pct = (rl.get(key) or {}).get("used_percentage")
+    if pct is not None:
+        parts.append(f"{label} {pct:.0f}%")
+ctx = (data.get("context_window") or {}).get("used_percentage")
+if ctx is not None:
+    parts.append(f"ctx {ctx:.0f}%")
+model = (data.get("model") or {}).get("display_name")
+if model:
+    parts.append(model)
+print(" · ".join(parts))

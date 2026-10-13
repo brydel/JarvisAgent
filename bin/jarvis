@@ -30,6 +30,8 @@ ${C_CYAN}Pilotage${C_OFF}
   jarvis chef                           Lance (ou rejoint) le chef d'orchestre
   jarvis cockpit                        Interface plein écran (agents, plans, fil)
   jarvis etat                           État des agents, plans et projets
+  jarvis jetons                         Consommation Claude et Codex (5 h et semaine)
+  jarvis veille [fait <projet>]         Veille concurrentielle par projet
   jarvis plan liste|voir|ok|non         Plans proposés par le chef
   jarvis fil [n]                        Derniers événements
 
@@ -328,7 +330,7 @@ main() {
     start)        cmd_start "$@" ;;
     chef)         cmd_chef "$@" ;;
     task|t)       cmd_task "$@" ;;
-    cockpit|etat|plan|fil|projet|telegram|regler|capacite|demander|note|journal|daemon|voir)
+    cockpit|etat|plan|fil|projet|telegram|regler|capacite|demander|note|journal|daemon|voir|jetons|veille)
                   py "$cmd" "$@" ;;
     board|b)      cmd_board "$@" ;;
     status|s|ls)  cmd_status "$@" ;;

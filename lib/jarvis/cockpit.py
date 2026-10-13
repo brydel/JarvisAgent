@@ -222,7 +222,8 @@ class Cockpit:
             return
 
         self._draw_header(snap, w)
-        body_top, body_bottom = 2, h - 3
+        self._draw_tokens(snap, 2, w)
+        body_top, body_bottom = 3, h - 3
         body_h = body_bottom - body_top
         top_h = max(8, int(body_h * 0.58))
         left_w = int(w * 0.62)
@@ -239,6 +240,44 @@ class Cockpit:
             self._draw_feed(body_top + top_h, 0, bottom_h, w)
         self._draw_footer(h, w)
         self.scr.refresh()
+
+    def _draw_tokens(self, snap, y, w):
+        """Jauges de jetons : Claude et Codex, fenêtres 5 h et semaine, colorées selon les seuils."""
+        from . import usage
+        s = (snap or {}).get("usage")
+        if not s:
+            self.put(y, 1, "Jetons : données indisponibles", self.c("dim"))
+            return
+        alert, stop = usage.thresholds()
+        x = 1
+        for name in usage.PROVIDERS:
+            u = s[name]
+            lvl = u["niveau"]
+            dot_col = {"ok": "green", "alerte": "yellow", "epuise": "red"}.get(lvl, "dim")
+            self.put(y, x, "●", self.c(dot_col, True))
+            self.put(y, x + 2, name.capitalize(), self.c("white", True))
+            x += 2 + len(name) + 1
+            shown = False
+            for key, label in (("5h", "5h"), ("semaine", "sem")):
+                win = u.get(key)
+                if not win:
+                    continue
+                shown = True
+                pct = win["used"]
+                col = "red" if pct >= stop else ("yellow" if pct >= alert else "green")
+                seg = f"{label} {usage.bar(pct, 8)} {pct:3.0f}%"
+                self.put(y, x, seg, self.c(col, True))
+                x += width(seg) + 2
+            if not shown:
+                self.put(y, x, "en attente de données", self.c("dim"))
+                x += 23
+            if lvl == "epuise" and u.get("reprise"):
+                seg = f"→ {usage.fmt_reset(u['reprise'])}"
+                self.put(y, x, seg, self.c("red"))
+                x += width(seg) + 1
+            x += 3
+            if x >= w - 20:
+                break
 
     def _draw_header(self, snap, w):
         now = time.strftime("%H:%M:%S")

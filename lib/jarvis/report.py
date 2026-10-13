@@ -12,7 +12,13 @@ def snapshot() -> dict:
     agents, err = ag.status_all()
     s = config.settings()["general"]
     busy = [a for a in (agents or []) if a["status"] in ag.BUSY]
+    try:
+        from . import usage
+        jetons = usage.summary()
+    except Exception:  # noqa: BLE001 — l'état doit s'afficher même sans données de jetons
+        jetons = None
     return {
+        "usage": jetons,
         "ts": time.time(),
         "agents": agents,
         "agents_error": err,
@@ -34,6 +40,14 @@ def text(snap: dict | None = None, detail: bool = True) -> str:
         head += " · ⏸ PAUSE (aucun nouveau lancement)"
     head += " · chef " + ("actif" if snap["chef"] else "arrêté")
     out.append(head)
+
+    out.append("")
+    out.append("JETONS")
+    try:
+        from . import usage
+        out.extend("  " + ln for ln in usage.text(snap.get("usage")).splitlines())
+    except Exception as exc:  # noqa: BLE001
+        out.append(f"  ⚠ lecture impossible : {exc}")
 
     out.append("")
     out.append("AGENTS")

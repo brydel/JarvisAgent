@@ -122,6 +122,124 @@ class JarvisTest(unittest.TestCase):
         FakeTelegram.calls.clear()
         store.write_json(plans.PLANS_FILE, {"seq": 0, "plans": []})  # chaque test part de zéro
         store.set_paused(False)
+        for name in ("claude_usage.json", "budget.json", "veille.json"):
+            store.state_path(name).unlink(missing_ok=True)
+        shutil.rmtree(TMP / "codexhome" / "sessions", ignore_errors=True)
+
+    # --- jetons -----------------------------------------------------------------
+    def set_claude(self, five, week=10.0):
+        now = int(time.time())
+        payload = {"rate_limits": {"five_hour": {"used_percentage": five, "resets_at": now + 3600},
+                                   "seven_day": {"used_percentage": week, "resets_at": now + 5 * 86400}}}
+        res = subprocess.run([str(ROOT / "bin" / "jarvis-statusline")], input=json.dumps(payload),
+                             capture_output=True, text=True)
+        self.assertEqual(res.returncode, 0, res.stderr)
+        return res.stdout
+
+    def set_codex(self, five, week=10.0, reached=None):
+        now = int(time.time())
+        d = TMP / "codexhome" / "sessions" / time.strftime("%Y/%m/%d")
+        d.mkdir(parents=True, exist_ok=True)
+        line = {"timestamp": "2026-10-12T23:00:00.000Z", "type": "event_msg", "payload": {
+            "type": "token_count", "info": None, "rate_limits": {
+                "primary": {"used_percent": five, "window_minutes": 300, "resets_at": now + 7200},
+                "secondary": {"used_percent": week, "window_minutes": 10080, "resets_at": now + 3 * 86400},
+                "rate_limit_reached_type": reached}}}
+        with (d / "rollout-test.jsonl").open("a") as fh:
+            fh.write(json.dumps({"type": "session_meta", "payload": {}}) + "\n")
+            fh.write(json.dumps(line) + "\n")
+
+    def test_statusline_and_codex_rollouts_are_read(self):
+        from jarvis import usage
+        out = self.set_claude(42.4, 61)
+        self.assertIn("5h 42%", out)
+        self.set_codex(88, 30)
+        s = usage.summary()
+        self.assertEqual(s["claude"]["5h"]["used"], 42.4)
+        self.assertEqual(s["claude"]["niveau"], "ok")
+        self.assertEqual(s["codex"]["5h"]["used"], 88)
+        self.assertEqual(s["codex"]["semaine"]["used"], 30)
+        self.assertEqual(s["codex"]["niveau"], "alerte")
+        self.assertAlmostEqual(s["codex"]["marge"], 12)
+
+    def test_expired_window_counts_as_reset(self):
+        from jarvis import usage
+        store.write_json(usage.CLAUDE_FILE, {"ts": time.time(), "five_hour": {
+            "used_percentage": 99, "resets_at": int(time.time()) - 10}})
+        self.assertEqual(usage.claude_usage()["5h"]["used"], 0.0)
+
+    def test_budget_alert_stop_pause_and_recover(self):
+        set_status()  # jp-12-onboarding : agent Claude au travail
+        Path(os.environ["FAKE_WORKMUX_LOG"]).write_text("")
+        self.set_claude(50)
+        self.set_codex(20)
+        daemon.budget_check()
+        self.set_claude(85)
+        self.assertIn("Claude alerte", daemon.budget_check())
+        self.assertIn("[JARVIS jetons] Claude a dépassé le seuil d'alerte", self.chef_screen())
+        self.set_claude(97)
+        self.assertIn("Claude épuisé", daemon.budget_check())
+        sent = Path(os.environ["FAKE_WORKMUX_LOG"]).read_text()
+        self.assertIn("send jobpilot-ia:jp-12-onboarding [JARVIS] La limite de jetons", sent)
+        # Lancement refusé côté Claude, accepté côté Codex.
+        p = plans.create("Budget", [plans.parse_item("repriceo:BIS-60:claude"), plans.parse_item("repriceo:BIS-61:codex")])
+        plans.decide(p["id"], True, par="test")
+        res = subprocess.run([sys.executable, "-m", "jarvis", "plan", "verifier", p["id"], "repriceo", "BIS-60", "claude"],
+                             capture_output=True, text=True, env=dict(os.environ, PYTHONPATH=str(ROOT / "lib")))
+        self.assertEqual(res.returncode, 5, res.stderr)
+        self.assertIn("épuisés", res.stderr)
+        # Les deux épuisés → pause automatique, puis reprise quand Claude se libère.
+        self.set_codex(99)
+        self.assertIn("pause auto", daemon.budget_check())
+        self.assertTrue(store.paused())
+        self.set_claude(10)
+        events = daemon.budget_check()
+        self.assertIn("Claude rétabli", events)
+        self.assertIn("reprise auto", events)
+        self.assertFalse(store.paused())
+
+    def test_human_pause_is_not_lifted_by_budget(self):
+        self.set_claude(10)
+        self.set_codex(10)
+        store.set_paused(True)  # pause décidée par l'humain
+        daemon.budget_check()
+        self.assertTrue(store.paused())
+
+    def test_veille_reminder_is_due_then_throttled(self):
+        self.assertEqual(daemon.veille_check(), "repriceo")  # priorité 1, jamais faite
+        self.assertIn("[JARVIS veille] Veille concurrentielle due pour « repriceo »", self.chef_screen())
+        self.assertIsNone(daemon.veille_check())  # au plus un rappel toutes les 6 h
+        from jarvis import cli
+        cli.main(["veille", "fait", "repriceo"])
+        st = store.read_json(daemon.VEILLE_STATE, {})
+        st["dernier_rappel"] = 0
+        store.write_json(daemon.VEILLE_STATE, st)
+        self.assertEqual(daemon.veille_check(), "jobpilot-ia")  # repriceo est à jour
+
+    def test_auto_validation_setting(self):
+        from jarvis import cli
+        data = config.settings()
+        data["plans"]["validation"] = "auto"
+        config.save_settings(data)
+        try:
+            self.assertEqual(cli.main(["plan", "nouveau", "--titre", "Auto", "--item", "repriceo:BIS-70:codex"]), 0)
+            self.assertEqual(plans.all_plans()[-1]["statut"], "approuve")
+        finally:
+            data["plans"]["validation"] = "humain"
+            config.save_settings(data)
+
+    def test_installer_statusline_never_overwrites(self):
+        cfg = TMP / "claudecfg"
+        cfg.mkdir(exist_ok=True)
+        (cfg / "settings.json").unlink(missing_ok=True)
+        run = lambda: subprocess.run([sys.executable, "-m", "jarvis", "installer-statusline"], capture_output=True,
+                                     text=True, env=dict(os.environ, PYTHONPATH=str(ROOT / "lib")))
+        self.assertEqual(run().returncode, 0)
+        self.assertIn("jarvis-statusline", json.loads((cfg / "settings.json").read_text())["statusLine"]["command"])
+        self.assertIn("déjà", run().stdout)
+        (cfg / "settings.json").write_text(json.dumps({"statusLine": {"type": "command", "command": "ma-barre"}}))
+        self.assertEqual(run().returncode, 3)
+        self.assertEqual(json.loads((cfg / "settings.json").read_text())["statusLine"]["command"], "ma-barre")
 
     def chef_screen(self) -> str:
         time.sleep(0.4)

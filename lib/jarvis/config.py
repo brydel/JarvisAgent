@@ -32,6 +32,24 @@ DEFAULTS: dict = {
     "notifications": {
         "windows": True,
     },
+    "jetons": {
+        # Pourcentage d'une fenêtre (5 h ou semaine) à partir duquel on prévient / on arrête.
+        "alerte": 80,
+        "arret": 95,
+        # À l'arrêt : demander aux agents concernés de committer leur travail et de s'arrêter.
+        "arret_agents": True,
+        # Si les deux abonnements sont épuisés : pause automatique, levée à la remise à zéro.
+        "pause_auto": True,
+    },
+    "veille": {
+        # Veille concurrentielle par projet tous les N jours (0 = désactivée).
+        "jours": 7,
+    },
+    "plans": {
+        # "humain" : chaque plan attend ta validation. "auto" : approuvé aussitôt (tu es prévenu),
+        # dans les limites de capacité, de jetons et de pause.
+        "validation": "humain",
+    },
     "telegram": {
         "token": "",
         "chat_id": "",

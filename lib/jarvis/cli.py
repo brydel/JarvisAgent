@@ -50,6 +50,13 @@ def cmd_plan_nouveau(a) -> int:
         plan = plans.create(a.titre, items, mode="nuit" if a.nuit else "vague", resume=a.pourquoi, origine="chef")
     except plans.PlanError as exc:
         return _err(str(exc))
+    if config.settings()["plans"].get("validation") == "auto":
+        # Validation automatique choisie par l'humain : il est prévenu, les autres garde-fous restent actifs.
+        plan = plans.decide(plan["id"], True, par="auto")
+        notify.telegram(f"📋 Plan approuvé automatiquement\n\n{plans.format_plan(plan)}")
+        print(plans.format_plan(plan))
+        print(f"\n{plan['id']} approuvé automatiquement (réglage plans.validation = auto). Tu peux lancer ses tâches.")
+        return 0
     notify.telegram(f"📋 Nouveau plan à valider\n\n{plans.format_plan(plan)}", notify.plan_buttons(plan["id"]))
     notify.toast("JARVIS · plan à valider", f"{plan['id']} : {plan['titre']}")
     print(plans.format_plan(plan))
@@ -101,6 +108,14 @@ def cmd_plan_verifier(a) -> int:
     """Utilisé par `jarvis task` : vérifie pause, capacité et plan, puis marque le lancement."""
     if store.paused():
         return _err("Jarvis est en PAUSE : aucun nouveau lancement autorisé.", 3)
+    from . import usage
+    kind = plans.AGENTS.get(a.agent, a.agent)
+    u = usage.summary().get(kind)
+    if u and u["niveau"] == "epuise":
+        other = "codex" if kind == "claude" else "claude"
+        reprise = usage.fmt_reset(u.get("reprise")) or "sa remise à zéro"
+        return _err(f"jetons {kind} épuisés jusqu'à {reprise} : assigne la tâche à {other} "
+                    f"(nouveau plan) ou attends.", 5)
     agents, err = ag.status_all()
     if agents is None:
         return _err(f"impossible de compter les agents ({err})", 2)
@@ -310,6 +325,68 @@ def cmd_reglage_lire(a) -> int:
     return 0
 
 
+def cmd_jetons(a) -> int:
+    from . import usage
+    s = usage.summary()
+    if a.json:
+        print(json.dumps(s, ensure_ascii=False, indent=2))
+    else:
+        print(usage.text(s))
+    return 0
+
+
+def cmd_veille_liste(a) -> int:
+    from . import daemon
+    st = store.read_json(daemon.VEILLE_STATE, {"fait": {}})
+    days = int(config.settings()["veille"].get("jours", 7))
+    now = time.time()
+    for name in config.projects():
+        last = st.get("fait", {}).get(name)
+        if last:
+            age = int((now - last) // 86400)
+            due = "due" if days and now - last >= days * 86400 else f"prochaine dans {days - age} j"
+            print(f"{name:<16} dernière il y a {age} j — {due}")
+        else:
+            print(f"{name:<16} jamais faite — due")
+    return 0
+
+
+def cmd_veille_fait(a) -> int:
+    from . import daemon
+    if a.projet not in config.projects():
+        return _err(f"projet inconnu « {a.projet} »")
+    store.update_json(daemon.VEILLE_STATE, {"fait": {}, "dernier_rappel": 0},
+                      lambda st: st.setdefault("fait", {}).__setitem__(a.projet, time.time()))
+    store.feed_add("note", f"veille concurrentielle faite pour {a.projet}")
+    print(f"Veille de {a.projet} enregistrée.")
+    return 0
+
+
+def cmd_installer_statusline(a) -> int:
+    """Branche bin/jarvis-statusline dans ~/.claude/settings.json sans écraser un réglage existant."""
+    base = os.environ.get("CLAUDE_CONFIG_DIR")
+    settings_path = (Path(base) if base else config.HOME / ".claude") / "settings.json"
+    command = str(config.JARVIS_HOME / "bin" / "jarvis-statusline")
+    try:
+        data = json.loads(settings_path.read_text(encoding="utf-8")) if settings_path.exists() else {}
+    except json.JSONDecodeError:
+        return _err(f"{settings_path} est illisible : statusLine non installée", 2)
+    current = (data.get("statusLine") or {}).get("command", "")
+    if current == command:
+        print("déjà installée")
+        return 0
+    if current:
+        print(f"une barre d'état existe déjà ({current}) : je n'y touche pas")
+        return 3
+    data["statusLine"] = {"type": "command", "command": command}
+    settings_path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = settings_path.with_suffix(".jarvis-tmp")
+    tmp.write_text(json.dumps(data, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+    tmp.replace(settings_path)
+    print("installée")
+    return 0
+
+
 def cmd_voir(a) -> int:
     """Sortie récente d'un agent, même s'il n'est pas (encore) suivi par workmux."""
     print(ag.capture(a.cible, lines=a.lignes))
@@ -380,7 +457,10 @@ def cmd_chef_preparer(a) -> int:
                 "Bash(jarvis plan nouveau *)", "Bash(jarvis plan liste *)", "Bash(jarvis plan liste)",
                 "Bash(jarvis plan voir *)", "Bash(jarvis task *)", "Bash(jarvis capacite)",
                 "Bash(jarvis demander *)", "Bash(jarvis note *)", "Bash(jarvis journal *)", "Bash(jarvis journal)",
-                "Bash(jarvis voir *)",
+                "Bash(jarvis voir *)", "Bash(jarvis jetons)", "Bash(jarvis jetons *)",
+                "Bash(jarvis veille)", "Bash(jarvis veille *)",
+                # Veille concurrentielle : recherche web (lecture seule).
+                "WebSearch", "WebFetch",
                 "Bash(workmux status)", "Bash(workmux status *)", "Bash(workmux capture *)",
                 "Bash(workmux send *)", "Bash(workmux wait *)",
                 "Bash(gh pr view *)", "Bash(gh pr diff *)", "Bash(gh pr checks *)", "Bash(gh pr list *)",
@@ -499,6 +579,17 @@ def build_parser() -> argparse.ArgumentParser:
     s.add_argument("valeur")
     s.set_defaults(fn=cmd_regler)
 
+    s = sub.add_parser("jetons", help="consommation Claude et Codex (5 h et semaine)")
+    s.add_argument("--json", action="store_true")
+    s.set_defaults(fn=cmd_jetons)
+    veille_p = sub.add_parser("veille", help="veille concurrentielle")
+    veille_p.set_defaults(fn=cmd_veille_liste)  # « jarvis veille » seul = la liste
+    veille = veille_p.add_subparsers(dest="action")
+    veille.add_parser("liste").set_defaults(fn=cmd_veille_liste)
+    s = veille.add_parser("fait")
+    s.add_argument("projet")
+    s.set_defaults(fn=cmd_veille_fait)
+    sub.add_parser("installer-statusline", help=argparse.SUPPRESS).set_defaults(fn=cmd_installer_statusline)
     s = sub.add_parser("voir", help="sortie récente d'un agent (projet:worktree)")
     s.add_argument("cible")
     s.add_argument("-n", "--lignes", type=int, default=80)

@@ -208,6 +208,17 @@ else
   TODO+=("Lance « gh auth login » → GitHub.com → HTTPS → Login with a web browser.")
   warn "gh n'est pas encore connecté"
 fi
+# --- 9 bis. Surveillance des jetons Claude -----------------------------------
+step "Surveillance des jetons Claude (barre d'état)"
+chmod +x "$JARVIS_HOME/bin/jarvis-statusline"
+sl_out="$(PYTHONPATH="$JARVIS_HOME/lib" python3 -m jarvis installer-statusline 2>&1)" && sl_rc=0 || sl_rc=$?
+case "$sl_rc" in
+  0) ok "Barre d'état Jarvis $sl_out" ;;
+  3) warn "$sl_out"
+     TODO+=("Pour suivre les jetons Claude, remplace ta barre d'état par $JARVIS_HOME/bin/jarvis-statusline (~/.claude/settings.json → statusLine).") ;;
+  *) warn "Barre d'état non installée : $sl_out" ;;
+esac
+
 # --- 10. Superagent ---------------------------------------------------------
 step "Superagent (chef d'orchestre, cockpit, Telegram)"
 if python3 -c 'import sys; sys.exit(sys.version_info < (3, 11))' 2>/dev/null; then

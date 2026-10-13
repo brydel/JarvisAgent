@@ -109,6 +109,7 @@ Ensuite, tu pilotes depuis le **cockpit** ou depuis **Telegram**.
 | Boutons ✅ / ✋ sous un plan | Approuver ou refuser |
 | `/etat` | Agents et plans en cours |
 | `/plans` | Plans à valider, avec boutons |
+| `/jetons` | Consommation Claude et Codex |
 | `/pause` · `/reprendre` | Bloquer ou relancer les lancements |
 | N'importe quel texte | Transmis au chef (« Priorise JobPilot cette nuit ») |
 
@@ -148,6 +149,11 @@ Tu reçois aussi les questions du chef (❓) et ses bilans (📝), avec une noti
 | `general.chef_permission_mode` | `auto` | Mode de permission du chef |
 | `general.chef_remote_control` | `false` | `true` : tu peux aussi parler au chef depuis l'app Claude |
 | `notifications.windows` | `true` | Notifications Windows |
+| `jetons.alerte` · `jetons.arret` | `80` · `95` | Seuils d'alerte et d'arrêt (en % d'une fenêtre) |
+| `jetons.arret_agents` | `true` | À l'arrêt, demander aux agents de committer et de s'arrêter |
+| `jetons.pause_auto` | `true` | Pause automatique si les deux abonnements sont épuisés |
+| `veille.jours` | `7` | Fréquence de la veille concurrentielle (0 = désactivée) |
+| `plans.validation` | `humain` | `auto` : les plans sont approuvés sans attendre ta validation |
 
 Exemple : `jarvis regler general.max_agents 4`. Les réglages vivent dans `~/.config/jarvis/settings.toml` (permissions 600, jamais dans le dépôt).
 
@@ -180,6 +186,33 @@ tests/                        Tests de bout en bout (faux workmux, faux Telegram
 ```
 
 Données locales : `~/.config/jarvis/` (réglages, projets), `~/.local/state/jarvis/` (plans, fil, journal du chef), `~/.local/share/jarvis/chef/` (dossier de travail du chef).
+
+## Surveillance des jetons
+
+Jarvis lit la **consommation réelle** des deux abonnements, sur les fenêtres de 5 heures et de la semaine :
+
+- **Claude Code** : `bin/jarvis-statusline`, installée comme barre d'état, enregistre les `rate_limits` que Claude Code fournit aux abonnés Max ;
+- **Codex** : les événements `token_count` de ses fichiers de session (`~/.codex/sessions`).
+
+```
+🟢 Claude   5 h ██████░░░░ 62 %  ·  semaine ████░░░░░░ 41 %
+🔴 Codex    5 h ██████████ 97 %  ·  semaine ██████░░░░ 55 %
+          → épuisé jusqu'à 00:13
+```
+
+| Seuil (réglable) | Ce qui se passe |
+| --- | --- |
+| **Alerte** (`jetons.alerte`, 80 %) | Telegram + notification ; le chef bascule le travail vers l'autre agent |
+| **Arrêt** (`jetons.arret`, 95 %) | Les agents de cet abonnement **committent leur travail et s'arrêtent** ; `jarvis task` refuse de leur assigner de nouvelles tâches |
+| **Les deux épuisés** | **Pause automatique**, levée dès qu'un abonnement est remis à zéro (une pause décidée par toi n'est jamais levée automatiquement) |
+
+Avant chaque vague, le chef répartit les tâches selon la marge restante de chaque côté. Les jauges sont en haut du cockpit, et sur Telegram avec `/jetons`.
+
+## Linear et veille concurrentielle
+
+- Le chef **crée et met à jour les issues Linear seul**, sans validation (étiquette `jarvis`). Le lancement d'agents, lui, passe toujours par un plan.
+- Tous les `veille.jours` jours (7 par défaut), le démon lui rappelle la **veille concurrentielle** de chaque projet. Il fait rechercher les concurrents (sources à l'appui), écrit un document Linear, crée les issues des meilleures opportunités (étiquette `veille`) et t'envoie un résumé.
+- Envie de plus d'autonomie ? `jarvis regler plans.validation auto` : les plans sont approuvés automatiquement (tu en es informé), toujours dans les limites de capacité, de jetons et de pause. Pour revenir en arrière : `jarvis regler plans.validation humain`.
 
 ## Agents autonomes (aucun « Yes » à cliquer)
 
