@@ -147,7 +147,7 @@ class JarvisTest(unittest.TestCase):
                      "reprise.json", "agents_actifs.json", "chef_queue.json", "taches.json", "modeles_verif.json",
                      "modeles_propositions.json", "livrables.json", "usage_hist.json", "prevision.json",
                      "blocage.json", "chef_garde.json", "demon.json", "sante_windows.json", "watch.json",
-                     "pauses.json", "reservations.json", "lourdes.json", "relances.json", "journal.jsonl",
+                     "pauses.json", "reservations.json", "lourdes/operations.json", "relances.json", "journal.jsonl",
                      "ressources.json", "delegations.json", "exceptions.json", "budgets.json", "travaux.json"):
             store.state_path(name).unlink(missing_ok=True)
         (TMP / "cfg" / "modeles.toml").unlink(missing_ok=True)

@@ -17,12 +17,12 @@ from pathlib import Path
 from unittest import mock
 
 import test_jarvis  # noqa: F401 — prépare l'environnement (variables, chemins, faux binaires)
-from test_jarvis import TMP, FakeTelegram, set_status
+from test_jarvis import ROOT, TMP, FakeTelegram, set_status
 
 from jarvis import admission, agents, budgets, cli, config, daemon, diagnostic, journal, pauses, plans  # noqa: E402
 from jarvis import politique, poste, store, taches, travaux, usage  # noqa: E402
 
-ETAT = ("pauses.json", "reservations.json", "lourdes.json", "relances.json", "journal.jsonl", "ressources.json",
+ETAT = ("pauses.json", "reservations.json", "lourdes/operations.json", "relances.json", "journal.jsonl", "ressources.json",
         "delegations.json", "exceptions.json", "budgets.json", "travaux.json", "plans.json", "taches.json",
         "budget.json", "reprise.json", "agents_actifs.json", "chef_garde.json", "batterie.json", "sante_windows.json",
         "claude_usage.json", "pause", "chef_queue.json", "watch.json")
@@ -257,6 +257,21 @@ class AutonomieTest(unittest.TestCase):
         self.assertTrue(archives, "l'ancien journal est archivé")
         for f in archives:
             f.unlink()
+
+    def test_heavy_operations_live_in_their_own_writable_corner(self):
+        """Codex n'écrit que dans state/lourdes : déclarer une opération ne touche ni admission.lock ni le reste."""
+        racine = store.state_path("admission.lock")
+        racine.unlink(missing_ok=True)
+        avant = {p.name for p in config.STATE_DIR.iterdir()}
+        o = admission.lourde_debut("tests", worktree="bis-1")
+        admission.lourde_fin(o["id"])
+        apres = {p.name for p in config.STATE_DIR.iterdir()}
+        self.assertFalse(racine.exists(), "le verrou global de l'admission n'est pas pris pour une opération lourde")
+        self.assertEqual(apres - avant - {"journal.jsonl", "journal.jsonl.lock", "lourdes"}, set())
+        self.assertTrue((config.STATE_DIR / "lourdes" / "operations.json").is_file())
+        self.assertTrue((config.STATE_DIR / "lourdes" / "verrou.lock").is_file())
+        script = (ROOT / "bin" / "jarvis-codex").read_text(encoding="utf-8")
+        self.assertIn('STATE_DIR / "lourdes"', script, "le bac à sable Codex ouvre ce sous-dossier")
 
     def test_heavy_operation_declared_manually_counts(self):
         run = test_jarvis.JarvisTest.run_jarvis

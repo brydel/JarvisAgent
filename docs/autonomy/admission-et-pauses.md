@@ -35,6 +35,10 @@ Classes de charge : `recherche`, `orchestration`, `edition` (légères) ; `compi
 - Une opération déclarée par `exec` est oubliée quand son processus disparaît ; une opération déclarée par
   `debut` n'a pas de processus à suivre : seule `--duree` (120 min, 4 h au plus) ou `jarvis lourd fin` la clôt.
   Les options (`--duree`, `--attente`, `--worktree`) se placent avant la classe.
+- Les opérations lourdes sont rangées dans `~/.local/state/jarvis/lourdes/` avec leur propre verrou : c'est le
+  seul coin de l'état de Jarvis que le bac à sable de Codex peut écrire (`bin/jarvis-codex` l'ajoute aux
+  racines inscriptibles). Un agent Codex peut donc déclarer sa compilation sans pouvoir toucher aux plans,
+  pauses, budgets ni au journal (le journal n'est alors pas écrit pour cet événement : limite connue).
 - **Limite honnête** : c'est une consigne (templates/CLAUDE.md, AGENTS.md, rôle du chef) vérifiée a
   posteriori (`jarvis lourd liste`, `jarvis audit`). Une commande lancée hors de ce cadre n'est pas bloquée.
   Voir `securite.md` pour les plafonds système et pourquoi ils ne sont pas activés.

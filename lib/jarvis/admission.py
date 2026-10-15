@@ -22,7 +22,12 @@ from . import config, plans, store
 
 LOCK = "admission"
 RESERVATIONS = "reservations.json"
-LOURDES = "lourdes.json"
+# Les opérations lourdes vivent dans leur propre sous-dossier, avec leur propre verrou : c'est le SEUL
+# endroit de l'état de Jarvis ouvert en écriture au bac à sable de Codex (bin/jarvis-codex). Un agent
+# peut donc déclarer une compilation sans pouvoir toucher aux plans, pauses, budgets ni au journal.
+LOURDES_DIR = "lourdes"
+LOURDES = f"{LOURDES_DIR}/operations.json"
+LOCK_LOURDES = f"{LOURDES_DIR}/verrou"
 RELANCES = "relances.json"
 ORIGINES = ("plan", "cli", "reprise", "relance", "chef", "sous-agent")
 # Classes de charge. Les lourdes occupent une place d'« opération lourde » en plus d'une place d'agent.
@@ -282,7 +287,7 @@ def lourde_debut(classe: str, *, worktree: str = "", desc: str = "", pid: int | 
     now = now or time.time()
     if classe not in CLASSES or not CLASSES[classe]:
         raise Refus("config", f"« {classe} » n'est pas une classe lourde ({', '.join(c for c, l in CLASSES.items() if l)})")
-    with store.locked(LOCK):
+    with store.locked(LOCK_LOURDES):
         s = config.settings()
         if config.valider(s):
             raise Refus("config", "configuration invalide : corrige-la (jarvis doctor)")

@@ -38,8 +38,10 @@ ICONS = {
 
 
 def state_path(name: str) -> Path:
-    config.STATE_DIR.mkdir(parents=True, exist_ok=True)
-    return config.STATE_DIR / name
+    """Chemin d'un fichier d'état. Un sous-dossier (« lourdes/operations.json ») est créé au besoin."""
+    path = config.STATE_DIR / name
+    path.parent.mkdir(parents=True, exist_ok=True)
+    return path
 
 
 @contextlib.contextmanager
