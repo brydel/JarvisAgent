@@ -34,7 +34,7 @@ def boot_id() -> str:
 def save_snapshot(agents: list[dict]) -> None:
     """Mémorise les agents qui travaillent : ce sont eux qu'on relancera après un redémarrage."""
     actifs = [{k: a.get(k, "") for k in ("project", "worktree", "kind", "status", "workdir")}
-              for a in agents if a["status"] in ("working", "waiting", "untracked")]
+              for a in agents if a["status"] in ("working", "waiting", "untracked", "silent")]
     store.write_json(SNAPSHOT, {"ts": time.time(), "boot": boot_id(), "chef": ag.chef_running(), "agents": actifs})
 
 
@@ -82,7 +82,9 @@ def reprendre(dry_run: bool = False) -> list[str]:
         return []
     projs = config.projects()
     ouvertes = _open_windows()
-    lignes, repris, echecs = [], [], []
+    lignes, repris, echecs, refuses = [], [], [], []
+    from . import admission, taches
+    fiches = taches.toutes()
     for a in data.get("agents", []):
         label = f"{a['project']}/{a['worktree']}"
         proj = projs.get(a["project"])
@@ -98,6 +100,17 @@ def reprendre(dry_run: bool = False) -> list[str]:
         if dry_run:
             lignes.append(f"à reprendre : {label} ({ag.kind_label(a['kind'])})")
             continue
+        # Une reprise est un départ comme un autre : même admission (pauses, capacité, jetons). Une
+        # vieille vague n'est pas relancée en bloc si le poste ne le permet plus ; le reste attend.
+        fiche = taches.pour_agent(a["project"], a["worktree"], fiches, a.get("workdir", ""))
+        agent = (a.get("kind") or (fiche or {}).get("agent") or "").lower() or "claude"
+        try:
+            adm = admission.demander(origine="reprise", projet=a["project"], issue=(fiche or {}).get("issue") or a["worktree"],
+                                     agent=agent, worktree=a["worktree"], role=(fiche or {}).get("role", ""), acteur="reprise")
+        except admission.Refus as exc:
+            refuses.append(a)
+            lignes.append(f"en attente : {label} — {exc.raison}")
+            continue
         try:
             res = subprocess.run(["workmux", "open", a["worktree"], "--continue", "-p", REPRISE_MSG],
                                  cwd=proj["chemin"], capture_output=True, text=True, timeout=60)
@@ -109,24 +122,30 @@ def reprendre(dry_run: bool = False) -> list[str]:
             repris.append(label)
             lignes.append(f"repris : {label} ({ag.kind_label(a['kind'])})")
             store.feed_add("task", f"{label} repris après le redémarrage")
-            from . import taches
             taches.reouvrir(a["project"], a["worktree"])
+            if fiche:
+                admission.confirmer(adm["reservation"], fiche["id"], a["worktree"])
         else:
+            admission.liberer(adm["reservation"], "workmux open a échoué", acteur="reprise")
             echecs.append(a)
             lignes.append(f"ÉCHEC : {label} — {' '.join(err) or 'workmux open a échoué'}")
             store.feed_add("erreur", f"reprise impossible de {label}")
     if not dry_run:
-        if echecs:  # on garde ceux qui ont échoué : « jarvis reprendre » pourra réessayer
-            store.write_json(REPRISE, {**data, "agents": echecs})
+        restants = echecs + refuses
+        if restants:  # on garde ceux qui n'ont pas repris : « jarvis reprendre » pourra réessayer
+            store.write_json(REPRISE, {**data, "agents": restants})
         else:
             store.state_path(REPRISE).unlink(missing_ok=True)
         heure = time.strftime("%H:%M", time.localtime(data.get("ts", time.time())))
         store.write_json(NOTE_CHEF, {"ts": time.time(), "texte": (
             f"Le PC a redémarré (dernier état connu à {heure}). "
             + (f"Agents repris automatiquement avec leur conversation : {', '.join(repris)}. " if repris else
-               "Aucun agent n'était en cours. ")
+               "Aucun agent n'a été repris. ")
             + (f"Reprise impossible pour : {', '.join(x['project'] + '/' + x['worktree'] for x in echecs)}. "
                if echecs else "")
+            + (f"En attente (admission refusée : pause, capacité ou jetons) : "
+               f"{', '.join(x['project'] + '/' + x['worktree'] for x in refuses)} — « jarvis reprendre » réessaie. "
+               if refuses else "")
             + "Vérifie en priorité leur état, le travail non commité dans les worktrees et les plans en cours.")})
     return lignes
 
@@ -255,8 +274,8 @@ def checks(now: float | None = None, windows: bool = True) -> list[dict]:
 
 # --- Capacité adaptée au poste ------------------------------------------------------------------
 
-MEMOIRE_RESERVE_MO = 1500  # gardée pour Windows, le navigateur, Docker et le chef
-CHARGE_MAX = 2.5           # charge moyenne par cœur au-delà de laquelle on n'ajoute plus d'agent
+MEMOIRE_RESERVE_MO = 1500  # valeur de repli ; le réglage admission.memoire_reserve_mo fait foi
+CHARGE_MAX = 2.5           # valeur de repli ; le réglage admission.charge_max_par_coeur fait foi
 
 
 def capacite(busy: int = 0, now: float | None = None) -> dict:
@@ -267,8 +286,12 @@ def capacite(busy: int = 0, now: float | None = None) -> dict:
     on évite seulement d'en lancer de nouveaux sur un PC qui n'a plus la place.
     """
     now = now or time.time()
-    base = int(config.settings()["general"].get("max_agents", 3))
-    cfg = config.settings()["sante"]
+    s = config.settings()
+    base = int(s["general"].get("max_agents", 3))
+    cfg = s["sante"]
+    adm = s.get("admission", {})
+    reserve = float(adm.get("memoire_reserve_mo", MEMOIRE_RESERVE_MO))
+    charge_max = float(adm.get("charge_max_par_coeur", CHARGE_MAX))
     out = {"max": base, "base": base, "raisons": []}
     if not cfg.get("capacite_auto", True):
         return out
@@ -283,7 +306,7 @@ def capacite(busy: int = 0, now: float | None = None) -> dict:
     if mem.get("MemAvailable"):
         libre = mem["MemAvailable"] / 1024
         par_agent = max(200, int(cfg.get("memoire_par_agent_mo", 1200)))
-        places = int(max(0.0, libre - MEMOIRE_RESERVE_MO) // par_agent)
+        places = int(max(0.0, libre - reserve) // par_agent)
         _plafonner(busy + places, f"mémoire libre {libre / 1024:.1f} Go")
     try:
         free = shutil.disk_usage(config.HOME).free / 1e9
@@ -293,7 +316,7 @@ def capacite(busy: int = 0, now: float | None = None) -> dict:
         pass
     try:
         charge = os.getloadavg()[0] / max(1, os.cpu_count() or 1)
-        if charge > CHARGE_MAX:
+        if charge > charge_max:
             _plafonner(busy, f"processeur saturé (charge {charge:.1f} par cœur)")
     except (OSError, AttributeError):
         pass

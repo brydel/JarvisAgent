@@ -33,6 +33,7 @@ STATUS = {  # symbole, libellé, couleur
     "waiting": ("?", "attend", "yellow"),
     "done": ("✓", "terminé", "green"),
     "untracked": ("~", "actif ?", "magenta"),
+    "silent": ("…", "silencieux", "yellow"),
     "idle": ("·", "inactif ?", "dim"),
 }
 FEED = {  # type d'événement → symbole, couleur
@@ -95,7 +96,7 @@ def ateliers(agents: list[dict]) -> list[tuple]:
     par_role: dict[str, list[dict]] = {}
     for a in agents:
         par_role.setdefault(a.get("role") or "", []).append(a)
-    ordre = {"waiting": 0, "untracked": 1, "working": 2, "done": 3}
+    ordre = {"waiting": 0, "untracked": 1, "silent": 1, "working": 2, "done": 3}
     rows: list[tuple] = []
     for equipe, membres in roles.par_equipe():
         libres = [r["sigle"] for r in membres if not par_role.get(r["nom"])]
@@ -373,7 +374,13 @@ class Cockpit:
              "green" if snap.get("livrables") else "dim"),
         ]
         if snap["paused"]:
-            chips.append(("⏸ PAUSE", "red"))
+            chips.append((f"⏸ {snap.get('pauses_texte') or 'PAUSE'}", "red"))
+        if snap.get("reservations"):
+            chips.append((f"⧗ {snap['reservations']} réservé", "yellow"))
+        if snap.get("exceptions"):
+            chips.append((f"! {snap['exceptions']} exception{'s' if snap['exceptions'] > 1 else ''}", "magenta"))
+        if snap.get("config_erreurs"):
+            chips.append(("⚠ config invalide", "red"))
         if not snap.get("demon"):
             chips.append(("⚠ démon arrêté : jarvis start", "red"))
         x = 1
@@ -748,12 +755,20 @@ class Cockpit:
             if not ag.select_window(config.SESSION, config.CHEF_WINDOW):
                 self.flash("Le chef n'est pas lancé : jarvis chef", "yellow")
         elif key == "P":
-            now = not store.paused()
+            # La touche P pose ou lève TA pause (cause « humain ») ; les causes automatiques restent.
+            from . import pauses
+            now = "humain" not in pauses.actives()
             store.set_paused(now)
-            store.feed_add("systeme", "pause activée depuis le cockpit" if now else "pause levée depuis le cockpit")
-            ag.chef_inject("[JARVIS] Ton humain a mis Jarvis en PAUSE : ne lance plus rien." if now
-                           else "[JARVIS] Pause levée : tu peux reprendre ta boucle.")
-            self.flash("⏸ Pause activée" if now else "▶ Pause levée", "red" if now else "green")
+            store.feed_add("systeme", "pause humaine activée depuis le cockpit" if now else "pause humaine levée depuis le cockpit")
+            restantes = pauses.actives()
+            if now:
+                ag.chef_inject("[JARVIS] Ton humain a mis Jarvis en PAUSE : ne lance plus rien.")
+                self.flash("⏸ Pause activée", "red")
+            elif restantes:
+                self.flash(f"▶ Ta pause est levée ; reste : {', '.join(sorted(restantes))}", "yellow")
+            else:
+                ag.chef_inject("[JARVIS] Pause levée : tu peux reprendre ta boucle.")
+                self.flash("▶ Pause levée", "green")
         # sélection courante → cible de l'aperçu
         a = self.selected_agent(snap)
         self.data.preview_target = ag.target(a) if (self.bas == "apercu" and a) else None

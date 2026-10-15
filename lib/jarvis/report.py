@@ -67,7 +67,18 @@ def snapshot() -> dict:
         props = modeles.propositions()
     except Exception:  # noqa: BLE001
         livr, props = [], []
+    try:
+        from . import admission, pauses, politique
+        causes = pauses.actives()
+        garde = {"pauses": causes, "pauses_texte": pauses.resume_court(causes),
+                 "reservations": len(admission.en_attente()), "lourdes": len(admission.lourdes_en_cours()),
+                 "exceptions": len(politique.exceptions()), "profil": config.settings()["admission"].get("profil") or "",
+                 "config_erreurs": config.valider()}
+    except Exception:  # noqa: BLE001 — l'état doit s'afficher même si un garde-fou est illisible
+        garde = {"pauses": {}, "pauses_texte": "", "reservations": 0, "lourdes": 0, "exceptions": 0, "profil": "",
+                 "config_erreurs": []}
     return {
+        **garde,
         "usage": jetons,
         "ts": time.time(),
         "agents": agents,
@@ -89,7 +100,7 @@ def snapshot() -> dict:
 
 def _ligne_agent(a: dict, detail: bool) -> str:
     from . import modeles
-    icon = {"working": "🤖", "waiting": "💬", "done": "✅", "untracked": "🌀"}
+    icon = {"working": "🤖", "waiting": "💬", "done": "✅", "untracked": "🌀", "silent": "🤫", "idle": "◌"}
     qui = modeles.libelle(ag.kind_label(a["kind"]).lower(), a.get("modele", ""), a.get("effort", "")) \
         if a.get("modele") else ag.kind_label(a["kind"])
     line = (f"  {icon.get(a['status'], '•')} {a['project']}/{a['worktree']} "
@@ -105,7 +116,8 @@ def usine(snap: dict | None = None) -> str:
     snap = snap or snapshot()
     agents = snap["agents"] or []
     out = [f"USINE — {snap['busy']}/{snap['max_agents']} agents occupés"
-           + (" · ⏸ PAUSE" if snap["paused"] else "")]
+           + (f" · ⏸ {snap.get('pauses_texte') or 'PAUSE'}" if snap["paused"] else "")
+           + (f" · profil {snap['profil']}" if snap.get("profil") else "")]
     if snap.get("capacite_raisons"):
         out.append(f"  capacité réduite ({snap['max_base']} → {snap['max_agents']}) : {' ; '.join(snap['capacite_raisons'])}")
     par_role: dict[str, list[dict]] = {}
@@ -135,7 +147,15 @@ def text(snap: dict | None = None, detail: bool = True) -> str:
     if snap.get("capacite_raisons"):
         head += f" (plafond {snap['max_base']} réduit : {' ; '.join(snap['capacite_raisons'])})"
     if snap["paused"]:
-        head += " · ⏸ PAUSE (aucun nouveau lancement)"
+        head += f" · ⏸ {snap.get('pauses_texte') or 'PAUSE'} (aucun nouveau lancement)"
+    if snap.get("reservations"):
+        head += f" · {snap['reservations']} réservation(s) en attente"
+    if snap.get("lourdes"):
+        head += f" · {snap['lourdes']} opération(s) lourde(s)"
+    if snap.get("exceptions"):
+        head += f" · {snap['exceptions']} exception(s) à décider (jarvis politique exceptions)"
+    if snap.get("config_erreurs"):
+        head += " · ⚠ CONFIGURATION INVALIDE, admission fermée"
     head += " · chef " + ("actif" if snap["chef"] else "arrêté")
     if not snap.get("demon", True):
         head += " · ⚠ démon arrêté (jarvis start)"

@@ -1,0 +1,30 @@
+# Profil « laptop-conservative » — portable qui chauffe (ex. ASUS Vivobook 16, Core i9, WSL).
+# Point de départ prudent À VALIDER PAR LA MESURE (jarvis diagnostic) : ce n'est pas une garantie
+# de capacité. Les autres spécialités ne sont pas supprimées : leurs tâches attendent une place.
+# Appliquer : jarvis profil appliquer laptop-conservative   (settings.toml est sauvegardé avant)
+
+[profil]
+description = "Portable : 2 exécutants, 1 opération lourde, marge pour le chef, Windows et tes applications"
+mesure = false
+
+[general]
+max_agents = 2
+poll_seconds = 30
+battement_min = 45
+
+[admission]
+operations_lourdes_max = 1
+reservation_min = 15
+charge_max_par_coeur = 1.5
+memoire_reserve_mo = 2500
+pression_memoire_pct = 20
+hysterese_min = 5
+
+[sante]
+capacite_auto = true
+memoire_par_agent_mo = 1500
+batterie_min_pct = 40
+batterie_arret_pct = 15
+
+[jetons]
+semaine_prudence = 60

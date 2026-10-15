@@ -135,7 +135,19 @@ def thresholds() -> tuple[float, float]:
     return float(s.get("alerte", 80)), float(s.get("arret", 95))
 
 
-def level(u: dict) -> str:
+PEREMPTION_H = 6  # au-delà, une mesure de quota ne prouve plus rien : prudence (jamais « illimité »)
+
+
+def perime(u: dict, now: float | None = None) -> bool:
+    """Vrai si la dernière mesure du fournisseur est trop vieille pour être crue."""
+    maj = u.get("maj")
+    if not maj:
+        return False  # pas de mesure du tout : c'est « inconnu », traité ailleurs
+    heures = float(config.settings()["jetons"].get("peremption_h", PEREMPTION_H))
+    return (now or time.time()) - float(maj) > heures * 3600
+
+
+def level(u: dict, now: float | None = None) -> str:
     alert, stop = thresholds()
     used = [w["used"] for k, w in u.items() if k in ("5h", "semaine") and w]
     if not used:
@@ -143,6 +155,9 @@ def level(u: dict) -> str:
     if u.get("limite_atteinte") or max(used) >= stop:
         return "epuise"
     if max(used) >= alert:
+        return "alerte"
+    # Mesure périmée : on ne la prend pas pour un feu vert. Le routeur réserve alors les modèles chers.
+    if perime(u, now):
         return "alerte"
     return "ok"
 
@@ -165,7 +180,9 @@ def summary(now: float | None = None) -> dict:
     hist = store.read_json(HIST_FILE, {})
     for name, fn in (("claude", claude_usage), ("codex", codex_usage)):
         u = fn(now)
-        u["niveau"] = level(u)
+        u["perime"] = perime(u, now)
+        u["age_s"] = int((now or time.time()) - float(u["maj"])) if u.get("maj") else None
+        u["niveau"] = level(u, now)
         u["marge"] = headroom(u)
         u["reprise"] = next_reset(u)
         u["prevision"] = prevision(u, hist.get(name) or [], now)

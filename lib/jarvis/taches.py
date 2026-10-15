@@ -15,9 +15,9 @@ from . import roles, store
 
 FILE = "taches.json"
 MAX = 600
-OUVERTS = ("lancee", "en_cours", "attente")
-STATUTS = {"lancee": "lancée", "en_cours": "en cours", "attente": "attend", "terminee": "terminée",
-           "perdue": "interrompue"}
+OUVERTS = ("lancee", "en_cours", "attente", "silencieuse", "inconnue")
+STATUTS = {"lancee": "lancée", "en_cours": "en cours", "attente": "attend", "silencieuse": "silencieuse",
+           "inconnue": "état inconnu", "terminee": "terminée", "perdue": "interrompue"}
 VERDICTS = {"pret": "prêt", "corrections": "corrections demandées"}
 DEMARRAGE_MAX = 15 * 60  # une fiche « lancée » jamais vue par workmux après ce délai est perdue
 ABSENCE_MAX = 120         # secondes sans voir la fenêtre d'un agent au travail avant de le dire interrompu
@@ -33,7 +33,8 @@ def toutes() -> list[dict]:
 
 def enregistrer(*, projet: str, issue: str, agent: str, worktree: str, chemin: str = "", role: str = "",
                 modele: str = "", modele_id: str = "", effort: str = "", repli: str = "", taille: str = "M",
-                plan: str = "", revue: str = "", raison: str = "", secours: bool = False) -> dict:
+                plan: str = "", revue: str = "", raison: str = "", secours: bool = False, classe: str = "",
+                reservation: str = "") -> dict:
     """Crée la fiche d'un lancement. `chemin` : dossier du worktree (clé des lanceurs)."""
     chemin = str(Path(chemin).resolve()) if chemin else ""
 
@@ -44,6 +45,7 @@ def enregistrer(*, projet: str, issue: str, agent: str, worktree: str, chemin: s
             "role": roles.ou_defaut(role)["nom"], "modele": modele, "modele_id": modele_id, "effort": effort,
             "repli": repli, "taille": taille, "plan": plan, "revue": str(revue or ""), "raison": raison,
             "secours": bool(secours), "worktree": worktree, "chemin": chemin, "statut": "lancee",
+            "classe": classe, "reservation": reservation,
             "cree": time.time(), "debut": None, "fin": None, "jetons": None, "verdict": "", "verdict_note": "",
         }
         data["taches"].append(fiche)
@@ -164,10 +166,11 @@ def synchroniser(agents: list[dict], jetons_fn=None, now: float | None = None) -
                 continue
             t.pop("absent", None)
             st = a["status"]
-            if st in ("working", "untracked", "waiting"):
+            if st in ("working", "untracked", "waiting", "silent"):
                 # Un agent qui reprend après une consigne corrective (ou un redémarrage) rouvre sa
                 # fiche : sa durée et ses jetons couvrent tout son travail, pas seulement le premier tour.
-                t["statut"] = "attente" if st == "waiting" else "en_cours"
+                # « silent » : programme vivant sans sortie depuis longtemps — ouvert, jamais terminé d'office.
+                t["statut"] = {"waiting": "attente", "silent": "silencieuse"}.get(st, "en_cours")
                 t["debut"] = t["debut"] or now
                 t["fin"] = None
             elif st in ("done", "idle") and t["statut"] in OUVERTS:

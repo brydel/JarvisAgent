@@ -166,7 +166,7 @@
   const heure = (ts) => { const d = new Date(ts * 1000); return `${deux(d.getHours())}:${deux(d.getMinutes())}`; };
   const maj = (v) => (v ? v.charAt(0).toUpperCase() + v.slice(1) : '');
   const affectation = (a) => [maj(a.fournisseur), a.modele && !a.modele.endsWith('-defaut') ? a.modele : '', a.effort].filter(Boolean).join(' · ');
-  const ETATS = { working: 'travaille', waiting: 'attend une réponse', done: 'terminé', untracked: 'démarre', idle: 'inactif' };
+  const ETATS = { working: 'travaille', waiting: 'attend une réponse', done: 'terminé', untracked: 'démarre', idle: 'inactif', silent: 'silencieux (programme actif, sans sortie)' };
   const jetons = (n) => (n >= 1e6 ? `${(n / 1e6).toFixed(1)} M` : n >= 1000 ? `${Math.round(n / 1000)} k` : String(n));
   let cleLivrables = '';
 
@@ -184,7 +184,10 @@
     $('voyants').innerHTML = v.map(([nom, ok]) => `<div class="voyant"><span class="lampe ${ok ? 'ok' : 'ko'}"></span>${t(nom)}${ok ? '' : ' arrêté'}</div>`).join('')
       + `<div class="heure">${heure(Date.now() / 1000)}:${deux(new Date().getSeconds())}</div>`;
     const messages = [];
-    if (e.pause) messages.push(['Pause : aucun nouveau lancement tant qu\'elle n\'est pas levée (cockpit, touche P, ou /reprendre sur Telegram).', true]);
+    if (e.pause) messages.push([`Pause (${Object.keys(e.pauses || {}).join(', ') || 'humain'}) : aucun nouveau lancement tant qu'il reste une cause. Ta pause : cockpit touche P ou /reprendre ; les autres se lèvent seules ou avec « jarvis pause lever <cause> ».`, true]);
+    if (e.config_erreurs && e.config_erreurs.length) messages.push([`Configuration invalide, admission fermée : ${e.config_erreurs.join(' ; ')}`, true]);
+    if (e.exceptions) messages.push([`${e.exceptions} demande(s) hors politique attendent ta décision : jarvis politique exceptions`, false]);
+    if (e.reservations || e.lourdes) messages.push([`${e.reservations} réservation(s) de lancement en attente · ${e.lourdes} opération(s) lourde(s) déclarée(s)${e.profil ? ` · profil ${e.profil}` : ''}`, false]);
     if (!e.demon) messages.push(['Le démon est arrêté : plus rien n\'est surveillé. Relance-le avec « jarvis start ».', true]);
     if (e.agents_erreur) messages.push([`État des agents illisible : ${e.agents_erreur}`, true]);
     if (e.capacite < e.capacite_base) messages.push([`Capacité réduite de ${e.capacite_base} à ${e.capacite} agents : ${e.capacite_raisons.join(' ; ')}.`, false]);
