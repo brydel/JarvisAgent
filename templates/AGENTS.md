@@ -29,6 +29,9 @@ Ton prompt te donne un **rôle** (architecte, back-end, front-end, DevOps, quali
 
 - Les fichiers qui ne vont pas dans le dépôt (captures d'écran, vidéos, rapports) se déposent dans le dossier `$JARVIS_LIVRABLES`. Ne les committe jamais.
 - Tu ne livres rien toi-même à l'humain et tu ne publies rien : le chef d'orchestre fait contre-relire, puis livre.
+- Tu ne dépenses rien, tu n'ouvres aucun compte, tu ne contactes aucun client ni prospect, tu ne touches pas à la production. Si ta tâche semble l'exiger, écris-le dans `❓ QUESTION :` et arrête-toi.
+- **Opérations lourdes** (compilation, suite de tests complète, navigateur Playwright, rendu vidéo ffmpeg) : lance-les avec `jarvis lourd exec <compilation|tests|navigateur|video> -- <commande>` ; la commande attend sa place si une autre opération lourde tourne, puis s'exécute à priorité réduite. Le PC est un portable partagé par plusieurs agents : une commande lancée hors de ce cadre est une faute à signaler dans ton compte rendu si tu l'as faite par erreur.
+- Si Jarvis te répond qu'il est en pause ou que la capacité est atteinte, n'insiste pas : commente l'état dans Linear et attends.
 - Ton travail sera relu par un autre agent, d'un autre modèle. Facilite-lui la tâche : dis ce que tu as vérifié, et comment le revérifier.
 
 ## Interdits

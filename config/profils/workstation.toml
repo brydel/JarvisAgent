@@ -1,0 +1,27 @@
+# Profil « workstation » — future station dédiée. Valeurs VOLONTAIREMENT modestes : rien n'est
+# connu de cette machine. Augmente max_agents et operations_lourdes_max seulement après des mesures
+# sur place (jarvis diagnostic, puis essais courts), jamais d'avance.
+# Appliquer : jarvis profil appliquer workstation
+
+[profil]
+description = "Station dédiée : à régler après mesure ; départ à 4 exécutants et 2 opérations lourdes"
+mesure = false
+
+[general]
+max_agents = 4
+poll_seconds = 20
+battement_min = 30
+
+[admission]
+operations_lourdes_max = 2
+reservation_min = 15
+charge_max_par_coeur = 2.0
+memoire_reserve_mo = 4000
+pression_memoire_pct = 25
+hysterese_min = 5
+
+[sante]
+capacite_auto = true
+memoire_par_agent_mo = 1500
+batterie_min_pct = 30
+batterie_arret_pct = 12

@@ -23,7 +23,8 @@ AIDE = (
     "/bilan — ce que l'usine a produit cette semaine\n"
     "/sante — état du PC (mémoire, disque, Docker, batterie)\n"
     "/pause — bloque tout nouveau lancement\n"
-    "/reprendre — lève la pause\n"
+    "/reprendre — lève ta pause (les causes automatiques restent)\n"
+    "/pauses — causes de pause et réservations en cours\n"
     "/aide — cette aide\n\n"
     "Tout autre message est transmis directement au chef d'orchestre. "
     "Tu peux aussi lui envoyer une image (maquette, direction artistique) ou un fichier, avec une légende."
@@ -57,12 +58,16 @@ def watch_once(first: bool = False) -> list[dict]:
         for key in prev.keys() - cur.keys():
             events.append(("agent_gone", f"{key.replace(':', '/')} n'est plus suivi", None))
 
-    from . import taches, usage
+    from . import admission, taches, usage
     try:
         closes = taches.synchroniser(agents, usage.task_tokens)
         _lancements_avortes([t for t in closes if t.get("jamais_demarre")], agents)
     except Exception as exc:  # noqa: BLE001 — le registre est un plus : la surveillance continue sans lui
         store.feed_add("erreur", f"registre des tâches : {exc}")
+    try:
+        admission.reconcilier(agents)  # réservations démarrées ou expirées (place rendue, plan relançable)
+    except Exception as exc:  # noqa: BLE001
+        store.feed_add("erreur", f"réservations : {exc}")
     fiches = taches.toutes()
     chef_up = ag.chef_running()
     for i, (kind, msg, a) in enumerate(events):
@@ -146,7 +151,8 @@ def budget_check() -> list[str]:
     """Réagit aux changements de niveau de jetons (alerte, épuisé, rétabli). Renvoie les événements."""
     from . import usage
     s = usage.summary()
-    st = store.read_json(BUDGET_STATE, {"niveaux": {}, "pause_budget": False})
+    st = store.read_json(BUDGET_STATE, {"niveaux": {}})
+    from . import pauses
     cfg = config.settings()["jetons"]
     events = []
     agents_now, _ = ag.status_all()
@@ -171,7 +177,7 @@ def budget_check() -> list[str]:
                            f"(jarvis task la refusera). Ses agents en cours ont reçu l'ordre de committer et de s'arrêter.")
             if cfg.get("arret_agents", True):
                 for a in agents_now or []:
-                    if a["status"] in ("working", "untracked") and p in (a["kind"] or "").lower():
+                    if a["status"] in ("working", "untracked", "silent") and p in (a["kind"] or "").lower():
                         ok, _ = ag.send(ag.target(a), STOP_MSG)
                         store.feed_add("systeme", f"arrêt demandé à {a['project']}/{a['worktree']} (jetons {name})")
         elif old == "epuise":
@@ -181,19 +187,20 @@ def budget_check() -> list[str]:
             ag.chef_inject(f"[JARVIS jetons] {name} est de nouveau disponible ({_pct(u)}).")
 
     both_out = all(s[p]["niveau"] == "epuise" for p in usage.PROVIDERS)
-    if both_out and cfg.get("pause_auto", True) and not store.paused():
-        store.set_paused(True)
-        st["pause_budget"] = True
-        events.append("pause auto")
-        notify.alert("systeme", "Pause automatique : Claude et Codex sont épuisés. Reprise dès qu'un abonnement "
-                                "se libère.", title="JARVIS · jetons")
-    elif st.get("pause_budget") and not both_out:
-        st["pause_budget"] = False
-        if store.paused():
-            store.set_paused(False)
-            events.append("reprise auto")
-            notify.alert("plan_ok", "Fin de la pause automatique : un abonnement a des jetons.", title="JARVIS · jetons")
-            ag.chef_inject("[JARVIS jetons] Pause automatique levée : reprends ta boucle en tenant compte des marges "
+    # Cause « quota », indépendante des autres : la lever ne touche ni à ta pause ni à celle de la batterie.
+    if both_out and cfg.get("pause_auto", True):
+        if pauses.poser("quota", "Claude et Codex épuisés", par="demon"):
+            events.append("pause auto")
+            notify.alert("systeme", "Pause automatique (quota) : Claude et Codex sont épuisés. Reprise dès qu'un "
+                                    "abonnement se libère.", title="JARVIS · jetons")
+    elif not both_out and pauses.lever("quota", par="demon"):
+        events.append("reprise auto")
+        restantes = pauses.actives()
+        notify.alert("plan_ok", "Fin de la pause quota : un abonnement a des jetons."
+                     + (f" Jarvis reste en pause ({', '.join(sorted(restantes))})." if restantes else ""),
+                     title="JARVIS · jetons")
+        if not restantes:
+            ag.chef_inject("[JARVIS jetons] Pause quota levée : reprends ta boucle en tenant compte des marges "
                            "(jarvis jetons).")
     store.write_json(BUDGET_STATE, st)
     return events
@@ -299,12 +306,12 @@ def chef_check(now: float | None = None) -> str | None:
     if not occupes and not restant and not plans.pending():
         _chef_vu = False  # arrêté sans rien laisser en cours : arrêt normal
         return None
-    st = store.read_json(CHEF_STATE, {"relances": [], "alerte": 0})
-    st["relances"] = [t for t in st.get("relances", []) if now - t < 3600]
+    st = store.read_json(CHEF_STATE, {"alerte": 0})
+    from . import admission
+    # Aucune relance automatique en pause (quelle que soit la cause) : l'arrêt voulu par l'humain,
+    # une maintenance ou un incident ne doivent jamais être contournés par le démon.
     auto = config.settings()["general"].get("chef_relance_auto", True) and not store.paused()
-    if auto and len(st["relances"]) < CHEF_RELANCES_MAX:
-        st["relances"].append(now)
-        store.write_json(CHEF_STATE, st)
+    if auto and admission.relance_autorisee("chef", CHEF_RELANCES_MAX, now)[0]:
         try:
             res = subprocess.run([str(config.JARVIS_HOME / "bin" / "jarvis"), "chef-lancer"],
                                  capture_output=True, text=True, timeout=120)
@@ -527,34 +534,101 @@ def batterie_check(now: float | None = None) -> list[str]:
         return []
     from . import poste
     now = now or time.time()
-    st = store.read_json(BATTERIE_STATE, {"pause": ""})
+    from . import pauses
     pct = poste.batterie_critique(now, rafraichir=True)
-    if pct is not None and not st.get("pause"):
+    if pct is not None:
+        if not pauses.poser("batterie", f"{pct} %, PC non branché", par="demon"):
+            return []  # déjà posée : rien de neuf
         found, _ = ag.status_all()
         for a in found or []:
-            if a["status"] in ("working", "untracked"):
+            if a["status"] in ("working", "untracked", "silent"):
                 ag.send(ag.target(a), BATTERIE_MSG)
-        deja = store.paused()
-        if not deja:
-            store.set_paused(True)
-        st["pause"] = "humain" if deja else "jarvis"
-        store.write_json(BATTERIE_STATE, st)
         notify.alert("erreur", f"Batterie à {pct} % et PC non branché : les agents committent leur travail et "
                                "Jarvis se met en pause. Branche le PC.", title="JARVIS · batterie")
         ag.chef_inject(f"[JARVIS santé] Batterie à {pct} % : pause. Les agents ont reçu l'ordre de committer. "
                        "Ne lance plus rien tant que le PC n'est pas rebranché.")
         return ["batterie"]
-    if pct is None and st.get("pause"):
+    if "batterie" in pauses.actives():
         b = poste.batterie(now)
         if b and b["secteur"]:
-            # Seule la pause posée par Jarvis est levée : celle de l'humain lui appartient.
-            if st["pause"] == "jarvis" and store.paused():
-                store.set_paused(False)
-                notify.alert("plan_ok", "PC rebranché : fin de la pause batterie.", title="JARVIS · batterie")
+            # Seule la cause « batterie » est levée : ta pause, une maintenance ou un quota restent.
+            pauses.lever("batterie", par="demon")
+            restantes = pauses.actives()
+            notify.alert("plan_ok", "PC rebranché : fin de la pause batterie."
+                         + (f" Jarvis reste en pause ({', '.join(sorted(restantes))})." if restantes else ""),
+                         title="JARVIS · batterie")
+            if not restantes:
                 ag.chef_inject("[JARVIS santé] PC rebranché : pause levée, reprends ta boucle.")
-            store.write_json(BATTERIE_STATE, {"pause": ""})
             return ["batterie rétablie"]
     return []
+
+
+RESSOURCES_STATE = "ressources.json"
+
+
+def pression_memoire() -> float | None:
+    """PSI mémoire « some avg60 » en % (Linux ≥ 4.20, souvent présent sous WSL2), ou None si indisponible."""
+    try:
+        with open("/proc/pressure/memory", encoding="utf-8") as fh:
+            for ligne in fh:
+                if ligne.startswith("some"):
+                    for champ in ligne.split():
+                        if champ.startswith("avg60="):
+                            return float(champ[6:])
+    except (OSError, ValueError):
+        return None
+    return None
+
+
+def ressources_check(now: float | None = None, pression: float | None = None, libre_mo: float | None = None) -> str | None:
+    """Pause « ressources » quand la pression mémoire reste élevée, levée avec hystérésis et délai.
+
+    Mesures soutenues : la cause se pose après deux lectures consécutives au-dessus du seuil (deux
+    minutes), et se lève après `hysterese_min` minutes sous la moitié du seuil. Une mesure absente ne pose
+    ni ne lève rien. Renvoie "posee", "levee" ou None.
+    """
+    if not config.settings()["sante"].get("active", True):
+        return None
+    now = now or time.time()
+    cfg = config.settings()["admission"]
+    seuil = float(cfg.get("pression_memoire_pct", 25))
+    hyst = 60 * int(cfg.get("hysterese_min", 5))
+    from . import pauses, poste
+    pression = pression_memoire() if pression is None else pression
+    if libre_mo is None:
+        mem = poste._meminfo()
+        libre_mo = mem["MemAvailable"] / 1024 if mem.get("MemAvailable") else None
+    reserve = float(cfg.get("memoire_reserve_mo", 1500))
+    st = store.read_json(RESSOURCES_STATE, {"haut": 0, "bas_depuis": 0})
+    mauvais = (pression is not None and pression >= seuil) or (libre_mo is not None and libre_mo < reserve / 2)
+    bon = (pression is None or pression < seuil / 2) and (libre_mo is None or libre_mo >= reserve)
+    if pression is None and libre_mo is None:
+        return None  # rien de mesurable : on ne conclut rien
+    resultat = None
+    if mauvais:
+        st["haut"] = st.get("haut", 0) + 1
+        st["bas_depuis"] = 0
+        if st["haut"] >= 2 and "ressources" not in pauses.actives():
+            detail = (f"pression mémoire {pression:.0f} %" if pression is not None and pression >= seuil
+                      else f"mémoire libre {libre_mo:.0f} Mo")
+            pauses.poser("ressources", detail, par="demon")
+            notify.alert("question", f"PC sous pression ({detail}) : aucun nouveau lancement jusqu'au retour au calme. "
+                                     "Les agents en cours continuent.", title="JARVIS · ressources", windows=False)
+            ag.chef_inject(f"[JARVIS santé] PC sous pression ({detail}) : pause « ressources », ne lance rien de plus.")
+            resultat = "posee"
+    elif bon:
+        st["haut"] = 0
+        st["bas_depuis"] = st.get("bas_depuis") or now
+        if "ressources" in pauses.actives() and now - st["bas_depuis"] >= hyst:
+            pauses.lever("ressources", par="demon")
+            if not pauses.actives():
+                ag.chef_inject("[JARVIS santé] Pression retombée : pause « ressources » levée, reprends ta boucle.")
+            resultat = "levee"
+    else:
+        st["haut"] = 0  # zone intermédiaire : ni assez haut pour poser, ni assez bas pour lever
+        st["bas_depuis"] = 0
+    store.write_json(RESSOURCES_STATE, st)
+    return resultat
 
 
 def battement_demon() -> None:
@@ -580,7 +654,7 @@ def watch_loop(stop: threading.Event) -> None:
 def sante_loop(stop: threading.Event) -> None:
     """Fil séparé : PowerShell et Docker peuvent mettre des secondes à répondre."""
     while not stop.is_set():
-        for step in (batterie_check, sante_check):
+        for step in (batterie_check, ressources_check, sante_check):
             try:
                 step()
             except Exception as exc:  # noqa: BLE001
@@ -679,10 +753,19 @@ def handle_update(bot: Bot, chat_id: str, upd: dict) -> None:
         ag.chef_inject("[JARVIS] Ton humain a mis Jarvis en PAUSE : ne lance plus aucune tâche jusqu'à nouvel ordre.")
         bot.send(owner, "⏸ Pause activée : plus aucun nouveau lancement.")
     elif cmd == "/reprendre":
+        from . import pauses
         store.set_paused(False)
-        store.feed_add("systeme", "pause levée depuis Telegram")
-        ag.chef_inject("[JARVIS] Pause levée par ton humain : tu peux reprendre ta boucle.")
-        bot.send(owner, "▶ C'est reparti.")
+        store.feed_add("systeme", "pause humaine levée depuis Telegram")
+        restantes = pauses.actives()
+        if restantes:
+            bot.send(owner, "▶ Ta pause est levée, mais Jarvis reste en pause : " + pauses.texte(restantes)
+                     + "\nCes causes se lèvent seules (batterie, quota, ressources) ou avec « jarvis pause lever <cause> ».")
+        else:
+            ag.chef_inject("[JARVIS] Pause levée par ton humain : tu peux reprendre ta boucle.")
+            bot.send(owner, "▶ C'est reparti.")
+    elif cmd == "/pauses":
+        from . import admission, pauses
+        bot.send(owner, pauses.texte() + "\n\n" + admission.texte_etat())
     else:
         store.feed_add("toi", f"(Telegram) {text}")
         if ag.chef_inject(f"[Message de ton humain via Telegram] {text}"):

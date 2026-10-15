@@ -42,7 +42,8 @@ ${C_CYAN}Agents${C_OFF}
   jarvis voir <projet:worktree>         Sortie récente d'un agent (même non suivi par workmux)
   jarvis fermer <projet:worktree>|--termines
                                         Ferme la fenêtre d'agents terminés (worktree conservé)
-  jarvis reprendre [--essai]            Relance les agents interrompus par un redémarrage
+  jarvis reprendre [--essai]            Relance les agents interrompus par un redémarrage (même admission)
+  jarvis lourd debut|fin|exec|liste     Déclare une opération lourde (compilation, tests, navigateur, vidéo)
   jarvis tache [n] · jarvis bilan       Registre des tâches · ce que l'usine a produit
   jarvis verdict <projet> <ISSUE> pret|corrections [note]
                                         Verdict d'une contre-relecture
@@ -73,8 +74,18 @@ ${C_CYAN}Réglages${C_OFF}
   jarvis doctor                         Vérifie que tout est installé et connecté
   jarvis relancer [--chef]              Après une mise à jour : relance démon et cockpit (et le chef)
 
+${C_CYAN}Autonomie et garde-fous${C_OFF}
+  jarvis pause [poser|lever <cause>]    Pauses indépendantes : humain, batterie, quota, ressources, incident, maintenance
+  jarvis admission etat                 Réservations et opérations lourdes en cours (point d'admission commun)
+  jarvis politique [verifier <action>]  Politique de délégation : ce qui est automatique, délégué ou à approuver
+  jarvis budget [definir …]             Enveloppes de dépense (non renseignée = zéro)
+  jarvis fournisseurs                   Capacités déclarées de Claude et Codex (modèles, quotas, fraîcheur)
+  jarvis audit [n] [--verifier]         Journal d'audit des décisions (chaîne d'empreintes)
+
 ${C_CYAN}Poste${C_OFF}
   jarvis sante                          Mémoire, disque, Docker, batterie, redémarrage Windows
+  jarvis diagnostic                     Inventaire léger du poste (WSL vs Windows), rapport expurgé
+  jarvis profil [appliquer <nom>]       Profils : laptop-conservative, workstation
   jarvis autostart installer|retirer|etat
                                         Démarrer Jarvis tout seul à l'ouverture de session Windows
   jarvis reparer-git <projet>           Répare le dépôt après un arrêt brutal (sauvegarde d'abord)
@@ -182,6 +193,9 @@ cmd_relancer() {
   [[ "${1:-}" == "--chef" ]] && avec_chef=1
   has tmux || die "tmux n'est pas installé (lance ./install.sh)."
   tmux has-session -t "$SESSION" 2>/dev/null || { cmd_start --fond; return 0; }
+  # Pause « maintenance » le temps de la relance : aucun lancement ne part pendant que le démon
+  # change de version. Levée à la fin ; si la relance casse, « jarvis pause lever maintenance ».
+  py pause poser maintenance "relance de Jarvis" >/dev/null 2>&1 || true
   # Les anciennes fenêtres sont renommées, les nouvelles créées, puis les anciennes fermées :
   # la session ne reste jamais vide, même si elle ne contenait que ces deux fenêtres.
   for w in daemon cockpit; do
@@ -203,6 +217,7 @@ cmd_relancer() {
       warn "Le chef garde son ancien rôle jusqu'à son prochain démarrage : jarvis relancer --chef"
     fi
   fi
+  py pause lever maintenance >/dev/null 2>&1 || true
 }
 
 # Lance le chef sans s'y attacher (utilisé par le démon quand le chef s'est arrêté).
@@ -313,19 +328,29 @@ cmd_task() {
   fi
   [[ -n "$projet" ]] || projet="$(basename "$root")"
 
-  # Affectation : fournisseur, modèle, effort et rôle.
-  #  - avec un plan : celle que l'humain a validée (pause, capacité, jetons et plan vérifiés sous verrou) ;
-  #  - à la main : le routeur choisit selon le rôle, la taille et les jetons.
-  local fiche
+  local branch
+  branch="$(slugify "$issue")"
+  [[ -n "$desc" ]] && branch="$branch-$(slugify "$desc")"
+  [[ -n "$revue" && "$branch" != *revue* ]] && branch="$branch-revue-pr-$revue"
+
+  # Affectation : fournisseur, modèle, effort et rôle. Tout départ passe par l'admission commune
+  # (pauses, observation, capacité + réservations, opérations lourdes, doublons, jetons) :
+  #  - avec un plan : l'affectation validée par l'humain, marquée lancée sous le même verrou ;
+  #  - à la main : réservation d'abord, puis le routeur choisit selon le rôle, la taille et les jetons.
+  local fiche reservation=""
   if ((guarded)); then
-    fiche="$(py plan verifier "$plan" "$projet" "$issue" "$who" ${revue:+--revue})" || exit $?
+    fiche="$(py plan verifier "$plan" "$projet" "$issue" "$who" --worktree "$branch" ${revue:+--revue})" || exit $?
   else
     [[ -n "$revue" && -z "$role" ]] && role="revue"
+    local admis
+    admis="$(py admission demander "$projet" "$issue" "$who" --origine cli --worktree "$branch" --role "$role")" || exit $?
+    reservation="$(sed -n 's/^reservation=//p' <<<"$admis")"
     local -a choix=(--shell --agent "$who" --taille "${taille:-M}")
     [[ -n "$role" ]] && choix+=(--role "$role")
     [[ -n "$modele" ]] && choix+=(--modele "$modele")
     [[ -n "$revue" && "$who" == "auto" ]] && choix+=(--relit "$projet:$issue")
-    fiche="$(py modele choisir "${choix[@]}")" || exit 1
+    fiche="$(py modele choisir "${choix[@]}")" || { py admission liberer "$reservation" "routeur en échec" >/dev/null || true; exit 1; }
+    fiche+=$'\n'"reservation=$reservation"$'\n'"classe=$(sed -n 's/^classe=//p' <<<"$admis")"
   fi
   local -A F=()
   local cle valeur
@@ -333,6 +358,7 @@ cmd_task() {
     [[ -n "$cle" ]] && F["$cle"]="$valeur"
   done <<<"$fiche"
   who="${F[agent]:-}"
+  reservation="${F[reservation]:-$reservation}"
 
   local agent rules
   case "$who" in
@@ -342,16 +368,12 @@ cmd_task() {
   esac
   [[ -f "$root/$rules" ]] || warn "$rules absent de ce projet : lance « jarvis init-project » pour ajouter le protocole Linear."
 
-  local branch
-  branch="$(slugify "$issue")"
-  [[ -n "$desc" ]] && branch="$branch-$(slugify "$desc")"
-  [[ -n "$revue" && "$branch" != *revue* ]] && branch="$branch-revue-pr-$revue"
-
   # Annule proprement un lancement qui n'aboutit pas : la tâche redevient lançable dans son plan.
   local tache_id="" prompt_file=""
   abandon() {  # abandon <message>
     [[ -n "$prompt_file" ]] && rm -f "$prompt_file"
     [[ -n "$tache_id" ]] && py tache-annuler "$tache_id" || true
+    [[ -n "$reservation" ]] && py admission liberer "$reservation" "$1" >/dev/null || true
     ((guarded)) && py plan relacher "$plan" "$projet" "$issue" "$who" || true
     py evenement erreur "échec du lancement de $issue ($who) sur $projet"
     die "$1"
@@ -374,7 +396,8 @@ cmd_task() {
   local -a targs=(--projet "$projet" --issue "$issue" --agent "$who" --worktree "$branch" --chemin "$wt_path"
                   --role "${F[role]:-}" --modele "${F[modele]:-}" --modele-id "${F[modele_id]:-}"
                   --effort "${F[effort]:-}" --repli "${F[repli]:-}" --taille "${F[taille]:-M}"
-                  --plan "$plan" --revue "$revue" --raison "${F[raison]:-}")
+                  --plan "$plan" --revue "$revue" --raison "${F[raison]:-}"
+                  --classe "${F[classe]:-}" --reservation "$reservation")
   [[ "${F[par_secours]:-0}" == "1" ]] && targs+=(--secours)
   tache_id="$(py tache-enregistrer "${targs[@]}")" || abandon "impossible d'enregistrer la tâche."
 
@@ -551,7 +574,8 @@ main() {
     chef)         cmd_chef "$@" ;;
     task|t)       cmd_task "$@" ;;
     cockpit|etat|plan|fil|projet|telegram|regler|capacite|demander|note|journal|daemon|voir|jetons|veille|\
-    fermer|reprendre|sante|reparer-git|role|modele|tache|verdict|bilan|usine|studio|livrer|livrables|web)
+    fermer|reprendre|sante|reparer-git|role|modele|tache|verdict|bilan|usine|studio|livrer|livrables|web|\
+    admission|pause|profil|lourd|audit|diagnostic|politique|budget|fournisseurs|proposition)
                   py "$cmd" "$@" ;;
     chef-lancer)  cmd_chef_lancer "$@" ;;
     relancer)     cmd_relancer "$@" ;;

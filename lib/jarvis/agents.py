@@ -11,12 +11,15 @@ import time
 from . import config
 
 STATUS_LABELS = {"working": "travaille", "waiting": "attend", "done": "terminé", "untracked": "actif ?",
-                 "idle": "inactif ?"}
+                 "idle": "inactif ?", "silent": "silencieux"}
 # « untracked » : fenêtre d'agent visible dans tmux mais absente de workmux status (ex. Codex
 # avant la fin de son premier tour). Comptée comme occupée : on ne relance jamais par-dessus.
-# « idle » : même cas, mais sans activité depuis IDLE_AFTER secondes : sans doute fini, la place
-# est libérée (sinon une vieille fenêtre bloquerait la capacité toute la nuit).
-BUSY = ("working", "waiting", "untracked")
+# « idle » : même cas, sans activité depuis IDLE_AFTER secondes ET plus aucun programme dans le volet
+# (il ne reste qu'un shell) : fini, la place est libérée (sinon une vieille fenêtre bloquerait la
+# capacité toute la nuit).
+# « silent » : sans activité depuis IDLE_AFTER secondes mais Claude Code ou Codex tourne encore dans le
+# volet : vivant, peut-être bloqué, jamais « terminé » faute de sortie. Compté comme occupé.
+BUSY = ("working", "waiting", "untracked", "silent")
 IDLE_AFTER = 20 * 60
 WINDOW_PREFIX = "wm-"
 NON_AGENTS = (config.CHEF_WINDOW, "daemon", "cockpit", "reprise")
@@ -27,7 +30,7 @@ def tmux_agent_windows() -> list[dict]:
     if not shutil.which("tmux"):
         return []
     fmt = "\t".join(["#{session_name}", "#{window_name}", "#{pane_current_path}",
-                     "#{pane_current_command}", "#{window_activity}", "#{window_id}"])
+                     "#{pane_current_command}", "#{window_activity}", "#{window_id}", "#{pane_pid}"])
     try:
         res = _run(["tmux", "list-windows", "-a", "-F", fmt], timeout=5)
     except (subprocess.TimeoutExpired, OSError):
@@ -35,11 +38,13 @@ def tmux_agent_windows() -> list[dict]:
     out = []
     for line in res.stdout.splitlines():
         parts = line.split("\t")
-        if len(parts) != 6 or not parts[1].startswith(WINDOW_PREFIX):
+        if len(parts) not in (6, 7) or not parts[1].startswith(WINDOW_PREFIX):
             continue
-        session, window, path, command, activity, wid = parts
+        session, window, path, command, activity, wid = parts[:6]
+        pid = parts[6] if len(parts) == 7 else ""
         out.append({"session": session, "window": window, "path": path, "command": command,
-                    "activity": int(activity) if activity.isdigit() else 0, "id": wid})
+                    "activity": int(activity) if activity.isdigit() else 0, "id": wid,
+                    "pid": int(pid) if pid.isdigit() else 0})
     return out
 
 
@@ -92,6 +97,7 @@ def status_all() -> tuple[list[dict] | None, str]:
     now = time.time()
     windows = tmux_agent_windows()
     panes = _pane_commands() if windows else {}
+    arbre = None
     for a in agents:
         if not a["kind"] and a["window"] in panes:
             a["kind"] = _kind_from_command(panes[a["window"]])
@@ -100,20 +106,31 @@ def status_all() -> tuple[list[dict] | None, str]:
             continue
         kind = _kind_from_command(w["command"], panes.get(w["window"], ""))
         idle = max(0, int(now - w["activity"])) if w["activity"] else 0
+        status, titre = "untracked", f"non suivi par workmux · dernière activité il y a {fmt_elapsed(idle)}"
+        if idle >= IDLE_AFTER:
+            # Silence prolongé : terminé seulement si plus rien ne tourne dans le volet. Un programme
+            # encore vivant est « silencieux » (bloqué ?), pas fini : sa place n'est pas libérée.
+            arbre = _arbre() if arbre is None else arbre
+            vivant = programme_actif(w["pid"], arbre) if w.get("pid") else None
+            if vivant is None:
+                vivant = w["command"] not in SHELLS  # sans /proc : ce que dit tmux
+            status = "silent" if vivant else "idle"
+            titre = (f"silencieux depuis {fmt_elapsed(idle)} (programme encore actif)" if vivant
+                     else f"plus aucun programme · inactif depuis {fmt_elapsed(idle)}")
         agents.append({
             "worktree": w["window"][len(WINDOW_PREFIX):],
             "branch": "",
             "project": config.project_for_path(w["path"]) or "?",
-            "status": "idle" if idle >= IDLE_AFTER else "untracked",
+            "status": status,
             "elapsed": idle,
-            "title": f"non suivi par workmux · dernière activité il y a {fmt_elapsed(idle)}",
+            "title": titre,
             "kind": kind,
             "session": w["session"],
             "window": w["window"],
             "pane": "",
             "workdir": w["path"],
         })
-    order = {"waiting": 0, "untracked": 1, "working": 2, "done": 3}
+    order = {"waiting": 0, "untracked": 1, "silent": 1, "working": 2, "done": 3}
     agents.sort(key=lambda a: (order.get(a["status"], 4), a["project"], a["worktree"]))
     return agents, ""
 
