@@ -32,8 +32,9 @@ Classes de charge : `recherche`, `orchestration`, `edition` (légères) ; `compi
 
 - `jarvis lourd exec <classe> -- <commande>` : attend une place (15 s entre deux essais, `--attente` 30 min),
   déclare l'opération, lance la commande avec `nice -n 10`, libère à la fin. `debut`/`fin` pour un usage manuel.
-- Une opération jamais clôturée est oubliée après `--duree` (120 min, 4 h au plus) ou quand son processus
-  déclarant a disparu.
+- Une opération déclarée par `exec` est oubliée quand son processus disparaît ; une opération déclarée par
+  `debut` n'a pas de processus à suivre : seule `--duree` (120 min, 4 h au plus) ou `jarvis lourd fin` la clôt.
+  Les options (`--duree`, `--attente`, `--worktree`) se placent avant la classe.
 - **Limite honnête** : c'est une consigne (templates/CLAUDE.md, AGENTS.md, rôle du chef) vérifiée a
   posteriori (`jarvis lourd liste`, `jarvis audit`). Une commande lancée hors de ce cadre n'est pas bloquée.
   Voir `securite.md` pour les plafonds système et pourquoi ils ne sont pas activés.

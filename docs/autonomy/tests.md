@@ -1,8 +1,14 @@
 # Tests : ce qui est prouvé, et comment
 
 Commande : `python3 -m unittest discover -s tests` (tmux requis ; workmux, Claude et Codex sont des doubles
-dans `tests/fake-bin/`). Résultat obtenu dans le conteneur de développement : **106 tests, OK, ~108 s**
-(84 préexistants dans `tests/test_jarvis.py`, 22 nouveaux dans `tests/test_autonomie.py`).
+dans `tests/fake-bin/`). Résultat obtenu dans le conteneur de développement : **108 tests, OK, ~108 s**
+(84 préexistants dans `tests/test_jarvis.py`, 24 nouveaux dans `tests/test_autonomie.py`). Une revue
+indépendante du code (second agent, sans contexte de production) a relevé 14 points, tous corrigés et
+couverts : enveloppe globale non consommée, catégorie de budget ignorée, `jarvis lourd debut` sans effet,
+chaîne d'audit rompue à la rotation, garde humaine affaiblie sur `jarvis pause`, action ajoutée au niveau 1,
+délégation de projet appliquée hors projet et consommation non atomique, `--sans-windows` ignoré,
+auto-vérification non détectée dans la file de travaux, réservation non libérée d'une tâche jamais démarrée,
+chemin d'abandon tardif dans `bin/jarvis`, pause maintenance levée à tort par `jarvis relancer`.
 
 ## Trois niveaux
 
@@ -30,7 +36,8 @@ dans `tests/fake-bin/`). Résultat obtenu dans le conteneur de développement : 
 | Configuration invalide | `test_invalid_configuration_closes_admission` | unitaire |
 | Refus de dépense ou publication non autorisée | `test_spending_and_publication_are_refused_without_envelope_or_delegation` | unitaire |
 | Séparation des secrets | `test_secrets_stay_out_of_reports`, `test_reglage_lire_never_prints_the_token` (existant) | unitaire + intégration |
-| Candidat ne peut pas modifier ses protections | `test_candidate_cannot_weaken_its_own_protections` (politique perso ignorée si elle assouplit ; journal altéré détecté) | unitaire |
+| Candidat ne peut pas modifier ses protections | `test_candidate_cannot_weaken_its_own_protections` (politique perso ignorée si elle assouplit ou ajoute une action automatique ; journal altéré détecté), `test_audit_chain_survives_rotation` | unitaire |
+| Opération lourde déclarée à la main | `test_heavy_operation_declared_manually_counts` (via `bin/jarvis`) | intégration simulée |
 | Pression ressources avec hystérésis | `test_resource_pressure_uses_sustained_measure_and_hysteresis` | unitaire |
 | File partagée : doublons, exécutant unique, preuve, plafond, import | `test_shared_queue_dedups_single_executor_verified_result` | unitaire |
 | Visibilité (rapport, web, Telegram) | `test_state_shows_pause_causes_reservations_and_exceptions` | intégration simulée |

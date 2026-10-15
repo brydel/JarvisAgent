@@ -102,6 +102,9 @@ def _lancements_avortes(fiches: list[dict], agents: list[dict]) -> None:
                 libere = True
             except plans.PlanError:
                 pass
+        if t.get("reservation"):
+            from . import admission
+            admission.liberer(t["reservation"], "tâche jamais démarrée", acteur="demon")
         msg = (f"{t['projet']} {t['issue']} ({t['agent']}) n'a jamais démarré"
                + (f" : l'élément est de nouveau lançable dans {t['plan']}" if libere else ""))
         store.feed_add("erreur", msg)

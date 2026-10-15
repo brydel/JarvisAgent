@@ -52,7 +52,10 @@ def charger() -> dict:
         if not isinstance(v, dict):
             continue
         if nom not in actions:
-            actions[nom] = {**v, "niveau": max(int(v.get("niveau", 3)), 1)}
+            # Une action nouvelle ne peut pas être plus permissive qu'une action inconnue (niveau 3).
+            if int(v.get("niveau", 3)) < 3:
+                ignorees.append(f"{nom} : action ajoutée au niveau {v.get('niveau')} refusée (une nouvelle action est de niveau 3)")
+            actions[nom] = {**v, "niveau": 3}
             continue
         niveau = int(v.get("niveau", actions[nom]["niveau"]))
         if niveau < int(actions[nom]["niveau"]):
@@ -122,22 +125,33 @@ def delegations(now: float | None = None) -> list[dict]:
     return [d for d in store.read_json(DELEGATIONS, _vide())["delegations"] if d["active"] and now < d["expire"]]
 
 
-def _delegation_pour(action: str, projet: str, montant: float, now: float) -> dict | None:
-    for d in delegations(now):
-        if d["action"] != action:
-            continue
-        if d.get("projet") and projet and d["projet"] != projet:
-            continue
-        if montant > 0 and d["consomme"] + montant > d["plafond"] + 1e-9:
-            continue
-        return d
-    return None
+def _couvre(d: dict, action: str, projet: str, montant: float, now: float) -> bool:
+    if not d["active"] or now >= d["expire"] or d["action"] != action:
+        return False
+    if d.get("projet") and d["projet"] != projet:
+        return False  # une délégation limitée à un projet ne couvre ni un autre projet ni « sans projet »
+    return not (montant > 0 and d["consomme"] + montant > d["plafond"] + 1e-9)
+
+
+def _reserver_delegation(action: str, projet: str, montant: float, now: float) -> dict | None:
+    """Trouve ET consomme une délégation couvrante dans la même écriture : deux demandes simultanées
+    ne peuvent pas dépasser le plafond à deux."""
+
+    def _set(data):
+        for d in data["delegations"]:
+            if _couvre(d, action, projet, montant, now):
+                if montant > 0:
+                    d["consomme"] = float(d.get("consomme", 0)) + montant
+                return dict(d)
+        return None
+
+    return store.update_json(DELEGATIONS, _vide(), _set)
 
 
 # --- Décision ----------------------------------------------------------------------------------
 
 def autoriser(action: str, *, acteur: str, projet: str = "", montant: float = 0.0, detail: str = "",
-              now: float | None = None) -> dict:
+              categorie: str = "depense", now: float | None = None) -> dict:
     """{"decision": "admis"|"refuse"|"approbation", "niveau", "raison", "delegation"}.
 
     Niveau 1 : admis (si pas de montant : une dépense n'est jamais de niveau 1). Niveau 2 : admis s'il
@@ -152,7 +166,9 @@ def autoriser(action: str, *, acteur: str, projet: str = "", montant: float = 0.
     delegation = None
     if montant and montant > 0:
         from . import budgets
-        ok_b, raison_b = budgets.verifier("depense", montant, projet=projet, now=now)
+        if categorie not in budgets.CATEGORIES:
+            categorie = "depense"
+        ok_b, raison_b = budgets.verifier(categorie, montant, projet=projet, now=now)
         if not ok_b:
             decision, raison = "refuse", raison_b
             _journaliser(action, acteur, decision, raison, projet, montant)
@@ -165,7 +181,7 @@ def autoriser(action: str, *, acteur: str, projet: str = "", montant: float = 0.
     elif n == 1:
         decision, raison = "approbation", "une dépense n'est jamais automatique, même pour une action de niveau 1"
     elif n == 2:
-        delegation = _delegation_pour(action, projet, montant, now)
+        delegation = _reserver_delegation(action, projet, montant, now)
         if delegation:
             decision, raison = "admis", f"délégation {delegation['id']} ({delegation['perimetre']})"
         else:
@@ -174,21 +190,10 @@ def autoriser(action: str, *, acteur: str, projet: str = "", montant: float = 0.
                                               + " : jarvis politique deleguer " + action + " …")
     else:
         decision, raison = "approbation", f"niveau 3 : {pol['actions'][action].get('perimetre', '')}"
-    if decision == "admis" and delegation and montant:
-        _consommer(delegation["id"], montant)
     _journaliser(action, acteur, decision, raison, projet, montant)
     if decision != "admis":
         _exception(action, acteur, projet, montant, detail, raison)
     return {"decision": decision, "niveau": n, "raison": raison, "delegation": delegation}
-
-
-def _consommer(deleg_id: str, montant: float) -> None:
-    def _set(data):
-        for d in data["delegations"]:
-            if d["id"] == deleg_id:
-                d["consomme"] = float(d.get("consomme", 0)) + montant
-
-    store.update_json(DELEGATIONS, _vide(), _set)
 
 
 def _journaliser(action, acteur, decision, raison, projet, montant) -> None:
@@ -267,8 +272,9 @@ def texte_exceptions() -> str:
     out = ["EXCEPTIONS EN ATTENTE DE TA DÉCISION (groupées, rien d'autre n'est bloqué)"]
     for e in exc:
         quand = time.strftime("%d/%m %H:%M", time.localtime(e["derniere"]))
+        devise = charger()["devise"]
         out.append(f"  {e['id']} {e['action']} ×{e['nb']} [{e['acteur']}{', ' + e['projet'] if e['projet'] else ''}"
-                   f"{', ' + format(e['montant'], 'g') + ' €' if e.get('montant') else ''}] {quand}")
+                   f"{', ' + format(e['montant'], 'g') + ' ' + devise if e.get('montant') else ''}] {quand}")
         out.append(f"      {e['detail'] or '(sans détail)'} — {e['raison']}")
     out.append("Décider : jarvis politique exception <E-xxxx> accordee|refusee  ·  déléguer : jarvis politique deleguer <action> --perimetre … --plafond N --jours N")
     return "\n".join(out)

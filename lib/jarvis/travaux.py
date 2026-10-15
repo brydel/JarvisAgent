@@ -163,8 +163,9 @@ def terminer(w_id: str, *, preuve: str, verifie_par: str, ok: bool = True, note:
                 continue
             if t["statut"] != "en_cours":
                 raise TravauxError(f"{t['id']} n'est pas en cours")
-            if verifie_par == t["executant"]:
-                raise TravauxError("l'exécutant ne vérifie pas son propre résultat")
+            if verifie_par.startswith("agent:") or verifie_par == t["executant"]:
+                raise TravauxError("un agent exécutant ne vérifie pas son propre résultat : la preuve est contrôlée "
+                                   "par le chef (après contre-relecture) ou par ton humain")
             t["statut"] = "terminee" if ok else "acceptee"  # échec : retourne à « acceptée », exécutant libéré
             if not ok:
                 t["executant"], t["tache"] = "", ""

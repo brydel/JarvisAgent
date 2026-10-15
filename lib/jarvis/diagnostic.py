@@ -263,7 +263,7 @@ def _wslconfig() -> dict | str:
     return vals or "présent sans limite mémoire/processeur"
 
 
-def collecter(windows_: bool = True, **_ignore) -> dict:
+def collecter(windows_: bool = True) -> dict:
     s = config.settings()
     return {
         "ts": time.time(), "date": time.strftime("%Y-%m-%d %H:%M"),

@@ -59,7 +59,7 @@ def ecrire(type_: str, *, acteur: str, objet: str, decision: str, raison: str = 
         if path.exists() and path.stat().st_size > MAX_BYTES:
             # Archive : le journal courant repart de zéro mais l'ancien reste lisible.
             path.rename(path.with_name(f"journal-{time.strftime('%Y%m%d-%H%M%S')}.jsonl"))
-            ev["prev"] = ""
+            ev["prev"], ev["n"] = "", 1  # nouveau fichier, nouvelle chaîne (l'archive garde la sienne)
         with path.open("a", encoding="utf-8") as fh:
             fh.write(json.dumps(ev, ensure_ascii=False) + "\n")
     return ev

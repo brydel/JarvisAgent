@@ -243,6 +243,31 @@ class AutonomieTest(unittest.TestCase):
         with self.assertRaises(admission.Refus):
             admission.lourde_debut("edition")  # pas une classe lourde
 
+    def test_audit_chain_survives_rotation(self):
+        old = journal.MAX_BYTES
+        journal.MAX_BYTES = 200
+        try:
+            for i in range(6):
+                journal.ecrire("systeme", acteur="test", objet=f"e{i}", decision="x", raison="r" * 40)
+        finally:
+            journal.MAX_BYTES = old
+        ok, msg = journal.verifier()
+        self.assertTrue(ok, msg)
+        archives = list(store.state_path(".").glob("journal-*.jsonl"))
+        self.assertTrue(archives, "l'ancien journal est archivé")
+        for f in archives:
+            f.unlink()
+
+    def test_heavy_operation_declared_manually_counts(self):
+        run = test_jarvis.JarvisTest.run_jarvis
+        self_ = test_jarvis.JarvisTest()
+        res = run(self_, "lourd", "debut", "tests", "suite complète")
+        self.assertEqual(res.returncode, 0, res.stderr)
+        self.assertEqual(len(admission.lourdes_en_cours()), 1, "sans PID, seule la durée fait foi")
+        self.assertEqual(run(self_, "lourd", "debut", "video").returncode, 2)
+        self.assertEqual(run(self_, "lourd", "fin", res.stdout.strip()).returncode, 0)
+        self.assertEqual(admission.lourdes_en_cours(), [])
+
     def test_bounded_restarts(self):
         t0 = time.time()
         for i in range(3):
@@ -352,12 +377,21 @@ class AutonomieTest(unittest.TestCase):
         politique.autoriser("publication", acteur="chef", projet="repriceo", detail="post LinkedIn")
         self.assertEqual(next(e for e in politique.exceptions() if e["action"] == "publication")["nb"], 2)
         # Délégation humaine : la publication passe, dans son périmètre et sa durée seulement.
-        dlg = politique.deleguer("publication", perimetre="blog du produit", jours=1, par="humain")
+        dlg = politique.deleguer("publication", perimetre="blog du produit", jours=1, par="humain", projet="repriceo")
         self.assertEqual(politique.autoriser("publication", acteur="chef", projet="repriceo")["decision"], "admis")
+        self.assertEqual(politique.autoriser("publication", acteur="chef")["decision"], "approbation",
+                         "une délégation limitée à un projet ne couvre pas une demande sans projet")
+        self.assertEqual(politique.autoriser("publication", acteur="chef", projet="autre")["decision"], "approbation")
         self.assertEqual(politique.autoriser("publication", acteur="chef", now=time.time() + 2 * 86400)["decision"],
                          "approbation", "délégation expirée")
         politique.revoquer(dlg["id"])
-        self.assertEqual(politique.autoriser("publication", acteur="chef")["decision"], "approbation")
+        self.assertEqual(politique.autoriser("publication", acteur="chef", projet="repriceo")["decision"], "approbation")
+        # Délégation plafonnée : la consommation est atomique, le plafond ne se dépasse pas à deux.
+        politique.deleguer("experience_marketing", perimetre="test A/B page", plafond=50, jours=1, par="humain")
+        budgets.definir("acquisition", 1000, periode="mois")
+        res = [politique.autoriser("experience_marketing", acteur="chef", montant=30, categorie="acquisition")["decision"]
+               for _ in range(3)]
+        self.assertEqual(res, ["admis", "approbation", "approbation"])
         with self.assertRaises(politique.PolitiqueError):
             politique.deleguer("depense", perimetre="tout")  # niveau 3 : ne se délègue pas
         # Enveloppe : réserve incidents déduite, dépassement refusé, périodes glissantes.
@@ -369,6 +403,11 @@ class AutonomieTest(unittest.TestCase):
         budgets.engager("depense", 60, projet="repriceo", libelle="pub")
         self.assertFalse(budgets.verifier("depense", 40, projet="repriceo")[0])
         self.assertFalse(budgets.verifier("depense", 1, projet="autre")[0], "l'enveloppe d'un projet ne vaut pas pour un autre")
+        # Enveloppe globale : consommée par les projets sans enveloppe propre, pas par ceux qui en ont une.
+        budgets.definir("services", 100, periode="mois")
+        budgets.engager("services", 50, projet="autre", libelle="api")
+        self.assertFalse(budgets.verifier("services", 50, projet="encore-un-autre")[0], "40 disponibles après 50 engagés et la réserve")
+        self.assertTrue(budgets.verifier("services", 40, projet="encore-un-autre")[0])
         b = budgets.bilan()
         self.assertEqual(b["projets"]["repriceo"]["depenses"], 60)
         self.assertIn("non saisis", b["avertissement"])
@@ -376,18 +415,22 @@ class AutonomieTest(unittest.TestCase):
     def test_candidate_cannot_weaken_its_own_protections(self):
         # 1. La copie personnelle de la politique ne peut qu'être plus stricte.
         (config.CONFIG_DIR / "politique.toml").write_text(
-            '[actions.depense]\nniveau = 1\n\n[actions.recherche]\nniveau = 3\n', encoding="utf-8")
+            '[actions.depense]\nniveau = 1\n\n[actions.recherche]\nniveau = 3\n\n[actions.publier_partout]\nniveau = 1\n',
+            encoding="utf-8")
         pol = politique.charger()
         self.assertEqual(pol["actions"]["depense"]["niveau"], 3, "abaisser un niveau est ignoré")
         self.assertEqual(pol["actions"]["recherche"]["niveau"], 3, "durcir est accepté")
-        self.assertTrue(pol["ignorees"])
+        self.assertEqual(pol["actions"]["publier_partout"]["niveau"], 3, "une action ajoutée n'est jamais automatique")
+        self.assertEqual(len(pol["ignorees"]), 2)
+        self.assertEqual(politique.autoriser("publier_partout", acteur="chef")["decision"], "approbation")
         # 2. Le journal détecte une ligne altérée.
         journal.ecrire("systeme", acteur="test", objet="a", decision="x")
         journal.ecrire("systeme", acteur="test", objet="b", decision="y")
         self.assertTrue(journal.verifier()[0])
         path = store.state_path(journal.FILE)
         lignes = path.read_text().splitlines()
-        lignes[0] = lignes[0].replace('"objet": "a"', '"objet": "z"')
+        i = next(k for k, ln in enumerate(lignes) if '"objet": "a"' in ln)
+        lignes[i] = lignes[i].replace('"objet": "a"', '"objet": "z"')
         path.write_text("\n".join(lignes) + "\n")
         ok, msg = journal.verifier()
         self.assertFalse(ok)
@@ -439,9 +482,9 @@ class AutonomieTest(unittest.TestCase):
         travaux.confier(t["id"], "local:claude", "T-00001")
         with self.assertRaises(travaux.TravauxError):   # pas de double exécution local + cloud
             travaux.confier(t["id"], "codex-cloud", "task-123")
-        with self.assertRaises(travaux.TravauxError):   # l'exécutant ne se vérifie pas lui-même
-            travaux.terminer(t["id"], preuve="PR #12", verifie_par="local:claude")
-        fini = travaux.terminer(t["id"], preuve="PR #12", verifie_par="revue:codex")
+        with self.assertRaises(travaux.TravauxError):   # un agent ne vérifie pas un résultat (le sien ou non)
+            travaux.terminer(t["id"], preuve="PR #12", verifie_par="agent:backend")
+        fini = travaux.terminer(t["id"], preuve="PR #12", verifie_par="chef")
         self.assertEqual(fini["statut"], "terminee")
         # Plafond : trois acceptations par source et par jour.
         for i in range(4):

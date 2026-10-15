@@ -159,7 +159,7 @@ def demander(*, origine: str, projet: str, issue: str, agent: str, worktree: str
             if (r["projet"], r["issue"], r["agent"]) == (projet, issue.upper(), agent):
                 raise _refus("doublon", f"{objet} a déjà une réservation en attente ({r['id']}, {r['origine']}) : "
                                         "pas de double lancement.")
-            if worktree and r.get("worktree") == worktree:
+            if worktree and (r.get("worktree") or "").lower() == worktree.lower():
                 raise _refus("doublon", f"le worktree {worktree} est déjà réservé ({r['id']})")
         if worktree and worktree.lower() in visibles and origine != "reprise":
             raise _refus("doublon", f"un agent travaille déjà dans le worktree {worktree}")

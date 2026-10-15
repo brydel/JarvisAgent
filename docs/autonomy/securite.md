@@ -2,8 +2,9 @@
 
 ## Ce que ce lot garantit (garde-fous applicatifs)
 
-- Approbations, délégations, budgets, profils, levée de pause, `--forcer` : réservés à un **terminal humain**
-  (ou cockpit/Telegram) ; refusés avec le code 4 au chef (`JARVIS_ROLE=chef`) et aux agents (`JARVIS_METIER`).
+- Approbations, délégations, budgets, profils, pose et levée de pause (sauf poser `incident`), `--forcer` :
+  réservés à un **terminal humain** (ou cockpit/Telegram) par la même garde `_human_only` ; refusés avec le
+  code 4 au chef (`JARVIS_ROLE=chef`), aux agents (`JARVIS_METIER`) et à tout appel sans terminal.
 - La copie personnelle de la politique ne peut que durcir ; une action inconnue est de niveau 3.
 - Toute décision est journalisée avec chaîne d'empreintes ; une altération se détecte.
 - Les réglages hors bornes ferment l'admission au lieu de l'ouvrir.

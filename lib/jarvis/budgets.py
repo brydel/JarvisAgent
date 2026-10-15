@@ -53,11 +53,19 @@ def definir(categorie: str, plafond: float, *, periode: str = "mois", projet: st
 
 
 def _consomme(data: dict, e: dict, now: float) -> float:
+    """Dépenses de la période imputées à l'enveloppe : celles de son projet ; pour l'enveloppe globale
+    (projet vide), celles de tous les projets qui n'ont pas d'enveloppe propre dans cette catégorie."""
     duree = PERIODES[e["periode"]]
     debut = now - duree if duree else 0
+    avec_propre = {x["projet"] for x in data["enveloppes"] if x["categorie"] == e["categorie"] and x["projet"]}
+
+    def _imputee(m) -> bool:
+        if e["projet"]:
+            return m["projet"] == e["projet"]
+        return m["projet"] not in avec_propre
+
     return sum(m["montant"] for m in data["mouvements"]
-               if m["type"] == "depense" and m["categorie"] == e["categorie"] and m["projet"] == e["projet"]
-               and m["ts"] >= debut)
+               if m["type"] == "depense" and m["categorie"] == e["categorie"] and m["ts"] >= debut and _imputee(m))
 
 
 def verifier(categorie: str, montant: float, *, projet: str = "", now: float | None = None) -> tuple[bool, str]:

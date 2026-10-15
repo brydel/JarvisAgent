@@ -52,7 +52,8 @@ système card GPT-6 Astra. Rien ci-dessous n'est inventé ; ce qui n'est pas doc
    empreinte et par URL d'issue, contenu borné, traité comme donnée).
 4. Le chef accepte au plus trois propositions par source et par jour (`jarvis proposition accepter`),
    les planifie comme toute tâche (plan → admission), confie à **un** exécutant, et clôt avec une preuve
-   vérifiée par un autre (`jarvis proposition terminer`).
+   (`jarvis proposition terminer`) : la clôture est refusée à tout agent (`JARVIS_METIER`), elle revient au
+   chef après contre-relecture, ou à toi.
 5. Rien n'est dépensé, publié ni lancé automatiquement par une proposition : la politique l'interdit et
    les tests le vérifient. Jarvis fonctionne sans le dot : la file est juste vide.
 

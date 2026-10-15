@@ -195,7 +195,8 @@ cmd_relancer() {
   tmux has-session -t "$SESSION" 2>/dev/null || { cmd_start --fond; return 0; }
   # Pause « maintenance » le temps de la relance : aucun lancement ne part pendant que le démon
   # change de version. Levée à la fin ; si la relance casse, « jarvis pause lever maintenance ».
-  py pause poser maintenance "relance de Jarvis" >/dev/null 2>&1 || true
+  local maintenance_posee=0
+  if py pause poser maintenance "relance de Jarvis" 2>/dev/null | grep -q "⏸"; then maintenance_posee=1; fi
   # Les anciennes fenêtres sont renommées, les nouvelles créées, puis les anciennes fermées :
   # la session ne reste jamais vide, même si elle ne contenait que ces deux fenêtres.
   for w in daemon cockpit; do
@@ -210,14 +211,16 @@ cmd_relancer() {
   ok "Démon et cockpit relancés avec la version installée."
   if chef_present; then
     if ((avec_chef)); then
-      tmux kill-window -t "$SESSION:chef"
+      tmux kill-window -t "$SESSION:chef" 2>/dev/null || true
       start_chef
     else
       py chef-preparer >/dev/null   # permissions à jour ; son rôle, lui, n'est relu qu'au démarrage
       warn "Le chef garde son ancien rôle jusqu'à son prochain démarrage : jarvis relancer --chef"
     fi
   fi
-  py pause lever maintenance >/dev/null 2>&1 || true
+  # Levée seulement si c'est nous qui l'avions posée : une maintenance décidée par toi reste en place.
+  ((maintenance_posee)) && { py pause lever maintenance >/dev/null 2>&1 || true; }
+  return 0
 }
 
 # Lance le chef sans s'y attacher (utilisé par le démon quand le chef s'est arrêté).
@@ -360,15 +363,8 @@ cmd_task() {
   who="${F[agent]:-}"
   reservation="${F[reservation]:-$reservation}"
 
-  local agent rules
-  case "$who" in
-    claude) agent="cc"; rules="CLAUDE.md" ;;
-    codex)  agent="cx"; rules="AGENTS.md" ;;
-    *) die "affectation illisible pour $issue (agent « $who »)." ;;
-  esac
-  [[ -f "$root/$rules" ]] || warn "$rules absent de ce projet : lance « jarvis init-project » pour ajouter le protocole Linear."
-
-  # Annule proprement un lancement qui n'aboutit pas : la tâche redevient lançable dans son plan.
+  # Annule proprement un lancement qui n'aboutit pas : réservation rendue, la tâche redevient lançable
+  # dans son plan. Défini ici : tout échec après l'admission doit passer par là.
   local tache_id="" prompt_file=""
   abandon() {  # abandon <message>
     [[ -n "$prompt_file" ]] && rm -f "$prompt_file"
@@ -378,6 +374,14 @@ cmd_task() {
     py evenement erreur "échec du lancement de $issue ($who) sur $projet"
     die "$1"
   }
+
+  local agent rules
+  case "$who" in
+    claude) agent="cc"; rules="CLAUDE.md" ;;
+    codex)  agent="cx"; rules="AGENTS.md" ;;
+    *) abandon "affectation illisible pour $issue (agent « $who »)." ;;
+  esac
+  [[ -f "$root/$rules" ]] || warn "$rules absent de ce projet : lance « jarvis init-project » pour ajouter le protocole Linear."
 
   prompt_file="$(mktemp --suffix=.md)"
   local -a pargs=(--projet "$projet" --issue "$issue" --branche "$branch" --regles "$rules" --role "${F[role]:-}")

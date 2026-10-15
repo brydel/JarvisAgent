@@ -19,7 +19,10 @@ les montre, `jarvis politique exception E-0001 accordee|refusee` les clôt (huma
 n'autorise rien de durable : pour une autorisation répétée, `jarvis politique deleguer`.
 
 Copie personnelle `~/.config/jarvis/politique.toml` : peut **durcir** (monter un niveau, ajouter une
-action) ; un niveau abaissé est ignoré et signalé (`ignorees`). Appliquer/déléguer/révoquer/décider exigent
+action — toujours au niveau 3, comme une action inconnue) ; un niveau abaissé ou une action ajoutée en
+dessous du niveau 3 est ignoré et signalé (`ignorees`). Une délégation limitée à un projet ne couvre ni un
+autre projet ni une demande sans projet ; sa consommation est vérifiée et débitée dans la même écriture
+(deux demandes simultanées ne dépassent pas le plafond). Appliquer/déléguer/révoquer/décider exigent
 un terminal humain et sont journalisés.
 
 Usage par le chef : `jarvis politique verifier <action> [--projet P] [--montant N]` avant toute action de
@@ -30,7 +33,9 @@ niveau 2 ou 3 (code 0 = admis). Les agents n'ont pas ces actions dans leur péri
 - Enveloppes par catégorie (`depense`, `infrastructure`, `services`, `acquisition`, `remboursement`,
   `abonnement`, `humain`), projet (ou `*`) et période (`mois`, `semaine`, `jour`, `unique`), posées par
   l'humain : `jarvis budget definir depense 100 --projet repriceo --periode mois`.
-- `verifier` : l'enveloppe du projet prime sur la globale ; 10 % de réserve pour incidents ; dépassement refusé.
+- `verifier` : l'enveloppe du projet prime sur la globale ; l'enveloppe globale est débitée par les dépenses des
+  projets qui n'en ont pas de propre ; 10 % de réserve pour incidents ; dépassement refusé. La catégorie
+  vérifiée est celle du mouvement (`jarvis politique verifier … --categorie services`).
 - `engager` enregistre une dépense (réelle ou `--estime`), `encaisser` un revenu réel. `bilan` compare
   encaissé, dépensé, estimé **et dit que la marge affichée omet ce qui n'est pas saisi** (abonnements,
   temps humain, frais). Rien ici ne paie : c'est une comptabilité d'autorisation et de comparaison.

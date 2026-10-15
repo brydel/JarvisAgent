@@ -970,12 +970,13 @@ def cmd_pause(a) -> int:
     if cause not in pauses.CAUSES:
         return _err(f"cause inconnue « {cause} » (valeurs : {', '.join(pauses.CAUSES)})")
     acteur = _acteur()
-    if acteur not in ("humain", "cli"):
-        # Un agent (le chef compris) peut POSER une pause incident : jamais en lever une.
-        # Garde-fou applicatif, pas une barrière : tout tourne sous le même utilisateur (docs/autonomy/securite.md).
-        if a.action == "lever" or cause not in ("incident",):
-            return _err("poser/lever une pause est réservé à l'humain (terminal, cockpit, Telegram) ; "
-                        "un agent peut seulement poser « incident ».", 4)
+    # Un agent (le chef compris) peut POSER une pause incident : jamais en lever une, ni poser une autre.
+    # Même garde que les approbations (terminal interactif) : garde-fou applicatif, pas une barrière
+    # (docs/autonomy/securite.md).
+    if not (a.action == "poser" and cause == "incident"):
+        refused = _human_only("poser ou lever une pause (un agent peut seulement poser « incident »)")
+        if refused is not None:
+            return refused
     note = " ".join(a.note)
     if a.action == "poser":
         if pauses.poser(cause, note, par=acteur):
@@ -1050,7 +1051,8 @@ def cmd_lourd(a) -> int:
     worktree = a.worktree or os.environ.get("JARVIS_ISSUE", "")
     if a.action == "debut":
         try:
-            o = admission.lourde_debut(classe, worktree=worktree, desc=" ".join(a.quoi[1:]), pid=os.getppid(),
+            # Sans PID : le wrapper bash qui nous appelle disparaît aussitôt ; seule la durée fait foi (jarvis lourd fin).
+            o = admission.lourde_debut(classe, worktree=worktree, desc=" ".join(a.quoi[1:]), pid=None,
                                        duree_min=a.duree, acteur=acteur)
         except admission.Refus as exc:
             return _err(exc.raison, _CODES_REFUS.get(exc.code, 2))
@@ -1095,7 +1097,7 @@ def cmd_audit(a) -> int:
 
 def cmd_diagnostic(a) -> int:
     from . import diagnostic
-    rapport = diagnostic.collecter(windows=not a.sans_windows)
+    rapport = diagnostic.collecter(windows_=not a.sans_windows)
     chemin = diagnostic.enregistrer(rapport)
     if a.json:
         print(json.dumps(rapport, ensure_ascii=False, indent=2, default=str))
@@ -1116,7 +1118,7 @@ def cmd_politique(a) -> int:
             if not a.quoi:
                 return _err("usage : jarvis politique verifier <action> [--projet P] [--montant N] [--detail …]")
             d = politique.autoriser(a.quoi[0], acteur=_acteur(), projet=a.projet or "", montant=float(a.montant or 0),
-                                    detail=" ".join(a.quoi[1:]))
+                                    detail=" ".join(a.quoi[1:]), categorie=a.categorie or "depense")
             print(f"{d['decision']} (niveau {d['niveau']}) — {d['raison']}")
             return 0 if d["decision"] == "admis" else 1
         elif a.action == "deleguer":
@@ -1209,7 +1211,7 @@ def politique_depense(a) -> int | None:
         return None
     from . import politique
     d = politique.autoriser("depense", acteur=_acteur(), projet=a.projet or "", montant=float(a.quoi[1]),
-                            detail=" ".join(a.quoi[2:]))
+                            detail=" ".join(a.quoi[2:]), categorie=a.quoi[0])
     if d["decision"] != "admis":
         return _err(f"dépense refusée ({d['decision']}) : {d['raison']}", 7)
     return None
@@ -1349,7 +1351,8 @@ def build_parser() -> argparse.ArgumentParser:
 
     s = sub.add_parser("lourd", help="déclarer une opération lourde (compilation, tests, navigateur, vidéo)")
     s.add_argument("action", choices=("debut", "fin", "exec", "liste"))
-    s.add_argument("quoi", nargs="*", help="debut <classe> [desc] · fin <L-xxxxx> · exec <classe> -- commande…")
+    s.add_argument("quoi", nargs="*", help="debut <classe> [desc] · fin <L-xxxxx> · exec <classe> -- commande… "
+                                           "(les options --duree/--attente/--worktree se placent AVANT la classe)")
     s.add_argument("--worktree", default="")
     s.add_argument("--duree", type=int, default=120, help="durée maximale prévue en minutes (défaut 120)")
     s.add_argument("--attente", type=int, default=30, help="exec : minutes d'attente maximales d'une place (défaut 30)")
@@ -1367,6 +1370,7 @@ def build_parser() -> argparse.ArgumentParser:
     s.add_argument("quoi", nargs="*")
     s.add_argument("--projet", default="")
     s.add_argument("--montant", type=float, default=0.0)
+    s.add_argument("--categorie", default="depense", help="catégorie de budget du montant (depense, services, acquisition…)")
     s.add_argument("--perimetre", default="")
     s.add_argument("--plafond", type=float, default=0.0)
     s.add_argument("--jours", type=int, default=7)

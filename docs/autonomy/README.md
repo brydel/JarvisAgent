@@ -32,7 +32,7 @@ politique de délégation, de budget monétaire, ni de journal d'audit ; quota p
 
 | Lot | Contenu | Statut |
 | --- | --- | --- |
-| 0 | État réel du dépôt, baseline de tests (84 → 106 verts), diagnostic du poste, profils, audit priorisé | implémenté/testé (diagnostic : implémenté/non vérifié sur ton PC) |
+| 0 | État réel du dépôt, baseline de tests (84 → 108 verts), diagnostic du poste, profils, audit priorisé | implémenté/testé (diagnostic : implémenté/non vérifié sur ton PC) |
 | 1 | Admission commune, réservations expirables, concurrence prudente (agents + opérations lourdes), pauses à causes indépendantes, reprise via admission, agents silencieux, visibilité cockpit/web/Telegram, tests §16 | implémenté/testé ; plafonnement système des processus : **bloqué** (voir `securite.md`) |
 | 2 | Politique de délégation versionnée, file d'exceptions, budgets (non renseigné = 0), journal d'audit à empreintes, adaptateurs fournisseurs avec fraîcheur des quotas, file de travaux partagée (dot/GitHub), états de tâches | fondations implémentées/testées ; états avancés d'échec (classification, reprise bornée par tâche) : conçu |
 | 3 | Parcours commercial complet d'un produit, en simulation | conçu (`feuille-de-route.md`) |
