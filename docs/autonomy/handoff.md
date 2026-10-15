@@ -1,7 +1,9 @@
 # Handoff — reprendre la session sans tout réanalyser
 
 **Branche de travail** : `claude/autonomie-lot1` (dérivée de `claude/usine-roles-modeles-studio` @ b8296b7,
-elle-même en PR #1 vers `main` @ 5e62e10). Rien n'a été fusionné dans `main`. L'instance qui tourne sur le
+elle-même en PR #1 vers `main` @ 5e62e10). Commits : 9542781 (lot), 8b93294 (correctifs de revue).
+**PR #2** : https://github.com/brydel/JarvisAgent/pull/2 (base : la branche usine ; à fusionner après #1).
+Rien n'a été fusionné dans `main`. L'instance qui tourne sur le
 PC de l'utilisateur n'a pas été touchée (l'agent n'avait pas accès au PC).
 
 **Environnement de l'agent** : conteneur Linux cloud, 2 cœurs, 8 Go, Python 3.13, tmux présent, workmux,
