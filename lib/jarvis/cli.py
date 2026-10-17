@@ -114,7 +114,8 @@ def _capacite(agents: list[dict]) -> tuple[int, dict]:
 
 def _fiche_shell(fiche: dict) -> str:
     """Affectation d'un lancement, une « clé=valeur » par ligne, lue par bin/jarvis."""
-    keys = ("agent", "modele", "modele_id", "effort", "repli", "role", "taille", "raison", "reservation", "classe")
+    keys = ("agent", "modele", "modele_id", "effort", "repli", "role", "taille", "raison", "reservation", "classe",
+            "jetons_max")
     lines = [f"{k}={' '.join(str(fiche.get(k) or '').split())}" for k in keys]
     lines.append(f"par_secours={'1' if fiche.get('par_secours') else '0'}")
     return "\n".join(lines)
@@ -122,7 +123,7 @@ def _fiche_shell(fiche: dict) -> str:
 
 # Code de sortie par motif de refus, lu par bin/jarvis et le chef.
 _CODES_REFUS = {"pause": 3, "budget": 5, "capacite": 2, "lourde": 2, "doublon": 2, "plan": 2, "observation": 2,
-                "config": 6, "origine": 2}
+                "config": 6, "origine": 2, "budget_jetons": 8, "escalade": 9, "meme_approche": 9}
 
 
 def _acteur() -> str:
@@ -142,11 +143,12 @@ def cmd_plan_verifier(a) -> int:
     from . import admission
     try:
         adm = admission.demander(origine="plan", projet=a.projet, issue=a.issue, agent=a.agent, worktree=a.worktree or "",
-                                 plan=a.id, relecture=a.revue, acteur=_acteur())
+                                 plan=a.id, relecture=a.revue, acteur=_acteur(), consignes_empreinte=a.consignes_empreinte or "")
     except admission.Refus as exc:
+        _prevenir_chef_refus(exc, a.projet, a.issue)
         return _err(exc.raison, _CODES_REFUS.get(exc.code, 2))
     fiche = dict(adm["fiche"])
-    fiche["reservation"], fiche["classe"] = adm["reservation"], adm["classe"]
+    fiche["reservation"], fiche["classe"], fiche["jetons_max"] = adm["reservation"], adm["classe"], adm["jetons_max"]
     for av in adm["avertissements"]:
         print(f"Attention : {av}", file=sys.stderr)
     print(_fiche_shell(fiche))
@@ -166,13 +168,24 @@ def cmd_admission(a) -> int:
         return _err("--forcer est réservé à l'humain devant un terminal.", 4)
     try:
         adm = admission.demander(origine=a.origine, projet=a.projet, issue=a.issue, agent=a.agent, worktree=a.worktree or "",
-                                 role=a.role or "", classe=a.classe or "", acteur=_acteur(), forcer=forcer)
+                                 role=a.role or "", classe=a.classe or "", acteur=_acteur(), forcer=forcer,
+                                 taille=(a.taille or "M").upper(), consignes_empreinte=a.consignes_empreinte or "")
     except admission.Refus as exc:
+        _prevenir_chef_refus(exc, a.projet, a.issue)
         return _err(exc.raison, _CODES_REFUS.get(exc.code, 2))
     for av in adm["avertissements"]:
         print(f"Attention : {av}", file=sys.stderr)
-    print(f"reservation={adm['reservation']}\nclasse={adm['classe']}")
+    print(f"reservation={adm['reservation']}\nclasse={adm['classe']}\njetons_max={adm['jetons_max']}")
     return 0
+
+
+def _prevenir_chef_refus(exc, projet: str, issue: str) -> None:
+    """Plafond de jetons ou escalade : le chef en est informé même si ce n'est pas lui qui a lancé."""
+    if exc.code not in ("budget_jetons", "escalade"):
+        return
+    store.feed_add("erreur", f"{projet} {issue} : lancement refusé ({exc.code})")
+    if os.environ.get("JARVIS_ROLE") != "chef":
+        ag.chef_inject(f"[JARVIS {exc.code}] {exc.raison}")
 
 
 def cmd_plan_relacher(a) -> int:
@@ -215,6 +228,12 @@ def cmd_note(a) -> int:
     journal = store.state_path("journal.md")
     with journal.open("a", encoding="utf-8") as fh:
         fh.write(f"\n## {time.strftime('%Y-%m-%d %H:%M')}\n\n{text}\n")
+    try:  # la note alimente aussi la mémoire cherchable (titre = première ligne)
+        from . import memoire
+        premiere = text.splitlines()[0]
+        memoire.noter(titre=premiere[:160], corps=text, source="note")
+    except Exception:  # noqa: BLE001 — le journal reste la référence ; la mémoire est un plus
+        pass
     store.feed_add("note", text if len(text) < 160 else text[:157] + "…")
     if a.envoyer:
         notify.telegram(f"📝 Bilan du chef\n\n{text}")
@@ -357,12 +376,21 @@ def cmd_regler(a) -> int:
         return _err(f"{a.cle} accepte : {', '.join(allowed)}")
     if isinstance(current, bool):
         value = a.valeur.lower() in ("1", "true", "oui", "vrai", "on")
-    elif isinstance(current, int):
+    elif isinstance(current, int) and config._BORNES.get((section, key), (int,))[0] is not float:
         try:
             value = int(a.valeur)
         except ValueError:
+            return _err(f"{a.cle} attend un nombre entier")
+    elif isinstance(current, (int, float)):
+        try:
+            value = float(a.valeur.replace(",", "."))
+        except ValueError:
             return _err(f"{a.cle} attend un nombre")
     data[section][key] = value
+    erreurs = config.valider(data)
+    if erreurs:
+        # Un réglage invalide fermerait l'admission : on le refuse plutôt que de l'écrire.
+        return _err("réglage refusé : " + " ; ".join(erreurs))
     config.save_settings(data)
     print(f"{a.cle} = {value}")
     return 0
@@ -680,7 +708,8 @@ def cmd_tache_enregistrer(a) -> int:
     fiche = taches.enregistrer(projet=a.projet, issue=a.issue, agent=a.agent, worktree=a.worktree, chemin=a.chemin,
                                role=a.role, modele=a.modele, modele_id=a.modele_id, effort=a.effort, repli=a.repli,
                                taille=a.taille, plan=a.plan, revue=a.revue, raison=a.raison, secours=a.secours,
-                               classe=a.classe, reservation=a.reservation)
+                               classe=a.classe, reservation=a.reservation, jetons_max=int(a.jetons_max or 0),
+                               consignes_empreinte=a.consignes_empreinte)
     if a.reservation:
         from . import admission
         admission.confirmer(a.reservation, fiche["id"], a.worktree)
@@ -700,6 +729,10 @@ def cmd_lancement_args(a) -> int:
     Une ligne « arg<TAB>valeur » par argument du CLI, « env<TAB>NOM=valeur » par variable.
     """
     from . import livrables, modeles, taches
+    if os.environ.get("JARVIS_METIER") or os.environ.get("JARVIS_ROLE"):
+        # Réservé aux lanceurs, qui l'appellent AVANT de démarrer l'agent : un agent ou le chef qui l'appellerait
+        # depuis le worktree d'un autre rôle lirait ses secrets.
+        return _err("lancement-args est réservé aux lanceurs de Jarvis.", 4)
     fiche = taches.par_chemin(os.getcwd())
     if not fiche:
         return 0  # worktree inconnu du registre (lancé à la main) : réglages par défaut du CLI
@@ -735,11 +768,26 @@ def cmd_lancement_args(a) -> int:
            "JARVIS_LIVRABLES": str(livrables.dossier(fiche["projet"], fiche["issue"]))}
     for k, v in env.items():
         print(f"env\t{k}={v}")
+    # Secrets minimaux : seulement ceux du rôle de la tâche. Les valeurs ne passent que par ce canal
+    # (lu par le lanceur), jamais par un fichier, un journal ou le prompt. Les noms seuls sont tracés.
+    from . import secrets
+    try:
+        injectes = secrets.pour_tache(fiche["projet"], fiche["role"])
+    except secrets.SecretsError as exc:
+        store.feed_add("erreur", f"secrets de {fiche['projet']} non injectés : {exc}")
+        injectes = {}
+    for k, v in injectes.items():
+        print(f"secret\t{k}={v}")
+    if injectes:
+        store.feed_add("systeme", f"{fiche['projet']} {fiche['issue']} [{fiche['role']}] : secrets injectés : "
+                                  + ", ".join(sorted(injectes)))
     return 0
 
 
 def cmd_tache_liste(a) -> int:
     from . import modeles, roles, taches
+    if a.quoi and a.quoi[0] in ("voir", "echec", "relancer"):
+        return _cmd_tache_action(a)
     nombres = [x for x in a.quoi if x != "liste"]
     if len(nombres) > 1 or any(not x.isdigit() or int(x) < 1 for x in nombres):
         return _err("usage : jarvis tache [n]  (n = nombre de tâches à afficher)")
@@ -755,7 +803,135 @@ def cmd_tache_liste(a) -> int:
             ligne += f" · {taches.fmt_jetons(t['jetons'].get('total', 0))} jetons"
         if t.get("verdict"):
             ligne += f" · relecture : {taches.VERDICTS[t['verdict']]}"
+        if t.get("echec"):
+            ligne += f" · échec : {t['echec']['classe']}"
         print(ligne)
+    return 0
+
+
+def _cmd_tache_action(a) -> int:
+    """jarvis tache voir <T-id> · tache echec <T-id> <classe> [note] · tache relancer <T-id> --autoriser."""
+    from . import couts, roles, taches, usage
+    action, reste = a.quoi[0], a.quoi[1:]
+    if not reste:
+        return _err(f"usage : jarvis tache {action} <T-xxxxx>" + (" <classe> [note]" if action == "echec" else ""))
+    t = taches.get(reste[0])
+    if not t:
+        return _err(f"tâche {reste[0]} introuvable")
+    if action == "voir":
+        unite = taches.unite(t["projet"], t["issue"], t.get("role", ""))
+        comptes = taches._essais_comptes(unite)
+        maxi = taches.ESSAIS_AUTO + taches.autorisations(t["projet"], t["issue"], t.get("role", ""))
+        c = couts.cout_fiche(t)
+        cpt = usage.compteur_tache(t["id"]) or {}
+        r = roles.ou_defaut(t.get("role"))
+        print(f"{t['id']} — {t['projet']} {t['issue']} [{r['titre']}, taille {t.get('taille', 'M')}] · {t['agent']} "
+              f"{t.get('modele') or ''} · {taches.STATUTS.get(t['statut'], t['statut'])}")
+        print(f"  essai {t.get('essai') or '?'} · essais comptés pour cette unité : {len(comptes)}/{maxi}")
+        if t.get("echec"):
+            e = t["echec"]
+            print(f"  échec : {e['classe']} ({taches.CLASSES_ECHEC[e['classe']]}, {'constaté' if e['source'] == 'auto' else 'déclaré'}"
+                  + (f" par {e['par']}" if e.get("par") else "") + ")" + (f" — {e['note']}" if e.get("note") else ""))
+        print(f"  jetons de l'unité : {taches.fmt_jetons(cpt.get('jetons', 0))} / plafond {taches.fmt_jetons(cpt.get('plafond', 0))}"
+              + (" — PLAFOND ATTEINT" if cpt.get("depasse") else ""))
+        print(f"  cette tâche : {taches.fmt_jetons(c['jetons'])} jetons · équivalent API {couts.monnaie(c['usd'])}"
+              + (" (estimation)" if c["estimation"] else ""))
+        for x in unite:
+            if x["id"] != t["id"]:
+                print(f"  autre essai : {x['id']} {taches.STATUTS.get(x['statut'], x['statut'])}"
+                      + (f" · échec {x['echec']['classe']}" if x.get("echec") else ""))
+        return 0
+    if action == "echec":
+        if len(reste) < 2:
+            return _err(f"usage : jarvis tache echec <T-xxxxx> <classe> [note] (classes : {', '.join(taches.CLASSES_ECHEC)})")
+        if os.environ.get("JARVIS_METIER"):
+            return _err("un agent ne classe pas son propre échec : le chef ou ton humain le fait.", 4)
+        try:
+            taches.classer(t["id"], reste[1], source="declare", par=_acteur(), note=" ".join(reste[2:]))
+        except ValueError as exc:
+            return _err(str(exc))
+        print(f"{t['id']} classé : {reste[1]} ({taches.CLASSES_ECHEC[reste[1]]})")
+        return 0
+    # relancer --autoriser : un humain débloque un essai après une escalade
+    if not a.autoriser:
+        return _err("ajoute --autoriser : débloquer un essai après escalade est une décision humaine.")
+    refused = _human_only("débloquer un essai après escalade")
+    if refused is not None:
+        return refused
+    total = taches.autoriser_essai(t["projet"], t["issue"], t.get("role", ""), par="humain", note=" ".join(reste[1:]))
+    print(f"Un essai de plus autorisé pour {t['projet']} {t['issue']} [{t.get('role')}] ({total} au total). "
+          "Le chef peut relancer avec un plan.")
+    ag.chef_inject(f"[JARVIS] Ton humain a débloqué un essai de plus pour {t['projet']} {t['issue']} [{t.get('role')}]. "
+                   "Change d'approche par rapport aux essais précédents.")
+    return 0
+
+
+def cmd_budget_jetons(a) -> int:
+    """jarvis budget-jetons voir <T-id> | defaut [--role R --taille M]"""
+    from . import couts, taches, usage
+    if a.action == "voir":
+        if not a.quoi:
+            return _err("usage : jarvis budget-jetons voir <T-xxxxx>")
+        c = usage.compteur_tache(a.quoi[0])
+        if not c:
+            return _err(f"tâche {a.quoi[0]} introuvable")
+        t = taches.get(c["tache"])
+        print(f"{t['projet']} {t['issue']} [{t.get('role')}] : {taches.fmt_jetons(c['jetons'])} jetons consommés "
+              f"(relances comprises) / plafond {taches.fmt_jetons(c['plafond'])} · reste {taches.fmt_jetons(c['reste'])}"
+              + (" — PLAFOND ATTEINT : aucune relance" if c["depasse"] else ""))
+        return 1 if c["depasse"] else 0
+    plafond, source = couts.plafond_defaut(a.role or "", a.taille or "M")
+    print(f"Plafond par défaut [{a.role or 'generaliste'}, taille {(a.taille or 'M').upper()}] : "
+          f"{taches.fmt_jetons(plafond)} jetons — {source}")
+    return 0
+
+
+def cmd_cout(a) -> int:
+    from . import couts, taches
+    note = couts.note_monnaie()
+    entete = "Équivalent API (tarifs publics) : ce que ces tâches auraient coûté hors abonnement, pas une dépense."
+    if a.action == "tache":
+        if not a.quoi:
+            return _err("usage : jarvis cout tache <T-xxxxx>")
+        t = taches.get(a.quoi[0])
+        if not t:
+            return _err(f"tâche {a.quoi[0]} introuvable")
+        c = couts.cout_fiche(t)
+        tf = couts.tarif(t["agent"], t.get("modele", ""))
+        print(entete)
+        print(f"{t['id']} {t['projet']} {t['issue']} · {t['agent']} {t.get('modele') or 'défaut'} · "
+              f"{taches.fmt_jetons(c['jetons'])} jetons → {couts.monnaie(c['usd'])}"
+              + (f" (estimation : {c['raison']})" if c["estimation"] else ""))
+        if tf.get("prix_in") is not None:
+            print(f"  tarif {tf['modele']} : entrée {tf['prix_in']:g} $, sortie {tf['prix_out']:g} $ par million de jetons")
+    elif a.action == "projet":
+        if not a.quoi:
+            return _err("usage : jarvis cout projet <nom> [--periode 7j]")
+        try:
+            r = couts.par_projet(a.quoi[0], a.periode)
+        except ValueError as exc:
+            return _err(str(exc))
+        print(entete)
+        print(f"{r['projet']} sur {r['periode']} : {len(r['lignes'])} tâche(s), {taches.fmt_jetons(r['jetons'])} jetons, "
+              f"{couts.monnaie(r['usd'])}" + (" (contient des estimations)" if r["estimation"] else "")
+              + (f", {r['inconnus']} tâche(s) sans mesure" if r["inconnus"] else ""))
+        for x in sorted(r["lignes"], key=lambda x: -(x["usd"] or 0))[:15]:
+            print(f"  {x['id']} {x['issue']:<10} {x['role']:<12} {x['modele']:<14} {taches.fmt_jetons(x['jetons']):>7} "
+                  f"{couts.monnaie(x['usd'])}{' *' if x['estimation'] else ''}")
+    else:
+        r = couts.semaine(a.n)
+        print(entete)
+        print(f"7 derniers jours : {taches.fmt_jetons(r['jetons'])} jetons, {couts.monnaie(r['usd'])}"
+              + (" (contient des estimations, marquées *)" if r["estimation"] else ""))
+        for p, usd in sorted(r["projets"].items(), key=lambda kv: -kv[1]):
+            print(f"  {p:<16} {couts.monnaie(usd)}")
+        if r["lignes"]:
+            print("Tâches les plus coûteuses :")
+            for x in r["lignes"]:
+                print(f"  {x['id']} {x['projet']} {x['issue']:<10} {x['role']:<12} {x['modele']:<14} "
+                      f"{taches.fmt_jetons(x['jetons']):>7} {couts.monnaie(x['usd'])}{' *' if x['estimation'] else ''}")
+    if note:
+        print(note)
     return 0
 
 
@@ -776,6 +952,13 @@ def cmd_verdict(a) -> int:
 
 def cmd_bilan(a) -> int:
     from . import taches
+    if a.quoi == "quotidien":
+        from . import bilan
+        texte = bilan.quotidien()
+        print(texte)
+        if a.envoyer:
+            print("Envoyé sur Telegram." if notify.telegram(texte) else "Telegram non configuré ou injoignable.")
+        return 0
     b = taches.bilan(a.jours)
     if a.json:
         print(json.dumps(b, ensure_ascii=False, indent=2, default=str))
@@ -880,6 +1063,7 @@ def cmd_chef_preparer(a) -> int:
     secrets = []
     for d in sorted({_rule_path(x) for x in protected if x not in (config.STATE_DIR, config.CONFIG_DIR)}):
         secrets += [f"Read({d}/**/.env)", f"Read({d}/**/.env.*)"]
+    secrets.append(f"Read({_rule_path(config.CONFIG_DIR / 'secrets')}/**)")  # secrets par rôle (vague 1)
 
     settings = {
         "permissions": {
@@ -896,7 +1080,9 @@ def cmd_chef_preparer(a) -> int:
                 "Bash(jarvis audit)", "Bash(jarvis audit *)", "Bash(jarvis profil liste)", "Bash(jarvis profil voir *)",
                 "Bash(jarvis diagnostic)", "Bash(jarvis diagnostic *)", "Bash(jarvis politique)", "Bash(jarvis politique *)",
                 "Bash(jarvis budget)", "Bash(jarvis budget *)", "Bash(jarvis fournisseurs)", "Bash(jarvis fournisseurs *)",
-                "Bash(jarvis proposition *)",
+                "Bash(jarvis proposition *)", "Bash(jarvis memoire)", "Bash(jarvis memoire *)",
+                "Bash(jarvis cout)", "Bash(jarvis cout *)", "Bash(jarvis budget-jetons *)",
+                "Bash(jarvis secrets verifier *)",
                 # Usine : rôles, routeur, registre, bilan, studio et livrables.
                 "Bash(jarvis role)", "Bash(jarvis role *)", "Bash(jarvis modele)", "Bash(jarvis modele liste)",
                 "Bash(jarvis modele choisir *)", "Bash(jarvis modele proposer *)",
@@ -928,6 +1114,7 @@ def cmd_chef_preparer(a) -> int:
                 "Bash(jarvis profil appliquer *)", "Bash(jarvis admission demander *)", "Bash(jarvis admission liberer *)",
                 "Bash(jarvis lourd debut *)", "Bash(jarvis lourd exec *)", "Bash(jarvis lourd fin *)",
                 "Bash(jarvis politique appliquer *)", "Bash(jarvis politique deleguer *)", "Bash(jarvis budget definir *)",
+                "Bash(jarvis tache relancer *)",
                 # Contournements de « jarvis task » et accès directs au noyau.
                 "Bash(workmux add *)", "Bash(workmux run *)", "Bash(python *)", "Bash(python3 *)",
                 "Bash(env *)", "Bash(script *)",
@@ -1269,6 +1456,42 @@ def cmd_proposition(a) -> int:
     return 0
 
 
+def cmd_secrets(a) -> int:
+    from . import secrets
+    if not a.projet:
+        return _err("usage : jarvis secrets verifier --projet <nom>")
+    try:
+        print("\n".join(secrets.verifier(a.projet)))
+    except secrets.SecretsError as exc:
+        return _err(str(exc))
+    return 0
+
+
+def cmd_memoire(a) -> int:
+    from . import memoire
+    try:
+        if a.action == "noter":
+            if not a.titre:
+                return _err("usage : jarvis memoire noter --titre \"…\" [--decisions \"a ; b\"] [--echecs …] [--lecons …] [--projet P] [corps]")
+            e = memoire.noter(titre=a.titre, corps=" ".join(a.quoi), decisions=a.decisions, echecs=a.echecs,
+                              lecons=a.lecons, projet=a.projet or "", etiquettes=a.etiquettes, source=_acteur())
+            print(f"{e['id']} noté : {e['titre']}")
+        elif a.action == "chercher":
+            if not a.quoi:
+                return _err("usage : jarvis memoire chercher <mots…> [--projet P] [--jours 90]")
+            print(memoire.texte(memoire.chercher(" ".join(a.quoi), jours=a.jours, projet=a.projet or "", limite=a.n), a.jours))
+        else:
+            entrees = memoire.toutes()[-a.n:]
+            if not entrees:
+                print("Mémoire vide. À la fin de chaque vague : jarvis memoire noter --titre … --lecons …")
+            for e in entrees:
+                quand = time.strftime("%d/%m/%Y", time.localtime(e.get("ts", 0)))
+                print(f"{e['id']} [{quand}{', ' + e['projet'] if e.get('projet') else ''}] {e['titre']}")
+    except ValueError as exc:
+        return _err(str(exc))
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(prog="jarvis", description="Poste de pilotage des agents IA")
     sub = p.add_subparsers(dest="cmd", required=True)
@@ -1309,6 +1532,7 @@ def build_parser() -> argparse.ArgumentParser:
     s.add_argument("agent")
     s.add_argument("--revue", action="store_true")
     s.add_argument("--worktree", default="")
+    s.add_argument("--consignes-empreinte", default="")
     s.set_defaults(fn=cmd_plan_verifier)
     s = plan.add_parser("relacher", help=argparse.SUPPRESS)
     s.add_argument("id")
@@ -1331,6 +1555,8 @@ def build_parser() -> argparse.ArgumentParser:
     s.add_argument("--worktree", default="")
     s.add_argument("--role", default="")
     s.add_argument("--classe", default="")
+    s.add_argument("--taille", default="M")
+    s.add_argument("--consignes-empreinte", default="")
     s.add_argument("--forcer", action="store_true", help="passer outre la capacité (humain seulement, jamais les pauses)")
     s.set_defaults(fn=cmd_admission)
     s = adm.add_parser("liberer", help=argparse.SUPPRESS)
@@ -1414,6 +1640,24 @@ def build_parser() -> argparse.ArgumentParser:
     s.add_argument("texte", nargs="+")
     s.add_argument("--envoyer", action="store_true", help="envoyer aussi le bilan sur Telegram")
     s.set_defaults(fn=cmd_note)
+
+    s = sub.add_parser("secrets", help="secrets minimaux par rôle : ce que recevrait chaque agent (noms seuls)")
+    s.add_argument("action", choices=("verifier",))
+    s.add_argument("--projet", default="")
+    s.set_defaults(fn=cmd_secrets)
+
+    s = sub.add_parser("memoire", help="mémoire du chef : décisions, échecs, leçons (recherche pondérée)")
+    s.add_argument("action", nargs="?", default="liste", choices=("noter", "chercher", "liste"))
+    s.add_argument("quoi", nargs="*")
+    s.add_argument("--titre", default="")
+    s.add_argument("--decisions", default="")
+    s.add_argument("--echecs", default="")
+    s.add_argument("--lecons", default="")
+    s.add_argument("--etiquettes", default="")
+    s.add_argument("--projet", default="")
+    s.add_argument("--jours", type=int, default=90)
+    s.add_argument("-n", type=int, default=8)
+    s.set_defaults(fn=cmd_memoire)
 
     s = sub.add_parser("journal", help="relire la fin du journal du chef")
     s.add_argument("--caracteres", type=int, default=6000)
@@ -1530,13 +1774,28 @@ def build_parser() -> argparse.ArgumentParser:
     s.add_argument("id")
     s.set_defaults(fn=lambda a: cmd_modele_decision(a, False))
 
-    s = sub.add_parser("tache", help="registre des tâches lancées")
-    s.add_argument("quoi", nargs="*", metavar="[liste] [n]", help="nombre de tâches à afficher (20 par défaut)")
+    s = sub.add_parser("tache", help="registre des tâches : liste, voir, echec, relancer")
+    s.add_argument("quoi", nargs="*", metavar="[liste] [n] | voir <T> | echec <T> <classe> [note] | relancer <T> --autoriser",
+                   help="nombre de tâches à afficher (20 par défaut), ou une action sur une tâche")
+    s.add_argument("--autoriser", action="store_true", help="relancer : débloquer un essai après escalade (humain)")
     s.set_defaults(fn=cmd_tache_liste)
+    s = sub.add_parser("budget-jetons", help="plafond de jetons d'une unité de travail")
+    s.add_argument("action", choices=("voir", "defaut"))
+    s.add_argument("quoi", nargs="*")
+    s.add_argument("--role", default="")
+    s.add_argument("--taille", default="M")
+    s.set_defaults(fn=cmd_budget_jetons)
+    s = sub.add_parser("cout", help="équivalent API des tâches (tâche, projet, semaine)")
+    s.add_argument("action", nargs="?", default="semaine", choices=("tache", "projet", "semaine"))
+    s.add_argument("quoi", nargs="*")
+    s.add_argument("--periode", default="7j")
+    s.add_argument("-n", type=int, default=10)
+    s.set_defaults(fn=cmd_cout)
     s = sub.add_parser("tache-enregistrer", help=argparse.SUPPRESS)
     for opt in ("projet", "issue", "agent", "worktree"):
         s.add_argument(f"--{opt}", required=True)
-    for opt in ("chemin", "role", "modele", "modele-id", "effort", "repli", "plan", "revue", "raison", "classe", "reservation"):
+    for opt in ("chemin", "role", "modele", "modele-id", "effort", "repli", "plan", "revue", "raison", "classe", "reservation",
+                "jetons-max", "consignes-empreinte"):
         s.add_argument(f"--{opt}", default="")
     s.add_argument("--taille", default="M")
     s.add_argument("--secours", action="store_true")
@@ -1559,7 +1818,9 @@ def build_parser() -> argparse.ArgumentParser:
     s.add_argument("verdict", choices=("pret", "corrections"))
     s.add_argument("note", nargs="*")
     s.set_defaults(fn=cmd_verdict)
-    s = sub.add_parser("bilan", help="ce que l'usine a produit (par fournisseur, rôle et modèle)")
+    s = sub.add_parser("bilan", help="ce que l'usine a produit ; « quotidien » : le bilan du matin")
+    s.add_argument("quoi", nargs="?", choices=("quotidien",))
+    s.add_argument("--envoyer", action="store_true", help="quotidien : l'envoyer aussi sur Telegram")
     s.add_argument("--jours", type=float, default=7)
     s.add_argument("--json", action="store_true")
     s.set_defaults(fn=cmd_bilan)

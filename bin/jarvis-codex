@@ -53,12 +53,25 @@ fi
 # Modèle, effort et variables du poste : fiche de la tâche de ce worktree (aucune hors Jarvis).
 modele=()
 if [[ "${1:-}" != --tester-commit* ]]; then
+  secrets_noms=()
   while IFS=$'\t' read -r kind val; do
     case "$kind" in
       arg) modele+=("$val") ;;
       env) export "${val?}" ;;
+      secret) export "${val?}"; secrets_noms+=("${val%%=*}") ;;
     esac
   done < <(PYTHONPATH="$JARVIS_HOME/lib" python3 -m jarvis lancement-args codex 2>/dev/null || true)
+  # Codex retire de ses sous-processus toute variable dont le nom contient KEY, SECRET ou TOKEN. Pour laisser
+  # passer les secrets autorisés de la tâche sans élargir le reste : filtre par défaut désactivé, et les AUTRES
+  # variables sensibles présentes exclues nommément (noms seulement sur la ligne de commande, jamais de valeur).
+  if ((${#secrets_noms[@]})); then
+    excl="$(PYTHONPATH="$JARVIS_HOME/lib" python3 -c '
+import json, sys
+from jarvis import secrets
+print(json.dumps(secrets.exclusions_codex(sys.argv[1:], existantes=secrets.exclusions_codex_utilisateur())))' \
+      "${secrets_noms[@]}")" || { echo "jarvis-codex : impossible de préparer le filtre des secrets, agent non lancé" >&2; exit 1; }
+    modele+=(-c "shell_environment_policy.ignore_default_excludes=true" -c "shell_environment_policy.exclude=$excl")
+  fi
   if [[ -n "${JARVIS_LIVRABLES:-}" ]]; then
     mkdir -p "$JARVIS_LIVRABLES" 2>/dev/null && add_root "$JARVIS_LIVRABLES"
   fi

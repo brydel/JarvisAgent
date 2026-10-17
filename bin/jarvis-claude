@@ -19,6 +19,8 @@ while IFS=$'\t' read -r kind val; do
   case "$kind" in
     arg) args+=("$val") ;;
     env) export "${val?}" ;;
+    # Secrets minimaux du rôle de la tâche (~/.config/jarvis/secrets/<projet>.toml) : environnement seulement.
+    secret) export "${val?}" ;;
   esac
 done < <(PYTHONPATH="$JARVIS_HOME/lib" python3 -m jarvis lancement-args claude 2>/dev/null || true)
 

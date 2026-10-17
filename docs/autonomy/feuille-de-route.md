@@ -5,16 +5,15 @@ humaine**, puis la rentabilité des produits. Pas de nouveaux agents sans preuve
 
 ## Lot 2 — à terminer
 
-- Classification des échecs d'agent (bloqué, erreur d'outil, hors périmètre, quota, régression) à partir
-  des événements existants (`taches.json`, `jarvis verdict`, captures), avec reprise bornée par tâche
-  (2 essais, puis changement d'approche/modèle, puis escalade) — conçu.
-- Secrets minimaux par tâche (variables autorisées par rôle, injectées par les lanceurs) — conçu
-  (`securite.md`).
+- Classification des échecs et reprise bornée — **fait en vague 1** (`vague-1.md`).
+- Secrets minimaux par tâche — **fait en vague 1** (`vague-1.md`).
 - Import périodique des propositions GitHub par le démon (réglage `propositions.github_depot`) — conçu,
   volontairement manuel pour le premier essai.
-- Bilan quotidien automatique (livré, prouvé, échoué, dépensé, risques, décisions demandées) envoyé sur
-  Telegram le matin : agrège `jarvis bilan`, `jarvis budget`, `jarvis politique exceptions`, `jarvis audit` —
-  conçu.
+- Bilan quotidien automatique — **fait en vague 1** (`vague-1.md`).
+- Vague 2 (prompt maître) : harnais d'évaluation, backend d'exécution abstrait, replay, observabilité, rollback
+  assisté — à faire. Attention : E2B (service payant), promptfoo et GEPA (appels d'API payants) restent hors runtime
+  et désactivés sans budget ; un proxy LiteLLM ne s'applique pas aux agents sur abonnement (il les ferait passer
+  sur des clés API), seulement aux fonctions IA des produits.
 - Dépendances explicites entre éléments de plan (A avant B) — conçu.
 
 ## Lot 3 — un parcours commercial pour un seul produit, en simulation

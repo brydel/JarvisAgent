@@ -29,7 +29,9 @@ PROPOSITIONS_FILE = "modeles_propositions.json"
 FOURNISSEURS = ("claude", "codex")
 EFFORTS = ("low", "medium", "high", "xhigh")
 TAILLES = {"S": -1, "M": 0, "L": 1}
-CHAMPS = ("fournisseur", "id", "niveau", "cout", "effort", "repli", "atouts", "note", "actif")
+CHAMPS = ("fournisseur", "id", "niveau", "cout", "effort", "repli", "atouts", "note", "actif",
+          "prix_in", "prix_out", "prix_cache_lecture", "prix_cache_ecriture", "prix_source", "prix_date")
+PRIX = ("prix_in", "prix_out", "prix_cache_lecture", "prix_cache_ecriture")
 _NOM_RE = re.compile(r"^[a-z0-9][a-z0-9._-]{0,39}$")
 _ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:\[\]/-]{0,79}$")
 
@@ -86,7 +88,22 @@ def _normaliser(nom: str, brut: dict) -> dict | None:
         "atouts": [x.strip().lower() for x in str(brut.get("atouts") or "").split(",") if x.strip()],
         "note": str(brut.get("note") or ""),
         "actif": brut.get("actif", True) is not False,
+        # Tarifs API publics en dollars US par million de jetons (équivalent API, pas une dépense) ;
+        # None = inconnu. Voir couts.py.
+        **{k: _prix(brut.get(k)) for k in PRIX},
+        "prix_source": str(brut.get("prix_source") or ""),
+        "prix_date": str(brut.get("prix_date") or ""),
     }
+
+
+def _prix(v) -> float | None:
+    if v is None or isinstance(v, bool) or v == "":
+        return None
+    try:
+        f = float(v)
+    except (TypeError, ValueError):
+        return None
+    return f if 0 <= f < 10_000 else None
 
 
 def catalogue() -> dict[str, dict]:
@@ -106,8 +123,8 @@ def catalogue() -> dict[str, dict]:
 def _toml(v) -> str:
     if isinstance(v, bool):
         return "true" if v else "false"
-    if isinstance(v, int):
-        return str(v)
+    if isinstance(v, (int, float)):
+        return repr(v) if isinstance(v, float) else str(v)
     # Une seule ligne, sans caractère de contrôle : un retour à la ligne rendrait le fichier illisible.
     propre = " ".join("".join(c if c.isprintable() else " " for c in str(v)).split())
     return '"' + propre.replace("\\", "\\\\").replace('"', '\\"') + '"'

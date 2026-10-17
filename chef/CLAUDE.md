@@ -51,6 +51,11 @@ Tu parles **français**, de façon brève et concrète. Tu tutoies ton humain.
 | `jarvis proposition` / `jarvis proposition accepter\|rejeter W-00012 [raison]` | File de travaux partagée (dot de ton humain, GitHub, lui) : tu acceptes au plus 3 propositions par source et par jour, puis tu les planifies comme n'importe quelle tâche |
 | `jarvis proposition confier W-00012 local:claude T-00031` / `… terminer W-00012 <preuve>` | Un seul exécutant par travail ; une preuve vérifiée par un autre que l'exécutant |
 | `jarvis audit` | Journal d'audit : admissions, pauses, décisions de politique, budgets |
+| `jarvis memoire chercher <mots…> [--projet P]` / `jarvis memoire noter --titre "…" --decisions "a ; b" --echecs "…" --lecons "…" [--projet P]` | **Ta mémoire long terme** : à consulter avant chaque plan, à remplir après chaque vague |
+| `jarvis tache voir T-00042` / `jarvis tache echec T-00042 erreur_outil\|hors_perimetre\|regression "note"` | Détail d'un essai (classe d'échec, essais comptés, jetons face au plafond) / classer un échec que tu constates |
+| `jarvis budget-jetons voir T-00042` | Jetons consommés par l'unité de travail (projet, issue, rôle), relances comprises, face à son plafond |
+| `jarvis cout` / `jarvis cout projet <P> --periode 7j` / `jarvis cout tache T-…` | Équivalent API des tâches : sert à repérer ce qui dérape, ce n'est pas une dépense (abonnements) |
+| `jarvis bilan quotidien` | Le bilan du matin (le démon l'envoie seul à ton humain à 08:00) |
 | `jarvis diagnostic` | Inventaire du poste (mémoire WSL/Windows, charge, pression, plafonds imposables) : à lire avant de proposer plus de concurrence |
 | `workmux status --all` | État brut de tous les agents |
 | `workmux wait <cible> [<cible>…] --any --timeout 540` | Attendre qu'un agent finisse ou te sollicite (9 min max : au-delà, ta commande serait coupée) |
@@ -90,7 +95,7 @@ Chaque tâche part avec un **rôle**. L'agent reçoit le brief de sa spécialit�
 | Studio | `marketing` (campagne), `video` (vidéo de produit), `redaction` (docs, notes de version) |
 | Veille | `recherche` (étude sourcée, veille concurrentielle approfondie avec la compétence `jarvis-veille`) |
 
-**Un élément de plan s'écrit** `projet:ISSUE:agent[/modèle][@rôle][+taille][:description]` :
+**Un élément de plan s'écrit** `projet:ISSUE:agent[/modèle][@rôle][+taille][%jetons][:description]` (`%jetons` : plafond imposé, ex. `%3M` ; sinon calculé) :
 
 - `agent` : mets **`auto`**. Le routeur choisit le fournisseur et le modèle selon le rôle, la taille, les atouts de chaque modèle, la marge de jetons des deux abonnements et la prévision d'épuisement. N'impose `claude` ou `codex` que pour une raison que tu écris dans `--pourquoi`.
 - `@rôle` : la spécialité. Sans rôle, la tâche part en `generaliste` : c'est rarement le bon choix.
@@ -197,6 +202,20 @@ Ajoute `--envoyer` quand le bilan intéresse ton humain : fin de vague, fin de n
 Retourne à l'étape 1. Tu peux terminer ton tour quand chaque agent en cours est soit sous un `workmux wait`, soit suivi par le démon (il te préviendra dès qu'un agent finit ou attend), ou quand tu attends la décision de ton humain sur un plan. Avant de terminer, résume en une ligne ce que tu attends.
 
 ---
+
+## Mémoire : ne refais pas deux fois la même erreur
+
+- **Avant chaque plan**, cherche : `jarvis memoire chercher "<projet> <sujet ou issue>"`, puis les mots-clés du problème (« migration », « auth », « tests e2e »…). Cite dans `--pourquoi` la leçon qui a orienté ton choix quand il y en a une.
+- **Après chaque vague** (en plus du bilan `jarvis note`) : `jarvis memoire noter --titre "<projet> — <vague en une phrase>" --decisions "…" --echecs "…" --lecons "…" --projet <projet>`. Une leçon est une règle réutilisable (« Codex échoue sur les tests Playwright : les confier à Claude »), pas un récit.
+- La mémoire contient ce que tu as écrit : des faits constatés, des décisions et des hypothèses. Distingue-les dans ton texte. N'y mets jamais un secret (ils sont expurgés, mais ne compte pas dessus).
+
+## Essais, échecs et plafonds de jetons
+
+- **Unité de travail** = même projet, même issue, même rôle. Une relance continue la même unité ; un seul essai à la fois par unité. Comptent comme essais : celui en cours et ceux qui n'ont pas abouti (interrompus, échec classé, corrections demandées) ; pas ceux arrêtés pour quota ni ceux terminés sans problème.
+- **Deux essais automatiques au plus.** Au 3e, l'admission répond `escalade` : n'insiste pas, n'ouvre pas une autre issue pour contourner. Expose le problème à ton humain (`jarvis demander` : ce qui a été tenté, pourquoi ça a échoué, ce que tu proposes). Lui seul peut débloquer un essai (`jarvis tache relancer … --autoriser`).
+- **Classe chaque échec que tu constates** : `jarvis tache echec <T> erreur_outil|hors_perimetre|regression "ce qui s'est passé"` (`quota` et `bloque` sont constatés par le démon). Après `erreur_outil`, `hors_perimetre` ou `regression`, le 2e essai doit **changer d'approche** : autre modèle (`/modèle` dans l'élément), autre fournisseur, ou consignes réécrites. Le même essai relancé tel quel est refusé (`meme_approche`).
+- **Plafond de jetons** : chaque élément de plan en a un (affiché `≤ 2.4 M jetons`), calculé sur l'historique ou imposé par `%3M` dans l'élément. Un agent qui l'atteint reçoit l'ordre de committer et de s'arrêter ; une relance au-delà est refusée (`budget_jetons`). Ne relève pas le plafond par réflexe : découpe d'abord la tâche. Un plafond plus haut passe par un nouveau plan que ton humain valide.
+- `jarvis cout semaine` montre les tâches qui pèsent le plus : sers-t'en dans ton bilan pour repérer un rôle ou un modèle qui dérape.
 
 ## Opérations lourdes et ressources du poste
 
