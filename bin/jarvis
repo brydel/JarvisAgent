@@ -405,7 +405,10 @@ cmd_task() {
   [[ -f "$root/$rules" ]] || warn "$rules absent de ce projet : lance « jarvis init-project » pour ajouter le protocole Linear."
 
   prompt_file="$(mktemp --suffix=.md)"
-  local -a pargs=(--projet "$projet" --issue "$issue" --branche "$branch" --regles "$rules" --role "${F[role]:-}")
+  local brief_file
+  brief_file="$(mktemp)"
+  local -a pargs=(--projet "$projet" --issue "$issue" --branche "$branch" --regles "$rules" --role "${F[role]:-}"
+                  --brief-sortie "$brief_file")
   [[ -n "$revue" ]] && pargs+=(--revue "$revue")
   [[ -n "$consignes" ]] && pargs+=(--consignes "$consignes")
   py prompt-construire "${pargs[@]}" >"$prompt_file" || abandon "impossible de préparer le prompt de l'agent."
@@ -425,6 +428,9 @@ cmd_task() {
                   --classe "${F[classe]:-}" --reservation "$reservation"
                   --jetons-max "${F[jetons_max]:-}" --consignes-empreinte "$empreinte")
   [[ "${F[par_secours]:-0}" == "1" ]] && targs+=(--secours)
+  # Version du brief réellement mise dans le prompt (stable ou candidat en essai).
+  [[ -s "$brief_file" ]] && targs+=(--brief "$(cat "$brief_file")")
+  rm -f "$brief_file"
   # Point de départ de la branche (workmux la crée depuis le dépôt principal) : base exacte d'un rollback.
   local base_sha
   base_sha="$(git -C "$root" rev-parse HEAD 2>/dev/null || true)"

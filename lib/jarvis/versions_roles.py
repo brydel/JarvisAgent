@@ -57,7 +57,14 @@ def get(prop_id: str) -> dict | None:
 
 
 def corps_candidat(p: dict) -> str:
-    return Path(p["fichier"]).read_text(encoding="utf-8")
+    """Le texte approuvé, conservé dans l'état (le fichier dans roles-candidats/ n'est qu'une copie lisible).
+    Son empreinte est revérifiée : un texte modifié après coup n'est jamais servi."""
+    corps = p.get("corps")
+    if corps is None:
+        corps = Path(p["fichier"]).read_text(encoding="utf-8")
+    if empreinte(corps) != p["empreinte"]:
+        raise VersionError(f"{p['id']} : le texte ne correspond plus à celui proposé (modifié après coup) — refusé")
+    return corps
 
 
 def _corps_seul(texte: str) -> tuple[str, str]:
@@ -115,7 +122,7 @@ def proposer(role_nom: str, texte: str, pourquoi: str, *, scores: dict | None = 
         fichier.write_text(corps + "\n", encoding="utf-8")
         p = {"id": pid, "role": role["nom"], "statut": "proposee", "ts": time.time(), "par": par, "source": source,
              "pourquoi": pourquoi.strip()[:800], "scores": scores or {}, "base": empreinte(role["corps"]),
-             "empreinte": empreinte(corps), "fichier": str(fichier), "pct": 0}
+             "empreinte": empreinte(corps), "fichier": str(fichier), "pct": 0, "corps": corps}
         data["propositions"].append(p)
         data["propositions"] = data["propositions"][-200:]
         return dict(p)
@@ -123,21 +130,43 @@ def proposer(role_nom: str, texte: str, pourquoi: str, *, scores: dict | None = 
     p = store.update_json(FILE, _vide(), _add)
     _journal(par, p, "propose", pourquoi)
     from . import notify
-    notify.telegram(texte_proposition(p, role["corps"], corps), notify.role_buttons(p["id"]))
+    message, complet = texte_proposition(p, role["corps"], corps)
+    # Pas de bouton d'accord si tout le diff ne tient pas dans le message : on n'approuve que ce qu'on a lu.
+    boutons = notify.role_buttons(p["id"]) if complet else [[("✋ Refuser", f"rlnon:{p['id']}")]]
+    notify.telegram(message, boutons)
     return p
 
 
-def texte_proposition(p: dict, ancien: str, nouveau: str, max_lignes: int = 40) -> str:
-    diff = list(difflib.unified_diff(ancien.splitlines(), nouveau.splitlines(), "actuel", "candidat", lineterm="", n=1))
-    coupe = diff[:max_lignes] + ([f"… ({len(diff) - max_lignes} lignes de plus : jarvis role candidats {p['id']})"]
-                                 if len(diff) > max_lignes else [])
+def _diff(ancien: str, nouveau: str) -> list[str]:
+    return list(difflib.unified_diff(ancien.splitlines(), nouveau.splitlines(), "actuel", "candidat", lineterm="", n=1))
+
+
+def diff_complet(p: dict) -> str:
+    role = roles.get(p["role"]) or {"corps": ""}
+    return (f"{p['id']} — rôle {p['role']} — {p['statut']} — par {p['par']}\nPourquoi : {p['pourquoi']}\n\n"
+            + "\n".join(_diff(role["corps"], corps_candidat(p))))
+
+
+def texte_proposition(p: dict, ancien: str, nouveau: str, max_lignes: int = 40) -> tuple[str, bool]:
+    """(message, complet). `complet` est faux si le diff a dû être coupé."""
+    from .telegram import MAX_LEN
+    diff = _diff(ancien, nouveau)
     s = p.get("scores") or {}
-    scores = (f"\nScores (cas réussis) : stable {s.get('stable_entrainement', '?')} → candidat "
-              f"{s.get('candidat_entrainement', '?')} ; cas protégés : stable {s.get('stable_protege', '?')} → candidat "
-              f"{s.get('candidat_protege', '?')}") if s else "\nAucun score d'évaluation fourni."
-    return (f"🧠 Brief candidat {p['id']} pour le rôle {p['role']} (par {p['par']})\nPourquoi : {p['pourquoi']}{scores}\n"
+    if s and p.get("par") == "optimiseur":
+        scores = (f"\nScores mesurés (cas réussis) : stable {s.get('stable_entrainement', '?')} → candidat "
+                  f"{s.get('candidat_entrainement', '?')} ; cas protégés : stable {s.get('stable_protege', '?')} → "
+                  f"candidat {s.get('candidat_protege', '?')}")
+    else:
+        scores = "\nAucun score mesuré : proposition non évaluée."
+    tete = (f"🧠 Brief candidat {p['id']} pour le rôle {p['role']} (par {p['par']})\nPourquoi : {p['pourquoi']}{scores}\n"
             f"Si tu approuves : essai sur {_pct()} % des tâches {p['role']}, retour automatique au brief actuel en cas "
-            f"de régression.\n\n" + "\n".join(coupe))
+            f"de régression.\n\n")
+    complet = len(diff) <= max_lignes and len(tete) + sum(len(x) + 1 for x in diff) <= MAX_LEN - 200
+    if complet:
+        return tete + "\n".join(diff), True
+    coupe = diff[:max_lignes]
+    return (tete + "\n".join(coupe) + f"\n… diff trop long pour Telegram : lis-le en entier avec « jarvis role candidats "
+            f"{p['id']} », puis approuve au terminal (« jarvis role approuver {p['id']} »)."), False
 
 
 def _pct() -> int:
@@ -166,6 +195,8 @@ def decider(prop_id: str, ok: bool, par: str) -> dict:
         if p and role and empreinte(role["corps"]) != p["base"]:
             _maj(prop_id, ("proposee",), statut="perimee", fin=time.time())
             raise VersionError("le brief du rôle a changé depuis la proposition : candidat périmé")
+        if p:
+            corps_candidat(p)  # le texte approuvé doit être exactement celui proposé
         p = _maj(prop_id, ("proposee",), statut="canari", pct=_pct(), debut_canari=time.time(), decide_par=par)
     else:
         p = _maj(prop_id, ("proposee",), statut="refusee", fin=time.time(), decide_par=par)
@@ -219,7 +250,7 @@ def choisir(role_nom: str, projet: str, issue: str) -> tuple[str, str | None]:
         return "stable", None
     try:
         return f"candidat:{p['id']}", corps_candidat(p).strip()
-    except OSError:
+    except (OSError, VersionError):
         return "stable", None
 
 

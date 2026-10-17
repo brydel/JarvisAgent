@@ -155,7 +155,15 @@ def transaction() -> Iterator[sqlite3.Connection]:
     finally:
         _local.profondeur -= 1
         if _local.profondeur == 0:
-            c.execute("COMMIT" if ok else "ROLLBACK")
+            if ok:
+                try:
+                    c.execute("COMMIT")
+                except sqlite3.Error:
+                    if c.in_transaction:  # jamais de transaction laissée ouverte derrière une erreur
+                        c.execute("ROLLBACK")
+                    raise
+            elif c.in_transaction:   # SQLite a pu annuler seul : ne pas masquer l'erreur d'origine
+                c.execute("ROLLBACK")
 
 
 # --- Lecture et écriture de l'état --------------------------------------------------

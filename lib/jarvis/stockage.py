@@ -33,10 +33,23 @@ def _fichiers_etat() -> list[Path]:
     return out
 
 
+def _session_active() -> bool:
+    import subprocess
+    try:
+        return subprocess.run(["tmux", "has-session", "-t", config.SESSION], capture_output=True, timeout=10).returncode == 0
+    except (OSError, subprocess.TimeoutExpired):
+        return False
+
+
 def _sans_demon() -> None:
+    """Personne ne doit écrire pendant la copie : ni le démon (bail), ni le cockpit, le chef ou les agents
+    (session tmux de Jarvis)."""
     b = bail.lire()
     if b and b["titulaire"] != bail.identite():
-        raise StockageError(f"un démon tient le bail ({b['titulaire']}) : arrête-le (jarvis start le relancera) puis recommence")
+        raise StockageError(f"un démon tient le bail ({b['titulaire']}) : arrête Jarvis (jarvis stop) puis recommence")
+    if _session_active():
+        raise StockageError(f"la session tmux « {config.SESSION} » tourne (cockpit, chef, agents) : arrête Jarvis "
+                            "(jarvis stop) puis recommence")
 
 
 def _regler(valeur: str) -> None:
@@ -51,11 +64,12 @@ def migrer(par: str = "humain") -> dict:
     _sans_demon()
     racine = config.STATE_DIR
     sauvegarde = racine / "sauvegardes" / f"json-{time.strftime('%Y%m%d-%H%M%S')}"
-    importes, ignores = {}, []
+    importes, ignores, dates = {}, [], {}
     with store.locked("stockage"):
         for p in _fichiers_etat():
             rel = p.relative_to(racine).as_posix()
             try:
+                dates[rel] = p.stat().st_mtime_ns
                 importes[rel] = json.loads(p.read_text(encoding="utf-8"))
             except (OSError, json.JSONDecodeError) as exc:
                 ignores.append(f"{rel} ({exc})")
@@ -72,7 +86,19 @@ def migrer(par: str = "humain") -> dict:
         if ecarts:
             raise StockageError("vérification échouée, rien n'est basculé : " + ", ".join(ecarts[:10]))
         _regler("sqlite")
-    _journal(par, "migre", f"{len(importes)} état(s), sauvegarde {sauvegarde}")
+        # Filet : un fichier réécrit malgré tout entre la copie et la bascule est réimporté (version la plus récente).
+        rattrapes = []
+        for p in _fichiers_etat():
+            rel = p.relative_to(racine).as_posix()
+            if rel in dates and p.stat().st_mtime_ns != dates[rel]:
+                try:
+                    with store.transaction():
+                        store._db_ecrire(rel, json.loads(p.read_text(encoding="utf-8")))
+                    rattrapes.append(rel)
+                except (OSError, json.JSONDecodeError):
+                    ignores.append(f"{rel} (modifié pendant la migration, illisible)")
+    _journal(par, "migre", f"{len(importes)} état(s), sauvegarde {sauvegarde}"
+             + (f", rattrapés : {', '.join(rattrapes)}" if rattrapes else ""))
     return {"importes": len(importes), "ignores": ignores, "sauvegarde": str(sauvegarde), "base": str(store.db_path())}
 
 

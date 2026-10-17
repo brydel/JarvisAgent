@@ -33,8 +33,9 @@ from . import config, store
 LOCK = "skill.lock"
 FILE = "skills.json"
 NAMESPACE = "jarvis-skill"
-NOM_OK = re.compile(r"^[a-z0-9][a-z0-9._-]{0,63}$")
-IGNORES = {".git", "__pycache__", ".DS_Store"}
+NOM_OK = re.compile(r"^[a-z0-9][a-z0-9._-]{0,39}$")   # 40 car. max : le bouton Telegram tient en 64 octets
+INTERDITS = {"__pycache__", ".git"}                   # code compilé ou dépôt imbriqué : jamais relus par un humain
+EXTENSIONS_INTERDITES = (".pyc", ".pyo")
 TAILLE_MAX = 50_000_000
 VALIDITE = 7 * 86400
 
@@ -68,11 +69,16 @@ def liens_dirs() -> list[Path]:
 # --- Empreinte et lock ---------------------------------------------------------------------------
 
 def _fichiers(dossier: Path) -> list[Path]:
+    """Tous les fichiers de la skill (seul le lock est exclu de l'empreinte). Du code compilé (.pyc,
+    __pycache__) ou un dépôt git imbriqué rendent la skill illisible : rien n'échappe à l'empreinte."""
     out = []
     for p in sorted(dossier.rglob("*")):
         rel = p.relative_to(dossier)
-        if any(part in IGNORES for part in rel.parts) or p.suffix == ".pyc" or rel.as_posix() in (LOCK, LOCK + ".sig"):
+        if rel.as_posix() == LOCK:
             continue
+        if any(part in INTERDITS for part in rel.parts) or p.suffix in EXTENSIONS_INTERDITES:
+            raise SkillError(f"fichier refusé dans la skill : {rel} (code compilé ou dépôt imbriqué ; supprime-le, "
+                             "il serait exécuté sans avoir été relu)")
         if p.is_symlink():
             raise SkillError(f"lien symbolique refusé dans la skill : {rel} (il pourrait pointer n'importe où)")
         if p.is_file():
@@ -202,16 +208,21 @@ def _nom_skill(dossier: Path, defaut: str) -> str:
     return nom
 
 
+def sans_identifiants(texte: str) -> str:
+    """Retire « utilisateur:jeton@ » des URL avant tout affichage, journal ou message."""
+    return re.sub(r"(\b[a-z][a-z0-9+.-]*://)[^/\s@]+@", r"\1", str(texte), flags=re.I)
+
+
 def _recuperer(source: str, dest: Path) -> None:
     src = Path(source).expanduser()
     if src.is_dir():
-        shutil.copytree(src, dest, symlinks=True, ignore=shutil.ignore_patterns(".git", "__pycache__", "*.pyc"))
+        shutil.copytree(src, dest, symlinks=True, ignore=shutil.ignore_patterns(".git"))
         return
     if re.match(r"^(https://|git@|ssh://)", source):
         r = subprocess.run(["git", "clone", "--depth", "1", "--quiet", "--", source, str(dest)], capture_output=True,
                            text=True, timeout=300, env={**os.environ, "GIT_TERMINAL_PROMPT": "0"})
         if r.returncode != 0:
-            raise SkillError(f"git clone impossible : {(r.stderr or r.stdout).strip()[:300]}")
+            raise SkillError(f"git clone impossible : {sans_identifiants((r.stderr or r.stdout).strip())[:300]}")
         shutil.rmtree(dest / ".git", ignore_errors=True)
         return
     raise SkillError(f"source introuvable : {source} (dossier local ou URL git https://…)")
@@ -219,13 +230,18 @@ def _recuperer(source: str, dest: Path) -> None:
 
 def installer(source: str, par: str = "humain") -> dict:
     """Met la skill en quarantaine et demande ton approbation. Rien n'est lu par les agents avant."""
+    affichee = sans_identifiants(source)
     q = quarantaine_dir()
     q.mkdir(parents=True, exist_ok=True)
     tmp = Path(tempfile.mkdtemp(prefix="arrivee-", dir=q))
     try:
         _recuperer(source, tmp / "skill")
         d = tmp / "skill"
-        nom = _nom_skill(d, Path(source.rstrip("/")).name.removesuffix(".git"))
+        nom = _nom_skill(d, Path(affichee.rstrip("/")).name.removesuffix(".git"))
+        attente = store.read_json(FILE, {}).get(nom) or {}
+        if attente.get("statut") == "quarantaine" and time.time() - attente.get("ts", 0) <= VALIDITE:
+            # Sinon une réinstallation remplacerait la copie que ton bouton désigne.
+            raise SkillError(f"« {nom} » attend déjà ta décision : refuse-la d'abord (jarvis skill refuser {nom})")
         reel = empreinte(d)
         lock = lire_lock(d)
         if lock and lock.get("empreinte") != reel:
@@ -242,26 +258,34 @@ def installer(source: str, par: str = "humain") -> dict:
         d.rename(cible)
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
-    demande = {"ts": time.time(), "statut": "quarantaine", "source": source, "empreinte": reel, "par": par,
+    demande = {"ts": time.time(), "statut": "quarantaine", "source": affichee, "empreinte": reel, "par": par,
                "version": str((lock or {}).get("version", "")), "auteur": str((lock or {}).get("auteur", "")),
                "signature": sig, "mise_a_jour": actuelle.exists(),
                "fichiers": len(_fichiers(cible))}
     store.update_json(FILE, {}, lambda data: data.update({nom: demande}))
-    _journal(par, nom, "quarantaine", f"{source} {reel[:19]} ({sig})")
+    _journal(par, nom, "quarantaine", f"{affichee} {reel[:19]} ({sig})")
     from . import notify
     texte = (f"🧩 Skill « {nom} » en quarantaine ({'mise à jour' if demande['mise_a_jour'] else 'nouvelle'}) — "
-             f"source {source}\n{demande['fichiers']} fichier(s), empreinte {reel[:23]}…, {sig_detail}.\n"
+             f"source {affichee}\n{demande['fichiers']} fichier(s), empreinte {reel[:23]}…, {sig_detail}.\n"
              f"Une skill exécute du code sur ton poste. Relis-la avant : {cible}")
-    demande["envoye"] = bool(notify.telegram(texte, notify.skill_buttons(nom)))
+    demande["envoye"] = bool(notify.telegram(texte, notify.skill_buttons(nom, jeton(reel))))
     return {"nom": nom, **demande, "quarantaine": str(cible)}
 
 
-def decider(nom: str, ok: bool, par: str) -> dict:
-    """Ta décision sur une skill en quarantaine. `ok` : activation ; sinon la copie est supprimée."""
+def jeton(empreinte_: str) -> str:
+    """Début de l'empreinte, porté par le bouton Telegram : le clic vaut pour CE contenu-là seulement."""
+    return empreinte_.removeprefix("sha256:")[:12]
+
+
+def decider(nom: str, ok: bool, par: str, jeton_attendu: str = "") -> dict:
+    """Ta décision sur une skill en quarantaine. `ok` : activation ; sinon la copie est supprimée.
+    `jeton_attendu` (bouton Telegram) : la demande doit être celle que le message montrait."""
     nom = nom.lower()
     d = store.read_json(FILE, {}).get(nom)
     if not d or d.get("statut") != "quarantaine":
         raise SkillError(f"aucune skill « {nom} » en attente de décision")
+    if jeton_attendu and jeton_attendu != jeton(d["empreinte"]):
+        raise SkillError("ce bouton concerne une autre version de la skill : rien n'est fait")
     cible = quarantaine_dir() / nom
     if not ok:
         shutil.rmtree(cible, ignore_errors=True)
@@ -273,6 +297,8 @@ def decider(nom: str, ok: bool, par: str) -> dict:
     if not cible.is_dir() or empreinte(cible) != d["empreinte"]:
         raise SkillError("la copie en quarantaine a changé depuis la demande : rien n'est activé, réinstalle-la")
     for lien in liens_dirs():
+        if lien.exists() and depot_dir().resolve() in (lien.resolve(), *lien.resolve().parents):
+            raise SkillError(f"{lien} pointe dans le dépôt Jarvis : une skill installée n'y est jamais écrite")
         dst = lien / nom
         if (dst.exists() or dst.is_symlink()) and not (dst.is_symlink() and Path(os.readlink(dst)) == installees_dir() / nom):
             raise SkillError(f"{dst} existe déjà et n'est pas géré par Jarvis : déplace-le d'abord (rien n'est écrasé)")

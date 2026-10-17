@@ -16,14 +16,18 @@ réel (Claude, Telegram, ta clé SSH, ton démon) reste à constater chez toi ; 
 ## P3.2 — Registre de skills avec confiance — implémenté/testé ; vraie signature SSH non vérifiée
 
 - `skill.lock` dans chaque skill : nom, version, empreinte SHA-256 de tout le dossier (chemins + contenus, lock
-  exclu ; les droits d'exécution ne comptent pas, ils varient sous WSL), auteur, signature facultative.
+  exclu ; les droits d'exécution ne comptent pas, ils varient sous WSL), auteur, signature facultative. Du code
+  compilé (`.pyc`, `__pycache__`), un dépôt git imbriqué ou un lien symbolique rendent la skill refusée/illisible :
+  rien n'échappe à l'empreinte.
 - Les 3 skills du dépôt sont épinglées. **Après une modification volontaire d'une skill du dépôt**, lance
   `jarvis skill epingler <nom>` (sinon l'audit et un test la signalent).
 - `jarvis skill installer <dossier|https://…git>` : copie en quarantaine (`~/.local/share/jarvis/skills-quarantaine`,
   hors des dossiers lus par Claude et Codex). Refus si le lock fourni ne correspond pas au contenu, si la
   signature est invalide, ou si le nom est celui d'une skill du dépôt. Liens symboliques refusés.
 - Activation seulement par toi : bouton Telegram « Activer » ou `jarvis skill approuver <nom>` au terminal
-  (niveau 3). La copie doit être identique à celle annoncée ; un fichier existant non géré par Jarvis n'est jamais
+  (niveau 3). Le bouton porte le début de l'empreinte : il n'active que la version qu'il montrait, et une demande
+  en attente ne peut pas être remplacée par une réinstallation. Les identifiants d'une URL git
+  (`https://moi:jeton@…`) sont retirés de tout message, état et journal. La copie doit être identique à celle annoncée ; un fichier existant non géré par Jarvis n'est jamais
   écrasé ; une ancienne version est sauvegardée. Le chef peut proposer une installation, jamais l'approuver.
 - `jarvis skill auditer` : épinglée, modifiée, non épinglée, signature invalide, quarantaine, et **hors registre**
   (lue par les agents sans être passée par Jarvis — tes autres skills, par exemple). Le démon audite toutes les
@@ -42,7 +46,13 @@ réel (Claude, Telegram, ta clé SSH, ton démon) reste à constater chez toi ; 
   l'en-tête du rôle ; **rien n'est jamais écrit dans `roles/`**.
 - Modes : `fixtures` (défaut, simulation déterministe pour vérifier la boucle, jamais soumise), `abonnement`
   (`--confirmer`, vrais agents via l'admission), `dspy` (conçu, refusé).
-- `--appliquer` soumet le candidat (`jarvis role proposer`) : message Telegram avec le diff et les scores.
+- `--appliquer` soumet le candidat (`jarvis role proposer`) : message Telegram avec le diff et les scores mesurés
+  (seul l'optimiseur peut en joindre ; une proposition du chef est marquée « non évaluée »). Si le diff ne tient
+  pas dans le message, pas de bouton d'accord : `jarvis role candidats RB-…` le montre en entier, puis accord au
+  terminal. Le texte approuvé est gardé dans l'état et son empreinte revérifiée à chaque usage : une copie
+  modifiée après coup n'est jamais servie ni promue.
+- La réflexion (`claude -p`) tourne sans aucun outil, depuis un dossier vide : elle ne peut pas lire les cas
+  protégés. Elle vérifie la pause mais ne passe pas par l'admission (un appel court) ; les mesures, si.
 - Ton accord (bouton ou `jarvis role approuver RB-…`) : **canari** sur 10 % des unités de travail du rôle
   (`optimisation.canari_pct`), tirage déterministe par (projet, issue, rôle) ; la fiche de tâche note la version
   reçue (`brief`). Le démon compare chaque heure : ≥ 3 tâches du candidat et 25 points d'échec de plus que le
@@ -53,7 +63,8 @@ réel (Claude, Telegram, ta clé SSH, ton démon) reste à constater chez toi ; 
 - Hebdomadaire : `jarvis regler optimisation.hebdo true` — désactivé par défaut. La nuit de `optimisation.jour`
   (7 = dimanche) après `optimisation.heure`, un rôle par semaine à tour de rôle (`optimisation.roles`), en
   arrière-plan ; chaque mesure passe par l'admission (pause, quota, capacité). Journal :
-  `~/.local/share/jarvis/optimisation/`.
+  `~/.local/share/jarvis/optimisation/`. Le processus survit à `jarvis stop` (son pid est noté dans
+  `optimisation.json`) ; `jarvis pause poser humain` arrête ses mesures suivantes.
 - Limites : 3 cas par rôle, c'est peu (2 d'entraînement, 1 protégé) : un gain mesuré reste fragile, d'où le canari.
   Le retrait compare des tâches réelles différentes : signal statistique faible sur peu de tâches.
 
@@ -62,12 +73,16 @@ réel (Claude, Telegram, ta clé SSH, ton démon) reste à constater chez toi ; 
 - **Stockage SQLite** (`stockage.backend`) : table `etat` (nom → JSON) dans `~/.local/state/jarvis/jarvis.db`,
   WAL, transactions `BEGIN IMMEDIATE` (imbriquées : même transaction), reconnexion si la base est remplacée.
   Restent des fichiers : `*.jsonl` (journal d'audit chaîné, fil, événements, mémoire), marqueurs, `lourdes/`.
-  Toute la suite de tests passe dans les deux modes (`JARVIS_STOCKAGE=sqlite`).
+  Toute la suite de tests passe dans les deux modes (`JARVIS_STOCKAGE=sqlite`). Un COMMIT en échec annule la
+  transaction (jamais laissée ouverte). Limite : en SQLite une écriture verrouille toute la base le temps de
+  l'opération (en JSON, un seul fichier) — les opérations sont courtes.
 - `jarvis stockage migrer` (toi, démon arrêté) : import de chaque JSON, relecture et comparaison valeur par valeur,
   puis bascule ; copie des JSON dans `sauvegardes/json-…`. `jarvis stockage revenir` : export, vérification,
-  bascule. Refusé tant qu'un démon tient le bail.
+  bascule. Refusé tant qu'un démon tient le bail ou que la session tmux de Jarvis tourne (cockpit, chef, agents) ;
+  un fichier réécrit malgré tout pendant la copie est réimporté après la bascule.
 - **Bail d'orchestrateur** (`bail.py`) : le démon le prend au démarrage (sinon il refuse de démarrer et dit qui le
-  tient), le renouvelle à chaque tour (120 s), le rend à l'arrêt (Ctrl+C ou SIGTERM). Repris si expiré ou si le
+  tient), le renouvelle à chaque tour (120 s), le rend à l'arrêt (Ctrl+C, SIGTERM, fenêtre fermée). Cinq erreurs de
+  stockage d'affilée en le renouvelant : le démon s'arrête en erreur et `jarvis start` le relance. Repris si expiré ou si le
   titulaire est mort sur ce poste ; numéro incrémenté à chaque prise : un démon qui perd le bail s'arrête.
 - **Exécutants déclarés** (`jarvis executant liste|declarer|retirer`) : « local » mesuré par le démon chaque minute
   (cœurs, mémoire, agents au maximum) ; d'autres déclarables à la main. L'admission n'utilise que le poste local.
@@ -76,10 +91,12 @@ réel (Claude, Telegram, ta clé SSH, ton démon) reste à constater chez toi ; 
 
 ## Tests
 
-`tests/test_vague3.py` : 14 tests (skills épinglées, quarantaine et approbation, empreinte modifiée, fichier non
+`tests/test_vague3.py` : 16 tests (skills épinglées, quarantaine et approbation, empreinte modifiée, fichier non
 géré jamais écrasé, signature ; optimiseur sans écriture et cas protégés cachés, surapprentissage et goldens
 modifiés ; règles et en-tête du brief, canari/retrait/promotion, hebdomadaire ; bail, démon refusé et bail perdu,
-migration sans perte et retour, exécutants). Suite complète : voir `tests.md`.
+migration sans perte et retour, exécutants ; correctifs de relecture : bouton lié à la version, code compilé et
+identifiants d'URL, brief modifié après accord, diff long sans bouton, scores non déclarables). Une relecture
+indépendante a trouvé 10 problèmes, tous corrigés. Suite complète : voir `tests.md`.
 
 ## Ce qui reste
 

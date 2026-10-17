@@ -48,6 +48,9 @@
   stable en cas de régression, promotion par toi seul ; l'optimiseur ne voit pas les cas protégés et ne peut pas
   modifier les goldens (empreinte contrôlée). `jarvis skill approuver|epingler`, `jarvis role
   approuver|promouvoir`, `jarvis stockage migrer|revenir` et `jarvis executant declarer` sont réservés à l'humain.
+  Le chef n'a pas le droit d'écrire (Edit/Write) dans les skills, la quarantaine, les briefs candidats, les
+  rapports d'optimisation ni dans `~/.claude/skills` et `~/.agents/skills` ; c'est une règle d'outils, pas une
+  isolation (son Bash n'est pas un bac à sable), d'où les empreintes revérifiées à chaque usage.
 
 ## Protection contre l'injection
 

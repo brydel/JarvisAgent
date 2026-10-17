@@ -35,6 +35,7 @@ import os
 import re
 import subprocess
 import sys
+import tempfile
 import time
 import zlib
 from pathlib import Path
@@ -115,6 +116,9 @@ def evaluateur_abonnement(agent: str, modele: str):
     return _eval
 
 
+OUTILS_INTERDITS = ("Read", "Glob", "Grep", "LS", "Bash", "Edit", "Write", "NotebookEdit", "WebFetch", "WebSearch",
+                    "Task", "Agent", "TodoWrite")
+
 PROMPT_REFLEXION = """Tu améliores le brief d'un agent de code spécialisé (rôle : {role}).
 Voici le brief actuel, puis des échecs constatés (évaluations automatiques et tâches réelles).
 Réécris le brief COMPLET pour éviter ces échecs, sans le rallonger inutilement, en gardant toutes les règles
@@ -142,9 +146,14 @@ def proposeur_abonnement(role: str):
             role=role, brief=brief,
             echecs="\n".join(f"- {e['titre']} : {e['detail'][:400]}" for e in echecs) or "(aucun)",
             journal="\n".join(f"- {j}" for j in journal) or "(aucun)")
-        r = subprocess.run(["claude", "-p", texte, "--permission-mode", "plan",
-                            "--settings", json.dumps({"disableAllHooks": True})],
-                           capture_output=True, text=True, timeout=900)
+        # Réflexion sans aucun outil, depuis un dossier vide : le modèle ne peut ni lire les cas protégés
+        # (tests/goldens), ni le CLAUDE.md du dépôt, ni rien d'autre que ce texte.
+        with tempfile.TemporaryDirectory(prefix="jarvis-reflexion-") as vide:
+            r = subprocess.run(["claude", "-p", texte, "--permission-mode", "plan", "--strict-mcp-config",
+                                "--disallowedTools", *OUTILS_INTERDITS,
+                                "--settings", json.dumps({"disableAllHooks": True,
+                                                          "permissions": {"deny": list(OUTILS_INTERDITS)}})],
+                               cwd=vide, capture_output=True, text=True, timeout=900)
         m = re.search(r"<<<BRIEF\s*\n(.*?)\n\s*BRIEF>>>", r.stdout, re.S)
         if r.returncode != 0 or not m:
             raise Arret("réflexion impossible : réponse de claude -p illisible")

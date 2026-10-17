@@ -748,8 +748,9 @@ def optimisation_check(now: float | None = None, lancer=None) -> str | None:
         lancer(cmd)
     else:
         with open(journal_dir / f"hebdo-{semaine}-{role}.log", "a", encoding="utf-8") as log:
-            subprocess.Popen(cmd, stdout=log, stderr=subprocess.STDOUT, start_new_session=True,
-                             env={k: v for k, v in __import__("os").environ.items() if k != "JARVIS_ROLE"})
+            proc = subprocess.Popen(cmd, stdout=log, stderr=subprocess.STDOUT, start_new_session=True, cwd=journal_dir,
+                                    env={k: v for k, v in __import__("os").environ.items() if k != "JARVIS_ROLE"})
+        store.update_json(OPTIM_STATE, {}, lambda d: d.update(pid=proc.pid))
     store.feed_add("systeme", f"optimisation hebdomadaire du brief {role} lancée (résultat soumis à ta décision)")
     return role
 
@@ -831,18 +832,32 @@ def battement_demon() -> None:
 _BAIL: dict | None = None   # bail d'orchestrateur tenu par ce démon (posé par run)
 
 
+_BAIL_ERREURS = 0
+
+
 def bail_check() -> bool:
-    """Renouvelle le bail. False si un autre orchestrateur l'a pris : ce démon doit s'arrêter."""
-    global _BAIL
+    """Renouvelle le bail. False si un autre orchestrateur l'a pris (ou 5 erreurs de stockage d'affilée) : ce
+    démon doit s'arrêter, et sortir en erreur pour que « jarvis start » le relance proprement."""
+    global _BAIL, _BAIL_ERREURS
     if _BAIL is None:
         return True
     from . import bail
+    try:
+        return _bail_renouveler(bail)
+    except Exception as exc:  # noqa: BLE001 — base occupée, disque plein… : passager, sauf s'il dure
+        _BAIL_ERREURS += 1
+        store.feed_add("erreur", f"bail d'orchestrateur : {exc} ({_BAIL_ERREURS}/5)")
+        return _BAIL_ERREURS < 5
+
+
+def _bail_renouveler(bail) -> bool:
+    global _BAIL, _BAIL_ERREURS
     # Expiré pendant une veille du PC mais libre : on le reprend (nouveau numéro). Pris par un autre : perdu.
     b = bail.renouveler(_BAIL["titulaire"], _BAIL["numero"]) or bail.acquerir(_BAIL["titulaire"])
     if not b:
         notify.alert("erreur", "Bail d'orchestrateur perdu : un autre démon Jarvis a pris la main, celui-ci s'arrête.")
         return False
-    _BAIL = b
+    _BAIL, _BAIL_ERREURS = b, 0
     return True
 
 
@@ -920,7 +935,8 @@ def handle_update(bot: Bot, chat_id: str, upd: dict) -> None:
         if action in ("skok", "sknon"):
             from . import skills
             try:
-                r = skills.decider(plan_id, action == "skok", par="Telegram")
+                nom, _, jeton = plan_id.partition(":")
+                r = skills.decider(nom, action == "skok", par="Telegram", jeton_attendu=jeton or "?")
                 verdict = "✅ Skill activée" if r["active"] else "✋ Skill refusée (copie supprimée)"
             except (skills.SkillError, OSError) as exc:
                 verdict = f"⚠ {exc}"
@@ -1130,12 +1146,20 @@ def run() -> None:
         raise KeyboardInterrupt
 
     signal.signal(signal.SIGTERM, _terminer)
+    signal.signal(signal.SIGHUP, _terminer)   # fenêtre tmux fermée : on rend le bail
+    perdu = False
     try:
         while not stop.is_set():
             stop.wait(3600)
-        print("Bail d'orchestrateur perdu : ce démon s'arrête.")
+        perdu = True
+        print("Bail d'orchestrateur perdu ou stockage indisponible : ce démon s'arrête.")
     except KeyboardInterrupt:
         stop.set()
         store.feed_add("systeme", "démon Jarvis arrêté")
     finally:
-        bail.liberer(_BAIL["titulaire"])
+        try:
+            bail.liberer(_BAIL["titulaire"])
+        except Exception:  # noqa: BLE001
+            pass
+    if perdu:
+        raise SystemExit(1)

@@ -49,7 +49,8 @@ def toutes() -> list[dict]:
 def enregistrer(*, projet: str, issue: str, agent: str, worktree: str, chemin: str = "", role: str = "",
                 modele: str = "", modele_id: str = "", effort: str = "", repli: str = "", taille: str = "M",
                 plan: str = "", revue: str = "", raison: str = "", secours: bool = False, classe: str = "",
-                reservation: str = "", jetons_max: int = 0, consignes_empreinte: str = "", base: str = "") -> dict:
+                reservation: str = "", jetons_max: int = 0, consignes_empreinte: str = "", base: str = "",
+                brief: str = "") -> dict:
     """Crée la fiche d'un lancement. `chemin` : dossier du worktree (clé des lanceurs).
 
     `jetons_max` : plafond de jetons de l'unité de travail (projet, issue, rôle), toutes relances comprises.
@@ -58,8 +59,9 @@ def enregistrer(*, projet: str, issue: str, agent: str, worktree: str, chemin: s
     """
     chemin = str(Path(chemin).resolve()) if chemin else ""
     role_nom = roles.ou_defaut(role)["nom"]
-    from . import versions_roles
-    brief = versions_roles.choisir(role_nom, projet, issue)[0]  # même tirage que le prompt : version reçue
+    if not brief:  # version notée par prompt-construire ; sinon même tirage (déterministe)
+        from . import versions_roles
+        brief = versions_roles.choisir(role_nom, projet, issue)[0]
 
     def _add(data):
         data["seq"] += 1

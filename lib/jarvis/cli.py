@@ -580,15 +580,21 @@ def cmd_role_version(a) -> int:
     from . import versions_roles as vr
     try:
         if a.action == "candidats":
+            if a.cible:
+                p = vr.get(a.cible)
+                if not p:
+                    return _err(f"proposition {a.cible} introuvable")
+                print(vr.diff_complet(p))
+                return 0
             print(vr.texte())
             return 0
         if a.action == "proposer":
             try:
                 texte = Path(a.fichier).read_text(encoding="utf-8")
-                scores = json.loads(a.scores) if a.scores else None
-            except (OSError, json.JSONDecodeError) as exc:
-                return _err(f"candidat ou scores illisibles : {exc}")
-            p = vr.proposer(a.cible, texte, a.pourquoi, scores=scores, par=_acteur(), source=a.fichier)
+            except OSError as exc:
+                return _err(f"candidat illisible : {exc}")
+            # Aucun score par la ligne de commande : seuls ceux mesurés par l'optimiseur sont affichés.
+            p = vr.proposer(a.cible, texte, a.pourquoi, par=_acteur(), source=a.fichier)
             print(f"{p['id']} proposé pour {p['role']} : ton humain décide (Telegram). Rien ne change avant.")
             return 0
         if a.action == "retirer":
@@ -719,7 +725,9 @@ def cmd_prompt_construire(a) -> int:
                     "livrables ci-dessous. La PR ne contient que les sources utiles à versionner (scénarios, "
                     "storyboards, textes) ; s'il n'y en a aucune, ne crée pas de PR et dis-le dans ton commentaire final."]
     from . import versions_roles
-    _version, corps_candidat = versions_roles.choisir(role["nom"], a.projet, issue)  # essai progressif d'un brief
+    version, corps_candidat = versions_roles.choisir(role["nom"], a.projet, issue)  # essai progressif d'un brief
+    if getattr(a, "brief_sortie", ""):
+        Path(a.brief_sortie).write_text(version, encoding="utf-8")  # la fiche de tâche notera la version reçue
     corps = corps_candidat if corps_candidat is not None else role["corps"]
     if corps:
         out += ["", f"## Ton rôle : {role['titre']}", "", corps]
@@ -747,7 +755,7 @@ def cmd_tache_enregistrer(a) -> int:
                                role=a.role, modele=a.modele, modele_id=a.modele_id, effort=a.effort, repli=a.repli,
                                taille=a.taille, plan=a.plan, revue=a.revue, raison=a.raison, secours=a.secours,
                                classe=a.classe, reservation=a.reservation, jetons_max=int(a.jetons_max or 0),
-                               consignes_empreinte=a.consignes_empreinte, base=a.base)
+                               consignes_empreinte=a.consignes_empreinte, base=a.base, brief=a.brief)
     if a.reservation:
         from . import admission
         admission.confirmer(a.reservation, fiche["id"], a.worktree)
@@ -1097,6 +1105,10 @@ def cmd_chef_preparer(a) -> int:
         root = Path(p["chemin"])
         protected |= {root, root.parent / f"{root.name}__worktrees"}
     protected |= {config.STATE_DIR, config.CONFIG_DIR, config.JARVIS_HOME, chef_dir / ".claude"}
+    # Vague 3 : skills actives, quarantaine, briefs candidats, rapports d'optimisation, dossiers lus par les agents.
+    from . import skills as _skills
+    protected |= {config.DATA_DIR / d for d in ("skills", "skills-quarantaine", "roles-candidats", "optimisation")}
+    protected |= set(_skills.liens_dirs())
     deny_paths = []
     for d in sorted({_rule_path(x) for x in protected}):
         deny_paths += [f"Edit({d}/**)", f"Write({d}/**)"]
@@ -2083,12 +2095,13 @@ def build_parser() -> argparse.ArgumentParser:
     s = role_sub.add_parser("voir")
     s.add_argument("nom")
     s.set_defaults(fn=cmd_role_voir)
-    role_sub.add_parser("candidats", help="briefs candidats et essais en cours").set_defaults(fn=cmd_role_version, action="candidats")
+    s = role_sub.add_parser("candidats", help="briefs candidats et essais en cours ; avec RB-… : diff complet")
+    s.add_argument("cible", nargs="?", default="", metavar="RB-0001")
+    s.set_defaults(fn=cmd_role_version, action="candidats")
     s = role_sub.add_parser("proposer", help="proposer un brief candidat (ton humain décide)")
     s.add_argument("cible", metavar="role")
     s.add_argument("--fichier", required=True)
     s.add_argument("--pourquoi", required=True)
-    s.add_argument("--scores", default="", help=argparse.SUPPRESS)
     s.set_defaults(fn=cmd_role_version, action="proposer")
     for act in ("approuver", "refuser", "retirer", "promouvoir"):
         s = role_sub.add_parser(act)
@@ -2153,7 +2166,7 @@ def build_parser() -> argparse.ArgumentParser:
     for opt in ("projet", "issue", "agent", "worktree"):
         s.add_argument(f"--{opt}", required=True)
     for opt in ("chemin", "role", "modele", "modele-id", "effort", "repli", "plan", "revue", "raison", "classe", "reservation",
-                "jetons-max", "consignes-empreinte", "base"):
+                "jetons-max", "consignes-empreinte", "base", "brief"):
         s.add_argument(f"--{opt}", default="")
     s.add_argument("--taille", default="M")
     s.add_argument("--secours", action="store_true")
@@ -2167,7 +2180,7 @@ def build_parser() -> argparse.ArgumentParser:
     s = sub.add_parser("prompt-construire", help=argparse.SUPPRESS)
     for opt in ("projet", "issue", "branche", "regles"):
         s.add_argument(f"--{opt}", required=True)
-    for opt in ("role", "revue", "consignes"):
+    for opt in ("role", "revue", "consignes", "brief-sortie"):
         s.add_argument(f"--{opt}", default="")
     s.set_defaults(fn=cmd_prompt_construire)
     s = sub.add_parser("verdict", help="enregistrer le verdict d'une contre-relecture")
