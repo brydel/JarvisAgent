@@ -828,12 +828,38 @@ def battement_demon() -> None:
     store.write_json(report.DEMON_FILE, {"ts": time.time(), "pid": os.getpid()})
 
 
+_BAIL: dict | None = None   # bail d'orchestrateur tenu par ce démon (posé par run)
+
+
+def bail_check() -> bool:
+    """Renouvelle le bail. False si un autre orchestrateur l'a pris : ce démon doit s'arrêter."""
+    global _BAIL
+    if _BAIL is None:
+        return True
+    from . import bail
+    # Expiré pendant une veille du PC mais libre : on le reprend (nouveau numéro). Pris par un autre : perdu.
+    b = bail.renouveler(_BAIL["titulaire"], _BAIL["numero"]) or bail.acquerir(_BAIL["titulaire"])
+    if not b:
+        notify.alert("erreur", "Bail d'orchestrateur perdu : un autre démon Jarvis a pris la main, celui-ci s'arrête.")
+        return False
+    _BAIL = b
+    return True
+
+
+def executant_check() -> None:
+    from . import executants
+    executants.signe_de_vie("local")
+
+
 def watch_loop(stop: threading.Event) -> None:
     first = True
     while not stop.is_set():
+        if not bail_check():
+            stop.set()
+            break
         for step in (battement_demon, lambda: watch_once(first=first), ag.chef_flush_queue, budget_check,
                      prevision_check, blocage_check, jetons_check, chef_check, modeles_check, veille_check,
-                     veille_modeles_check, menage_check, battement_check, bilan_check, skills_check,
+                     veille_modeles_check, menage_check, battement_check, bilan_check, skills_check, executant_check,
                      canari_check, optimisation_check):
             try:
                 step()
@@ -1071,6 +1097,14 @@ def telegram_loop(stop: threading.Event) -> None:
 
 
 def run() -> None:
+    global _BAIL
+    from . import bail
+    _BAIL = bail.acquerir()
+    if not _BAIL:
+        b = bail.lire() or {}
+        print(f"Un autre démon Jarvis tient le bail d'orchestrateur ({b.get('titulaire', '?')}, jusqu'à "
+              f"{time.strftime('%H:%M:%S', time.localtime(b.get('expire', 0)))}). Un seul démon à la fois : rien n'est lancé.")
+        raise SystemExit(1)
     stop = threading.Event()
     threads = [
         threading.Thread(target=watch_loop, args=(stop,), name="surveillance", daemon=True),
@@ -1090,9 +1124,18 @@ def run() -> None:
     if web_cfg.get("actif", True):
         print(f"Tableau de bord : http://localhost:{int(web_cfg.get('port', 7717))} (lecture seule, ce PC uniquement)")
     print("Laisse cette fenêtre ouverte. Ctrl+C pour arrêter.")
+    import signal
+
+    def _terminer(*_):
+        raise KeyboardInterrupt
+
+    signal.signal(signal.SIGTERM, _terminer)
     try:
-        while True:
-            time.sleep(3600)
+        while not stop.is_set():
+            stop.wait(3600)
+        print("Bail d'orchestrateur perdu : ce démon s'arrête.")
     except KeyboardInterrupt:
         stop.set()
         store.feed_add("systeme", "démon Jarvis arrêté")
+    finally:
+        bail.liberer(_BAIL["titulaire"])

@@ -1124,6 +1124,7 @@ def cmd_chef_preparer(a) -> int:
                 "Bash(jarvis rollback proposer *)", "Bash(jarvis rollback demander *)", "Bash(jarvis eval liste*)",
                 "Bash(jarvis eval verifier*)", "Bash(jarvis eval resultats*)", "Bash(jarvis proxy)", "Bash(jarvis proxy voir)",
                 "Bash(jarvis skill)", "Bash(jarvis skill liste)", "Bash(jarvis skill auditer)", "Bash(jarvis skill installer *)",
+                "Bash(jarvis stockage)", "Bash(jarvis stockage etat)", "Bash(jarvis executant)", "Bash(jarvis executant liste)",
                 # Usine : rôles, routeur, registre, bilan, studio et livrables.
                 "Bash(jarvis role)", "Bash(jarvis role *)", "Bash(jarvis modele)", "Bash(jarvis modele liste)",
                 "Bash(jarvis modele choisir *)", "Bash(jarvis modele proposer *)",
@@ -1159,6 +1160,8 @@ def cmd_chef_preparer(a) -> int:
                 "Bash(jarvis eval lancer *)", "Bash(jarvis proxy config*)", "Bash(jarvis skill approuver *)",
                 "Bash(jarvis skill refuser *)", "Bash(jarvis skill epingler *)",
                 "Bash(jarvis role approuver *)", "Bash(jarvis role refuser *)", "Bash(jarvis role promouvoir *)",
+                "Bash(jarvis stockage migrer*)", "Bash(jarvis stockage revenir*)", "Bash(jarvis executant declarer *)",
+                "Bash(jarvis executant retirer *)",
                 # Contournements de « jarvis task » et accès directs au noyau.
                 "Bash(workmux add *)", "Bash(workmux run *)", "Bash(python *)", "Bash(python3 *)",
                 "Bash(env *)", "Bash(script *)",
@@ -1662,6 +1665,54 @@ def cmd_skill(a) -> int:
         return _err(str(exc))
 
 
+def cmd_stockage(a) -> int:
+    """État du stockage ; migration JSON → SQLite et retour (toi seulement, démon arrêté)."""
+    from . import stockage
+    if a.action == "etat":
+        e = stockage.etat()
+        print(f"Stockage : {e['backend']} · base {e['base']} "
+              + (f"({e['lignes']} états, {e['taille_ko']} Ko)" if e["base_existe"] else "(pas encore créée)")
+              + f" · {e['fichiers_json']} fichier(s) JSON")
+        return 0
+    refused = _human_only("changer le stockage")
+    if refused is not None:
+        return refused
+    try:
+        if a.action == "migrer":
+            r = stockage.migrer(par="humain")
+            print(f"{r['importes']} état(s) importés dans {r['base']} et vérifiés ; stockage basculé en SQLite.")
+            print(f"Copie des JSON : {r['sauvegarde']}. Retour possible : jarvis stockage revenir.")
+            for i in r["ignores"]:
+                print(f"⚠ ignoré (illisible) : {i}")
+        else:
+            r = stockage.revenir(par="humain")
+            print(f"{r['exportes']} état(s) réécrits en JSON et vérifiés ; stockage rebasculé en JSON ({r['sauvegarde']}).")
+        return 0
+    except stockage.StockageError as exc:
+        return _err(str(exc))
+
+
+def cmd_executant(a) -> int:
+    from . import executants
+    try:
+        if a.action == "liste":
+            print(executants.texte())
+            return 0
+        refused = _human_only("déclarer ou retirer un exécutant")
+        if refused is not None:
+            return refused
+        if not a.nom:
+            return _err("précise le nom de l'exécutant")
+        if a.action == "retirer":
+            return 0 if executants.retirer(a.nom) else _err(f"exécutant « {a.nom} » inconnu")
+        cap = {"coeurs": a.coeurs, "memoire_mo": a.memoire_mo, "agents_max": a.agents_max} if a.nom != "local" else None
+        e = executants.declarer(a.nom, hote=a.hote, capacite=cap, par="humain")
+        print(f"Exécutant « {a.nom} » déclaré ({e.get('hote') or 'hôte inconnu'}). L'admission n'utilise encore que ce poste.")
+        return 0
+    except executants.ExecutantError as exc:
+        return _err(str(exc))
+
+
 def cmd_rollback(a) -> int:
     from . import rollback
     try:
@@ -1911,6 +1962,19 @@ def build_parser() -> argparse.ArgumentParser:
     s.add_argument("--auteur", default="")
     s.add_argument("--signer", default="", metavar="CLE_SSH", help="epingler : signer avec cette clé (ssh-keygen -Y sign)")
     s.set_defaults(fn=cmd_skill)
+
+    s = sub.add_parser("stockage", help="stockage de l'état : JSON (défaut) ou SQLite, migration vérifiée")
+    s.add_argument("action", nargs="?", default="etat", choices=("etat", "migrer", "revenir"))
+    s.set_defaults(fn=cmd_stockage)
+
+    s = sub.add_parser("executant", help="exécutants déclarés (machines) et bail d'orchestrateur")
+    s.add_argument("action", nargs="?", default="liste", choices=("liste", "declarer", "retirer"))
+    s.add_argument("nom", nargs="?", default="")
+    s.add_argument("--hote", default="")
+    s.add_argument("--coeurs", type=int, default=0)
+    s.add_argument("--memoire-mo", type=int, default=0)
+    s.add_argument("--agents-max", type=int, default=0)
+    s.set_defaults(fn=cmd_executant)
 
     s = sub.add_parser("execution", help=argparse.SUPPRESS)
     s.add_argument("action", choices=("lancer",))

@@ -149,7 +149,7 @@ class JarvisTest(unittest.TestCase):
                      "blocage.json", "chef_garde.json", "demon.json", "sante_windows.json", "watch.json",
                      "pauses.json", "reservations.json", "lourdes/operations.json", "relances.json", "journal.jsonl",
                      "ressources.json", "delegations.json", "exceptions.json", "budgets.json", "travaux.json"):
-            store.state_path(name).unlink(missing_ok=True)
+            store.supprimer(name)
         (TMP / "cfg" / "modeles.toml").unlink(missing_ok=True)
         Path(os.environ["FAKE_CLI_LOG"]).write_text("")
         shutil.rmtree(TMP / "codexhome" / "sessions", ignore_errors=True)
@@ -598,7 +598,7 @@ class JarvisTest(unittest.TestCase):
         snap["boot"] = "demarrage-precedent"
         store.write_json(poste.SNAPSHOT, snap)
         self.assertIsNotNone(poste.preparer_reprise())
-        self.assertFalse(store.state_path(poste.SNAPSHOT).exists())
+        self.assertFalse(store.existe(poste.SNAPSHOT))
         # Le chemin du fixture n'existe pas ici : on pointe vers le vrai dossier de test.
         rep = store.read_json(poste.REPRISE, {})
         rep["agents"][0]["workdir"] = str(wt)
@@ -1212,13 +1212,13 @@ class JarvisTest(unittest.TestCase):
         finally:
             data["sante"]["capacite_auto"] = False
             config.save_settings(data)
-            store.state_path(poste.WIN_CACHE).unlink(missing_ok=True)
+            store.supprimer(poste.WIN_CACHE)
 
     def test_critical_battery_saves_work_then_resumes_when_plugged(self):
         from jarvis import poste
         set_status()  # jp-12-onboarding travaille
         Path(os.environ["FAKE_WORKMUX_LOG"]).write_text("")
-        store.state_path(daemon.BATTERIE_STATE).unlink(missing_ok=True)
+        store.supprimer(daemon.BATTERIE_STATE)
         store.write_json(poste.WIN_CACHE, {"ts": time.time(), "info": {"batterie": 9, "secteur": False}})
         self.assertEqual(daemon.batterie_check(), ["batterie"])
         self.assertTrue(store.paused())
@@ -1236,7 +1236,7 @@ class JarvisTest(unittest.TestCase):
         # Une mesure trop vieille ne restreint plus rien.
         store.write_json(poste.WIN_CACHE, {"ts": time.time() - 3600, "info": {"batterie": 5, "secteur": False}})
         self.assertIsNone(poste.batterie())
-        store.state_path(poste.WIN_CACHE).unlink(missing_ok=True)
+        store.supprimer(poste.WIN_CACHE)
 
     def test_watchdog_reports_silent_and_endless_agents_once(self):
         set_status()  # jp-12-onboarding : « working » depuis 1830 s

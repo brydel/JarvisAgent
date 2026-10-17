@@ -62,13 +62,13 @@ class Vague2Test(unittest.TestCase):
         cls.server.server_close()
         config.SETTINGS_FILE.write_text(cls.reglages, encoding="utf-8")
         for n in ETAT:
-            store.state_path(n).unlink(missing_ok=True)
+            store.supprimer(n)
 
     def setUp(self):
         FakeTelegram.calls.clear()
         config.SETTINGS_FILE.write_text(self.reglages, encoding="utf-8")
         for n in ETAT:
-            store.state_path(n).unlink(missing_ok=True)
+            store.supprimer(n)
         self.libre = mock.patch.object(agents, "status_all", return_value=([], ""))
         self.libre.start()
         self.addCleanup(self.libre.stop)

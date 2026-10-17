@@ -46,7 +46,7 @@ def preparer_reprise(now: float | None = None) -> dict | None:
     """
     now = now or time.time()
     snap = store.read_json(SNAPSHOT, {})
-    store.state_path(SNAPSHOT).unlink(missing_ok=True)
+    store.supprimer(SNAPSHOT)
     if not snap or now - snap.get("ts", 0) > REPRISE_MAX_AGE:
         return None
     if snap.get("boot") and snap["boot"] == boot_id():
@@ -61,7 +61,7 @@ def preparer_reprise(now: float | None = None) -> dict | None:
 def reprise_en_attente(now: float | None = None) -> dict | None:
     data = store.read_json(REPRISE, {})
     if data and (now or time.time()) - data.get("detecte", 0) > REPRISE_MAX_AGE:
-        store.state_path(REPRISE).unlink(missing_ok=True)  # trop vieux : on ne relance plus rien
+        store.supprimer(REPRISE)  # trop vieux : on ne relance plus rien
         return None
     return data or None
 
@@ -137,7 +137,7 @@ def reprendre(dry_run: bool = False) -> list[str]:
         if restants:  # on garde ceux qui n'ont pas repris : « jarvis reprendre » pourra réessayer
             store.write_json(REPRISE, {**data, "agents": restants})
         else:
-            store.state_path(REPRISE).unlink(missing_ok=True)
+            store.supprimer(REPRISE)
         heure = time.strftime("%H:%M", time.localtime(data.get("ts", time.time())))
         store.write_json(NOTE_CHEF, {"ts": time.time(), "texte": (
             f"Le PC a redémarré (dernier état connu à {heure}). "
@@ -155,7 +155,7 @@ def reprendre(dry_run: bool = False) -> list[str]:
 def note_redemarrage() -> str:
     """Résumé du redémarrage pour le message de démarrage du chef (lu une seule fois)."""
     data = store.read_json(NOTE_CHEF, {})
-    store.state_path(NOTE_CHEF).unlink(missing_ok=True)
+    store.supprimer(NOTE_CHEF)
     if time.time() - data.get("ts", 0) > 3 * 3600:
         return ""  # vieille note (chef relancé bien plus tard) : plus d'actualité
     return data.get("texte", "")

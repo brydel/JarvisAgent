@@ -80,7 +80,7 @@ class SkillsTest(unittest.TestCase):
         shutil.rmtree(self.home, ignore_errors=True)
         for d in (skills.installees_dir(), skills.quarantaine_dir()):
             shutil.rmtree(d, ignore_errors=True)
-        store.state_path(skills.FILE).unlink(missing_ok=True)
+        store.supprimer(skills.FILE)
         self.env = mock.patch.dict(os.environ, {"HOME": str(self.home)})
         self.env.start()
         self.addCleanup(self.env.stop)
@@ -135,7 +135,7 @@ class SkillsTest(unittest.TestCase):
         (skills.installees_dir() / "propre" / "SKILL.md").write_text("---\nname: propre\n---\nautre chose\n")
         self.assertIn("propre", [s["nom"] for s in skills.problemes()])
         from jarvis import daemon
-        store.state_path(daemon.SKILLS_STATE).unlink(missing_ok=True)
+        store.supprimer(daemon.SKILLS_STATE)
         with mock.patch.object(daemon.notify, "alert") as alerte:
             self.assertIn("propre", daemon.skills_check(now=1e10))
             self.assertEqual(daemon.skills_check(now=1e10 + 7200), [], "une seule alerte par problème")
@@ -215,7 +215,7 @@ class BriefsTest(unittest.TestCase):
         from jarvis import roles, taches, versions_roles
         FakeTelegram.calls.clear()
         for n in (versions_roles.FILE, taches.FILE, "journal.jsonl", "canari.json", "optimisation.json"):
-            store.state_path(n).unlink(missing_ok=True)
+            store.supprimer(n)
         shutil.rmtree(roles.ROLES_PERSO, ignore_errors=True)
         self.addCleanup(shutil.rmtree, roles.ROLES_PERSO, True)
         self.libre = mock.patch.object(agents, "status_all", return_value=([], ""))
@@ -358,6 +358,113 @@ class BriefsTest(unittest.TestCase):
         finally:
             s["optimisation"]["hebdo"] = False
             config.save_settings(s)
+
+
+class MultiMachineTest(unittest.TestCase):
+    def setUp(self):
+        from jarvis import bail, executants
+        store.supprimer(bail.FILE)
+        store.supprimer(executants.FILE)
+
+    def test_single_orchestrator_lease(self):
+        from jarvis import bail
+        t0 = 1_000_000.0
+        a = bail.acquerir("poste-a:111", now=t0)
+        self.assertEqual(a["numero"], 1)
+        self.assertIsNone(bail.acquerir("poste-b:222", now=t0 + 10), "un seul orchestrateur à la fois")
+        self.assertIsNotNone(bail.renouveler("poste-a:111", 1, now=t0 + 60))
+        self.assertIsNone(bail.acquerir("poste-b:222", now=t0 + 150), "renouvelé : toujours tenu")
+        b = bail.acquerir("poste-b:222", now=t0 + 60 + bail.DUREE + 1)
+        self.assertEqual(b["numero"], 2, "bail expiré : repris avec un nouveau numéro")
+        self.assertIsNone(bail.renouveler("poste-a:111", 1, now=t0 + 200), "l'ancien titulaire ne peut plus renouveler")
+        self.assertTrue(bail.liberer("poste-b:222"))
+        # Titulaire mort sur ce poste : repris sans attendre l'expiration.
+        import socket
+        mort = subprocess.Popen([sys.executable, "-c", "pass"])
+        mort.wait()
+        bail.acquerir(f"{socket.gethostname()}:{mort.pid}")
+        self.assertIsNotNone(bail.acquerir(f"{socket.gethostname()}:{os.getpid()}"))
+
+    def test_daemon_refuses_second_orchestrator_and_stops_when_lease_lost(self):
+        from jarvis import bail, daemon
+        import socket
+        vivant = f"{socket.gethostname()}:{os.getppid()}"
+        bail.acquerir(vivant)
+        with contextlib.redirect_stdout(io.StringIO()) as out, self.assertRaises(SystemExit):
+            daemon.run()
+        self.assertIn("Un seul démon", out.getvalue())
+        bail.liberer(vivant)
+        moi = bail.acquerir()
+        daemon._BAIL = moi
+        try:
+            self.assertTrue(daemon.bail_check())
+            store.write_json(bail.FILE, {"numero": 9, "bail": {"titulaire": vivant, "hote": socket.gethostname(),
+                                                               "pid": os.getppid(), "numero": 9, "depuis": time.time(),
+                                                               "expire": time.time() + 100}})
+            with mock.patch.object(daemon.notify, "alert") as alerte:
+                self.assertFalse(daemon.bail_check())
+            alerte.assert_called_once()
+        finally:
+            daemon._BAIL = None
+
+    def test_json_to_sqlite_migration_is_lossless_and_reversible(self):
+        from jarvis import bail, stockage
+        etat = TMP / "etat-migration"
+        shutil.rmtree(etat, ignore_errors=True)
+        reglages = config.SETTINGS_FILE.read_text()
+        env = {k: v for k, v in os.environ.items() if k != "JARVIS_STOCKAGE"}
+        with mock.patch.object(config, "STATE_DIR", etat), mock.patch.dict(os.environ, env, clear=True):
+            try:
+                donnees = {"taches.json": {"seq": 3, "taches": [{"id": "T-00003", "issue": "BIS-1", "note": "é ✓"}]},
+                           "plans.json": {"seq": 1, "plans": []}, "budgets.json": {"enveloppes": [], "mouvements": [1.5]},
+                           "sous/dossier.json": {"x": [1, {"y": None}]}, "lourdes/operations.json": {"operations": []}}
+                for nom, v in donnees.items():
+                    store.write_json(nom, v)
+                (etat / "journal.jsonl").write_text('{"n": 1, "prev": ""}\n')
+                journal_avant = (etat / "journal.jsonl").read_bytes()
+                # Un démon tient le bail : migration refusée.
+                import socket
+                vivant = f"{socket.gethostname()}:{os.getppid()}"
+                bail.acquerir(vivant)
+                with self.assertRaises(stockage.StockageError):
+                    stockage.migrer()
+                bail.liberer(vivant)
+                r = stockage.migrer()
+                self.assertEqual(store.backend(), "sqlite")
+                self.assertEqual(r["importes"], 5, "bail.json compris, lourdes/ exclu")
+                for nom, v in donnees.items():
+                    self.assertEqual(store.read_json(nom, None), v, nom)
+                rangees = {n for (n,) in store.connexion().execute("SELECT nom FROM etat")}
+                self.assertNotIn("lourdes/operations.json", rangees, "lourdes/ reste un fichier (bac à sable Codex)")
+                journal = (etat / "journal.jsonl").read_bytes()
+                self.assertTrue(journal.startswith(journal_avant), "journal chaîné intact (la migration s'y ajoute)")
+                self.assertIn(b'"migre"', journal)
+                # Écrit en SQLite, puis retour au JSON : la modification est conservée.
+                store.update_json("taches.json", {}, lambda d: d.update(seq=4))
+                self.assertEqual(json.loads((etat / "taches.json").read_text())["seq"], 3, "le fichier n'est plus lu")
+                stockage.revenir()
+                self.assertEqual(store.backend(), "json")
+                self.assertEqual(json.loads((etat / "taches.json").read_text())["seq"], 4)
+                self.assertEqual(store.read_json("sous/dossier.json", None), donnees["sous/dossier.json"])
+            finally:
+                config.SETTINGS_FILE.write_text(reglages)
+        with mock.patch.dict(os.environ, {"JARVIS_ROLE": "chef"}), contextlib.redirect_stderr(io.StringIO()):
+            self.assertEqual(cli.main(["stockage", "migrer"]), 4)
+
+    def test_declared_executors(self):
+        from jarvis import executants
+        self.assertTrue(executants.signe_de_vie("local", now=5000.0))
+        self.assertFalse(executants.signe_de_vie("local", now=5030.0), "une mesure par minute au plus")
+        local = executants.liste(now=5030.0)[0]
+        self.assertEqual(local["nom"], "local")
+        self.assertTrue({"coeurs", "memoire_mo", "agents_max"} <= set(local["capacite"]))
+        executants.declarer("station", hote="station.lan", capacite={"coeurs": 32, "memoire_mo": 128000, "agents_max": 8},
+                            now=5000.0)
+        etats = {e["nom"]: e["actif"] for e in executants.liste(now=5000.0 + executants.ACTIF_S + 1)}
+        self.assertEqual(etats, {"local": False, "station": False})
+        self.assertIn("station.lan", executants.texte(now=5001.0))
+        with mock.patch.dict(os.environ, {"JARVIS_ROLE": "chef"}), contextlib.redirect_stderr(io.StringIO()):
+            self.assertEqual(cli.main(["executant", "declarer", "pirate"]), 4)
 
 if __name__ == "__main__":
     unittest.main()
