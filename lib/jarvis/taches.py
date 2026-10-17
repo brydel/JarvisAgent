@@ -58,6 +58,8 @@ def enregistrer(*, projet: str, issue: str, agent: str, worktree: str, chemin: s
     """
     chemin = str(Path(chemin).resolve()) if chemin else ""
     role_nom = roles.ou_defaut(role)["nom"]
+    from . import versions_roles
+    brief = versions_roles.choisir(role_nom, projet, issue)[0]  # même tirage que le prompt : version reçue
 
     def _add(data):
         data["seq"] += 1
@@ -68,7 +70,7 @@ def enregistrer(*, projet: str, issue: str, agent: str, worktree: str, chemin: s
             "repli": repli, "taille": taille, "plan": plan, "revue": str(revue or ""), "raison": raison,
             "secours": bool(secours), "worktree": worktree, "chemin": chemin, "statut": "lancee",
             "classe": classe, "reservation": reservation, "jetons_max": int(jetons_max or 0),
-            "consignes_empreinte": consignes_empreinte, "base": base, "essai": len(precedents) + 1, "echec": None,
+            "consignes_empreinte": consignes_empreinte, "base": base, "brief": brief, "essai": len(precedents) + 1, "echec": None,
             "cree": time.time(), "debut": None, "fin": None, "jetons": None, "verdict": "", "verdict_note": "",
         }
         data["taches"].append(fiche)

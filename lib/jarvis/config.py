@@ -141,6 +141,19 @@ DEFAULTS: dict = {
         # Point d'entrée OTLP/HTTP (ex. http://localhost:4318) pour « jarvis traces envoyer ». Vide = rien ne sort.
         "otlp_endpoint": "",
     },
+    "optimisation": {
+        # Optimisation hebdomadaire des briefs de rôles (outils/optimiser_prompts.py, sur tes abonnements) :
+        # désactivée par défaut. Rôles séparés par des virgules, traités un par semaine à tour de rôle.
+        "hebdo": False,
+        "roles": "backend,frontend,qa,securite,redaction",
+        "jour": 7,          # 1 = lundi … 7 = dimanche
+        "heure": "02:00",
+        "canari_pct": 10,   # part des tâches d'un rôle qui essaient un brief candidat approuvé
+    },
+    "stockage": {
+        # json (défaut) ou sqlite (après « jarvis stockage migrer »). Le journal d'audit reste un fichier.
+        "backend": "json",
+    },
     "bilan": {
         # Bilan quotidien envoyé sur Telegram par le démon, une fois par jour à cette heure (HH:MM, heure locale).
         "actif": True,

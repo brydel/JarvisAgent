@@ -575,6 +575,41 @@ def cmd_role_voir(a) -> int:
     return 0
 
 
+def cmd_role_version(a) -> int:
+    """Briefs candidats : proposer, lister, décider (toi), retirer, promouvoir (toi)."""
+    from . import versions_roles as vr
+    try:
+        if a.action == "candidats":
+            print(vr.texte())
+            return 0
+        if a.action == "proposer":
+            try:
+                texte = Path(a.fichier).read_text(encoding="utf-8")
+                scores = json.loads(a.scores) if a.scores else None
+            except (OSError, json.JSONDecodeError) as exc:
+                return _err(f"candidat ou scores illisibles : {exc}")
+            p = vr.proposer(a.cible, texte, a.pourquoi, scores=scores, par=_acteur(), source=a.fichier)
+            print(f"{p['id']} proposé pour {p['role']} : ton humain décide (Telegram). Rien ne change avant.")
+            return 0
+        if a.action == "retirer":
+            p = vr.retirer(a.cible, par=_acteur(), raison=a.pourquoi)
+            print(f"{p['id']} retiré : le rôle {p['role']} reprend son brief stable.")
+            return 0
+        refused = _human_only(f"{a.action} un brief de rôle")
+        if refused is not None:
+            return refused
+        if a.action in ("approuver", "refuser"):
+            p = vr.decider(a.cible, a.action == "approuver", par="humain")
+            print(f"{p['id']} en essai sur {p['pct']} % des tâches {p['role']}." if p["statut"] == "canari"
+                  else f"{p['id']} refusé.")
+            return 0
+        p = vr.promouvoir(a.cible, par="humain")
+        print(f"{p['id']} promu : brief du rôle {p['role']} écrit dans {p['ecrit']}.")
+        return 0
+    except vr.VersionError as exc:
+        return _err(str(exc))
+
+
 def cmd_modele_liste(a) -> int:
     from . import modeles
     print(modeles.texte())
@@ -683,8 +718,11 @@ def cmd_prompt_construire(a) -> int:
             out += ["Ton livrable principal est un ensemble de fichiers, pas du code : dépose-les dans le dossier des "
                     "livrables ci-dessous. La PR ne contient que les sources utiles à versionner (scénarios, "
                     "storyboards, textes) ; s'il n'y en a aucune, ne crée pas de PR et dis-le dans ton commentaire final."]
-    if role["corps"]:
-        out += ["", f"## Ton rôle : {role['titre']}", "", role["corps"]]
+    from . import versions_roles
+    _version, corps_candidat = versions_roles.choisir(role["nom"], a.projet, issue)  # essai progressif d'un brief
+    corps = corps_candidat if corps_candidat is not None else role["corps"]
+    if corps:
+        out += ["", f"## Ton rôle : {role['titre']}", "", corps]
     out += ["", "## Ton poste", "",
             f"- Projet : {a.projet} · issue : {issue} · branche : {a.branche}",
             f"- Livrables hors dépôt (captures, vidéos, rapports) : `{dossier}` (variable `$JARVIS_LIVRABLES`). "
@@ -1085,6 +1123,7 @@ def cmd_chef_preparer(a) -> int:
                 "Bash(jarvis secrets verifier *)", "Bash(jarvis rejouer *)", "Bash(jarvis traces)", "Bash(jarvis traces *)",
                 "Bash(jarvis rollback proposer *)", "Bash(jarvis rollback demander *)", "Bash(jarvis eval liste*)",
                 "Bash(jarvis eval verifier*)", "Bash(jarvis eval resultats*)", "Bash(jarvis proxy)", "Bash(jarvis proxy voir)",
+                "Bash(jarvis skill)", "Bash(jarvis skill liste)", "Bash(jarvis skill auditer)", "Bash(jarvis skill installer *)",
                 # Usine : rôles, routeur, registre, bilan, studio et livrables.
                 "Bash(jarvis role)", "Bash(jarvis role *)", "Bash(jarvis modele)", "Bash(jarvis modele liste)",
                 "Bash(jarvis modele choisir *)", "Bash(jarvis modele proposer *)",
@@ -1117,7 +1156,9 @@ def cmd_chef_preparer(a) -> int:
                 "Bash(jarvis lourd debut *)", "Bash(jarvis lourd exec *)", "Bash(jarvis lourd fin *)",
                 "Bash(jarvis politique appliquer *)", "Bash(jarvis politique deleguer *)", "Bash(jarvis budget definir *)",
                 "Bash(jarvis tache relancer *)", "Bash(jarvis execution *)", "Bash(jarvis rollback executer *)",
-                "Bash(jarvis eval lancer *)", "Bash(jarvis proxy config*)",
+                "Bash(jarvis eval lancer *)", "Bash(jarvis proxy config*)", "Bash(jarvis skill approuver *)",
+                "Bash(jarvis skill refuser *)", "Bash(jarvis skill epingler *)",
+                "Bash(jarvis role approuver *)", "Bash(jarvis role refuser *)", "Bash(jarvis role promouvoir *)",
                 # Contournements de « jarvis task » et accès directs au noyau.
                 "Bash(workmux add *)", "Bash(workmux run *)", "Bash(python *)", "Bash(python3 *)",
                 "Bash(env *)", "Bash(script *)",
@@ -1586,6 +1627,41 @@ def cmd_proxy(a) -> int:
     return 0
 
 
+def cmd_skill(a) -> int:
+    """Registre des skills : audit, installation en quarantaine, décision humaine, épinglage."""
+    from . import skills
+    try:
+        if a.action in ("liste", "auditer"):
+            audit = skills.auditer()
+            print(skills.texte(audit))
+            pb = skills.problemes(audit)
+            if pb and a.action == "auditer":
+                print(f"\n⚠ {len(pb)} skill(s) à examiner : modifiées, non épinglées ou hors registre.")
+                return 1
+            return 0
+        if not a.quoi:
+            return _err(f"jarvis skill {a.action} : précise la skill (ou la source)")
+        if a.action == "installer":
+            r = skills.installer(a.quoi, par=_acteur())
+            print(f"Skill « {r['nom']} » en quarantaine : {r['quarantaine']}")
+            print(f"{r['fichiers']} fichier(s), empreinte {r['empreinte']}, signature : {r['signature']}.")
+            print("Rien n'est actif. Activation : bouton Telegram ou « jarvis skill approuver " + r["nom"] + " » au terminal."
+                  if r["envoye"] else "Telegram injoignable : approuve au terminal avec « jarvis skill approuver " + r["nom"] + " ».")
+            return 0
+        refused = _human_only(f"{a.action} une skill")
+        if refused is not None:
+            return refused
+        if a.action in ("approuver", "refuser"):
+            r = skills.decider(a.quoi, a.action == "approuver", par="humain")
+            print(f"Skill « {r['nom']} » activée : {r['chemin']}" if r["active"] else f"Skill « {r['nom']} » refusée, copie supprimée.")
+            return 0
+        lock = skills.epingler(a.quoi, version=a.version, auteur=a.auteur, cle=a.signer)
+        print(f"« {lock['nom']} » épinglée : {lock['empreinte']}" + (" (signée)" if lock.get("signature") else " (non signée)"))
+        return 0
+    except skills.SkillError as exc:
+        return _err(str(exc))
+
+
 def cmd_rollback(a) -> int:
     from . import rollback
     try:
@@ -1828,6 +1904,14 @@ def build_parser() -> argparse.ArgumentParser:
     s.add_argument("tache")
     s.set_defaults(fn=cmd_rollback)
 
+    s = sub.add_parser("skill", help="registre des skills : audit, quarantaine, approbation, épinglage")
+    s.add_argument("action", nargs="?", default="liste", choices=("liste", "auditer", "installer", "approuver", "refuser", "epingler"))
+    s.add_argument("quoi", nargs="?", default="")
+    s.add_argument("--version", default="")
+    s.add_argument("--auteur", default="")
+    s.add_argument("--signer", default="", metavar="CLE_SSH", help="epingler : signer avec cette clé (ssh-keygen -Y sign)")
+    s.set_defaults(fn=cmd_skill)
+
     s = sub.add_parser("execution", help=argparse.SUPPRESS)
     s.add_argument("action", choices=("lancer",))
     s.add_argument("--projet", required=True)
@@ -1933,6 +2017,18 @@ def build_parser() -> argparse.ArgumentParser:
     s = role_sub.add_parser("voir")
     s.add_argument("nom")
     s.set_defaults(fn=cmd_role_voir)
+    role_sub.add_parser("candidats", help="briefs candidats et essais en cours").set_defaults(fn=cmd_role_version, action="candidats")
+    s = role_sub.add_parser("proposer", help="proposer un brief candidat (ton humain décide)")
+    s.add_argument("cible", metavar="role")
+    s.add_argument("--fichier", required=True)
+    s.add_argument("--pourquoi", required=True)
+    s.add_argument("--scores", default="", help=argparse.SUPPRESS)
+    s.set_defaults(fn=cmd_role_version, action="proposer")
+    for act in ("approuver", "refuser", "retirer", "promouvoir"):
+        s = role_sub.add_parser(act)
+        s.add_argument("cible", metavar="RB-0001")
+        s.add_argument("--pourquoi", default="")
+        s.set_defaults(fn=cmd_role_version, action=act)
 
     modele = sub.add_parser("modele", help="catalogue des modèles et routeur")
     modele.set_defaults(fn=cmd_modele_liste)

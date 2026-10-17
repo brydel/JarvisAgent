@@ -604,7 +604,7 @@ main() {
     cockpit|etat|plan|fil|projet|telegram|regler|capacite|demander|note|journal|daemon|voir|jetons|veille|\
     fermer|reprendre|sante|reparer-git|role|modele|tache|verdict|bilan|usine|studio|livrer|livrables|web|\
     admission|pause|profil|lourd|audit|diagnostic|politique|budget|fournisseurs|proposition|\
-    budget-jetons|cout|memoire|secrets|eval|rejouer|traces|proxy|rollback|execution)
+    budget-jetons|cout|memoire|secrets|eval|rejouer|traces|proxy|rollback|execution|skill|stockage|executant)
                   py "$cmd" "$@" ;;
     chef-lancer)  cmd_chef_lancer "$@" ;;
     relancer)     cmd_relancer "$@" ;;
