@@ -49,4 +49,5 @@ politique de délégation, de budget monétaire, ni de journal d'audit ; quota p
 - `exploitation.md` — installation, diagnostic, profils, **relance propre**, retour arrière, migration.
 - `tests.md` — ce que couvrent les tests, unitaires / intégration simulée / vérifications réelles.
 - `feuille-de-route.md` — lots 3 et 4, prochaines actions.
+- `vague-1.md` — plafonds de jetons, coûts (équivalent API), mémoire du chef, bilan quotidien, échecs bornés, secrets par rôle.
 - `handoff.md` — reprise de session en une page.

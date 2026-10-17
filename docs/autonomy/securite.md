@@ -31,9 +31,10 @@
   fenêtre du démon) arrêtent tout ; aucun mécanisme ne relance le chef en pause (`chef_check` vérifie
   `store.paused()`), et `_chef_vu` empêche une relance après un redémarrage non suivi de `jarvis chef`.
   Rien n'est conçu pour résister à un arrêt volontaire.
-- **Secrets par tâche** : la copie de `.env` par l'humain dans les worktrees n'est pas remplacée dans ce lot.
-  Conçu : un fichier `secrets.toml` par projet listant, par rôle, les variables autorisées, injectées par les
-  lanceurs `jarvis-claude`/`jarvis-codex` dans l'environnement du worktree seulement.
+- **Secrets par tâche** (vague 1, `vague-1.md`) : `~/.config/jarvis/secrets/<projet>.toml` liste par rôle les noms
+  autorisés, `<projet>.env` (600) les valeurs ; les lanceurs n'injectent que ceux du rôle de la tâche. Un agent voit
+  ce qu'il reçoit : c'est une réduction de ce qui peut fuiter, pas une isolation. Un `.env` copié à la main dans un
+  worktree n'est pas empêché.
 
 ## Protection contre l'injection
 

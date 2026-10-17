@@ -197,6 +197,12 @@ Tu reçois aussi les questions du chef (❓), ses bilans (📝) et les **livrabl
 | `jarvis audit [n] [--verifier]` | Journal d'audit des décisions, chaîne d'empreintes |
 | `jarvis diagnostic` | Inventaire léger du poste (rapport expurgé sous `~/.local/share/jarvis/diagnostics/`) |
 | `jarvis profil [liste\|voir\|appliquer <nom>]` | Profils `laptop-conservative` et `workstation` (settings.toml sauvegardé avant) |
+| `jarvis tache voir\|echec <T>` · `jarvis tache relancer <T> --autoriser` | Détail d'un essai (classe d'échec, essais, jetons) · classer un échec · débloquer un essai après escalade (toi seulement) |
+| `jarvis budget-jetons voir <T>` | Jetons consommés par une unité de travail face à son plafond |
+| `jarvis cout [tache <T>\|projet <P> --periode 7j\|semaine]` | Équivalent API des tâches (tarifs publics) : pas une dépense, tu es à l'abonnement |
+| `jarvis memoire noter\|chercher\|liste` | Mémoire du chef : décisions, échecs, leçons, recherche pondérée |
+| `jarvis bilan quotidien [--envoyer]` | Le bilan du matin (envoyé seul sur Telegram à `bilan.heure`) |
+| `jarvis secrets verifier --projet P` | Secrets que recevrait chaque rôle (noms seuls) |
 
 ### Réglages
 
@@ -233,6 +239,9 @@ Tu reçois aussi les questions du chef (❓), ses bilans (📝) et les **livrabl
 | `admission.pression_memoire_pct` · `admission.hysterese_min` | `25` · `5` | Pause « ressources » sur pression mémoire soutenue ; délai de retour au calme |
 | `jetons.peremption_h` | `6` | Une mesure de quota plus vieille que N h vaut « prudence », jamais « feu vert » |
 | `propositions.max_par_jour` · `propositions.github_depot` | `3` · vide | Plafond d'acceptations par source et par jour ; dépôt GitHub dont les issues `jarvis-proposition` sont importées |
+| `budget_jetons.multiplicateur` · `budget_jetons.estimation_s/m/l` | `3` · `300000/800000/2000000` | Plafond de jetons par unité de travail = multiplicateur × estimation (médiane de l'historique dès 5 tâches) |
+| `couts.devise` · `couts.taux` | `EUR` · `0` | Affichage de l'équivalent API ; 0 = en dollars US |
+| `bilan.actif` · `bilan.heure` | `true` · `08:00` | Bilan quotidien sur Telegram |
 
 Exemple : `jarvis regler general.max_agents 4`. Les réglages vivent dans `~/.config/jarvis/settings.toml` (permissions 600, jamais dans le dépôt).
 
