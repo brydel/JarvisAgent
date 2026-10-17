@@ -56,6 +56,10 @@ ${C_CYAN}Agents${C_OFF}
   jarvis rollback proposer|demander <T> Défaire par revert les commits d'une tâche (bouton Revert sur Telegram)
   jarvis traces [exporter|envoyer]      Dernières exécutions (jetons, durée, coût) · export OpenTelemetry
   jarvis eval liste|verifier|lancer     Harnais d'évaluation des rôles (cas fixes jugés par scripts)
+  jarvis skill auditer|installer <src>  Registre des skills : épinglage, quarantaine, approbation (toi)
+  jarvis role candidats|proposer        Briefs candidats : essai sur 10 % des tâches après ton accord
+  jarvis stockage etat|migrer|revenir   État en JSON (défaut) ou SQLite, migration vérifiée
+  jarvis executant liste                Exécutants déclarés et bail d'orchestrateur (un seul démon)
   jarvis verdict <projet> <ISSUE> pret|corrections [note]
                                         Verdict d'une contre-relecture
   jarvis board · jarvis status          Tableau de bord workmux · tâches du projet courant

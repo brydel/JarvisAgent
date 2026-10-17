@@ -12,6 +12,8 @@ humaine**, puis la rentabilité des produits. Pas de nouveaux agents sans preuve
 - Bilan quotidien automatique — **fait en vague 1** (`vague-1.md`).
 - Vague 2 (prompt maître) : harnais d'évaluation, backend d'exécution abstrait, replay, observabilité, rollback
   assisté — **fait** (`vague-2.md`). E2B réel, promptfoo exécuté et GEPA restent conçus, désactivés sans budget.
+- Vague 3 : skills de confiance, briefs auto-améliorés avec canari, SQLite, bail et exécutants — **fait sur un
+  poste** (`vague-3.md`) ; état partagé entre machines et exécutants distants : conçu.
 - Dépendances explicites entre éléments de plan (A avant B) — conçu.
 
 ## Lot 3 — un parcours commercial pour un seul produit, en simulation

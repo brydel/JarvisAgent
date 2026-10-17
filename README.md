@@ -208,6 +208,10 @@ Tu reçois aussi les questions du chef (❓), ses bilans (📝) et les **livrabl
 | `jarvis traces [exporter\|envoyer]` | Dernières exécutions avec durée, jetons, équivalent API · export OpenTelemetry (fichier ou collecteur) |
 | `jarvis rollback proposer\|demander\|executer <T>` | Défaire par `git revert` les commits d'une tâche : proposition, demande Telegram (bouton Revert), exécution (toi seulement) |
 | `jarvis proxy voir\|config` | Configuration LiteLLM pour les fonctions IA des produits (désactivée, jamais pour les agents) |
+| `jarvis skill auditer\|installer <source>` · `jarvis skill approuver\|epingler <nom>` | Registre des skills : audit, quarantaine · activation et épinglage (toi seulement) |
+| `jarvis role candidats\|proposer` · `jarvis role approuver\|promouvoir RB-…` | Briefs candidats (optimiseur ou chef) · essai sur 10 % puis promotion (toi seulement) |
+| `jarvis stockage etat\|migrer\|revenir` | État en JSON (défaut) ou SQLite : migration vérifiée, démon arrêté |
+| `jarvis executant liste` | Exécutants déclarés (capacité mesurée) et bail d'orchestrateur |
 
 ### Réglages
 
@@ -247,6 +251,9 @@ Tu reçois aussi les questions du chef (❓), ses bilans (📝) et les **livrabl
 | `budget_jetons.multiplicateur` · `budget_jetons.estimation_s/m/l` | `3` · `300000/800000/2000000` | Plafond de jetons par unité de travail = multiplicateur × estimation (médiane de l'historique dès 5 tâches) |
 | `couts.devise` · `couts.taux` | `EUR` · `0` | Affichage de l'équivalent API ; 0 = en dollars US |
 | `bilan.actif` · `bilan.heure` | `true` · `08:00` | Bilan quotidien sur Telegram |
+| `optimisation.hebdo` · `optimisation.roles` · `optimisation.jour` · `optimisation.heure` | `false` · 5 rôles · `7` · `02:00` | Optimisation hebdomadaire d'un brief (un rôle par semaine, sur tes abonnements, candidat soumis à ta décision) |
+| `optimisation.canari_pct` | `10` | Part des tâches d'un rôle qui essaient un brief candidat approuvé |
+| `stockage.backend` | `json` | `sqlite` après `jarvis stockage migrer` (ne pas changer à la main) |
 | `observabilite.otlp_endpoint` | vide | Collecteur OpenTelemetry (ex. `http://localhost:4318`) pour `jarvis traces envoyer` ; vide = rien ne sort |
 
 Par projet, `execution = "e2b"` dans `projects.toml` choisit le backend E2B (service payant : refusé sans SDK, clé `E2B_API_KEY` et budget `infrastructure`) ; par défaut `workmux`.
@@ -465,6 +472,7 @@ python3 -m unittest discover -s tests -v
 - [x] Phase 2.5 : reprise après redémarrage, démarrage automatique, santé du PC, battement du chef, images Telegram
 - [x] Phase 3 : l'usine — rôles spécialisés, routeur de modèles, secours, registre des tâches et bilan, studio vidéo et livrables, cockpit par ateliers, tableau de bord web, prévision des jetons, capacité adaptée au PC, chiens de garde
 - [x] Autonomie, lot 0–1 et fondations du lot 2 : admission commune, pauses indépendantes, agents silencieux, profils, diagnostic, politique de délégation, budgets, journal d'audit, adaptateurs fournisseurs, file de travaux partagée (`docs/autonomy/`)
+- [x] Prompt maître, vague 3 : registre de skills avec confiance, briefs auto-améliorés (canari), SQLite facultatif, bail d'orchestrateur, exécutants (`docs/autonomy/vague-3.md`)
 - [x] Prompt maître, vagues 1–2 : plafonds de jetons, coûts, mémoire, bilan quotidien, échecs bornés, secrets par rôle ; évaluation par goldens, backend d'exécution, replay, traces, rollback assisté (`docs/autonomy/vague-*.md`)
 - [ ] Autonomie, lots 3–4 : parcours commercial d'un produit en simulation, exploitation, amélioration mesurée des agents, migration vers la station (`docs/autonomy/feuille-de-route.md`)
 - [ ] Phase 4 : PR fusionnées par jour et par projet dans le bilan, voix off et sous-titres dans le studio, approbation des plans depuis le tableau de bord web

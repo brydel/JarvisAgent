@@ -51,4 +51,5 @@ politique de délégation, de budget monétaire, ni de journal d'audit ; quota p
 - `feuille-de-route.md` — lots 3 et 4, prochaines actions.
 - `vague-1.md` — plafonds de jetons, coûts (équivalent API), mémoire du chef, bilan quotidien, échecs bornés, secrets par rôle.
 - `vague-2.md` — harnais d'évaluation (goldens), backend d'exécution, replay, proxy LiteLLM des produits, traces OpenTelemetry, rollback assisté.
+- `vague-3.md` — registre de skills avec confiance, briefs de rôles auto-améliorés (canari), stockage SQLite facultatif, bail d'orchestrateur, exécutants.
 - `handoff.md` — reprise de session en une page.

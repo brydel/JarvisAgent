@@ -866,6 +866,8 @@ def _cmd_tache_action(a) -> int:
         print(f"{t['id']} — {t['projet']} {t['issue']} [{r['titre']}, taille {t.get('taille', 'M')}] · {t['agent']} "
               f"{t.get('modele') or ''} · {taches.STATUTS.get(t['statut'], t['statut'])}")
         print(f"  essai {t.get('essai') or '?'} · essais comptés pour cette unité : {len(comptes)}/{maxi}")
+        if t.get("brief", "stable") != "stable":
+            print(f"  brief reçu : {t['brief']} (essai d'un brief candidat, jarvis role candidats)")
         if t.get("echec"):
             e = t["echec"]
             print(f"  échec : {e['classe']} ({taches.CLASSES_ECHEC[e['classe']]}, {'constaté' if e['source'] == 'auto' else 'déclaré'}"

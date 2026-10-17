@@ -40,10 +40,10 @@ tache-enregistrer (confirme) → workmux add → fenêtre visible → réservati
 
 ## Chemin vers plusieurs machines
 
-Non commencé. Prérequis identifiés : état partagé (aujourd'hui JSON local sous verrou `fcntl`) à
-remplacer par une base légère à transactions (SQLite suffit pour un orchestrateur unique et plusieurs
-exécutants) ; un seul orchestrateur actif à la fois (verrou de bail) ; exécutants déclarés avec leur
-capacité mesurée. Voir `exploitation.md` (migration) et `feuille-de-route.md`.
+Commencé en vague 3 (`vague-3.md`), sur un poste : stockage SQLite facultatif derrière `store.py` (migration
+vérifiée et retour), bail d'orchestrateur (un seul démon, numéro de clôture), exécutants déclarés avec capacité
+mesurée. Reste conçu : un état partagé sur un serveur (SQLite ne se partage pas par le réseau), des exécutants
+distants qui reçoivent du travail de l'admission, le bail dans cette base partagée.
 
 ## Persistance
 
