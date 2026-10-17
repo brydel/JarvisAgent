@@ -672,6 +672,89 @@ def bilan_check(now: float | None = None) -> bool:
     return True
 
 
+SKILLS_STATE = "skills_audit.json"
+
+
+def skills_check(now: float | None = None) -> list[str]:
+    """Audit horaire des skills : prévient une seule fois par problème nouveau (skill modifiée après épinglage,
+    signature invalide, skill apparue hors registre). Ne désactive rien : la décision reste humaine."""
+    now = now or time.time()
+    st = store.read_json(SKILLS_STATE, {})
+    if now - st.get("ts", 0) < 3600:
+        return []
+    st["ts"] = now
+    store.write_json(SKILLS_STATE, st)
+    from . import skills
+    pb = skills.problemes()
+    cles = {f"{s['nom']}:{s['etat']}:{s.get('empreinte', '')}" for s in pb}
+    nouveaux = [s for s in pb if f"{s['nom']}:{s['etat']}:{s.get('empreinte', '')}" not in set(st.get("connus", []))]
+    st["connus"] = sorted(cles)
+    store.write_json(SKILLS_STATE, st)
+    if nouveaux:
+        lignes = [f"• {s['nom']} ({s['origine']}) : {s['etat']} — {s.get('detail', '')}" for s in nouveaux[:10]]
+        notify.alert("erreur", "Skills à examiner (jarvis skill auditer) :\n" + "\n".join(lignes))
+    return [s["nom"] for s in nouveaux]
+
+
+CANARI_STATE = "canari.json"
+
+
+def canari_check(now: float | None = None) -> list[dict]:
+    """Toutes les heures : retour automatique au brief stable si un candidat en essai régresse."""
+    now = now or time.time()
+    st = store.read_json(CANARI_STATE, {})
+    if now - st.get("ts", 0) < 3600:
+        return []
+    store.write_json(CANARI_STATE, {"ts": now})
+    from . import versions_roles
+    return versions_roles.surveiller(now)
+
+
+OPTIM_STATE = "optimisation.json"
+
+
+def optimisation_check(now: float | None = None, lancer=None) -> str | None:
+    """Optimisation hebdomadaire d'un brief (réglage optimisation.hebdo, désactivé par défaut) : un rôle par
+    semaine, à tour de rôle, la nuit choisie. Lancée en arrière-plan ; chaque mesure passe par l'admission (pauses,
+    quota, capacité) et un candidat n'est jamais appliqué sans ta décision. Renvoie le rôle lancé."""
+    cfg = config.settings().get("optimisation", {})
+    if not cfg.get("hebdo") or store.paused():
+        return None
+    now = now or time.time()
+    local = time.localtime(now)
+    try:
+        h, m = (int(x) for x in str(cfg.get("heure", "02:00")).split(":"))
+        jour = int(cfg.get("jour", 7))
+    except ValueError:
+        return None
+    if local.tm_wday + 1 != jour or (local.tm_hour, local.tm_min) < (h, m) or local.tm_hour >= 6:
+        return None
+    semaine = time.strftime("%G-%V", local)
+    st = store.read_json(OPTIM_STATE, {})
+    if st.get("semaine") == semaine:
+        return None
+    liste = [r.strip() for r in str(cfg.get("roles", "")).split(",") if r.strip()]
+    if not liste:
+        return None
+    role = liste[int(st.get("index", 0)) % len(liste)]
+    store.write_json(OPTIM_STATE, {"semaine": semaine, "index": int(st.get("index", 0)) + 1, "role": role, "ts": now})
+    import subprocess
+    import sys
+    journal_dir = config.DATA_DIR / "optimisation"
+    journal_dir.mkdir(parents=True, exist_ok=True)
+    cmd = [sys.executable, str(config.JARVIS_HOME / "outils" / "optimiser_prompts.py"), "--role", role,
+           "--mode", "abonnement", "--confirmer", "--appliquer"]
+    if lancer:
+        lancer(cmd)
+    else:
+        with open(journal_dir / f"hebdo-{semaine}-{role}.log", "a", encoding="utf-8") as log:
+            proc = subprocess.Popen(cmd, stdout=log, stderr=subprocess.STDOUT, start_new_session=True, cwd=journal_dir,
+                                    env={k: v for k, v in __import__("os").environ.items() if k != "JARVIS_ROLE"})
+        store.update_json(OPTIM_STATE, {}, lambda d: d.update(pid=proc.pid))
+    store.feed_add("systeme", f"optimisation hebdomadaire du brief {role} lancée (résultat soumis à ta décision)")
+    return role
+
+
 RESSOURCES_STATE = "ressources.json"
 
 
@@ -746,12 +829,53 @@ def battement_demon() -> None:
     store.write_json(report.DEMON_FILE, {"ts": time.time(), "pid": os.getpid()})
 
 
+_BAIL: dict | None = None   # bail d'orchestrateur tenu par ce démon (posé par run)
+
+
+_BAIL_ERREURS = 0
+
+
+def bail_check() -> bool:
+    """Renouvelle le bail. False si un autre orchestrateur l'a pris (ou 5 erreurs de stockage d'affilée) : ce
+    démon doit s'arrêter, et sortir en erreur pour que « jarvis start » le relance proprement."""
+    global _BAIL, _BAIL_ERREURS
+    if _BAIL is None:
+        return True
+    from . import bail
+    try:
+        return _bail_renouveler(bail)
+    except Exception as exc:  # noqa: BLE001 — base occupée, disque plein… : passager, sauf s'il dure
+        _BAIL_ERREURS += 1
+        store.feed_add("erreur", f"bail d'orchestrateur : {exc} ({_BAIL_ERREURS}/5)")
+        return _BAIL_ERREURS < 5
+
+
+def _bail_renouveler(bail) -> bool:
+    global _BAIL, _BAIL_ERREURS
+    # Expiré pendant une veille du PC mais libre : on le reprend (nouveau numéro). Pris par un autre : perdu.
+    b = bail.renouveler(_BAIL["titulaire"], _BAIL["numero"]) or bail.acquerir(_BAIL["titulaire"])
+    if not b:
+        notify.alert("erreur", "Bail d'orchestrateur perdu : un autre démon Jarvis a pris la main, celui-ci s'arrête.")
+        return False
+    _BAIL, _BAIL_ERREURS = b, 0
+    return True
+
+
+def executant_check() -> None:
+    from . import executants
+    executants.signe_de_vie("local")
+
+
 def watch_loop(stop: threading.Event) -> None:
     first = True
     while not stop.is_set():
+        if not bail_check():
+            stop.set()
+            break
         for step in (battement_demon, lambda: watch_once(first=first), ag.chef_flush_queue, budget_check,
                      prevision_check, blocage_check, jetons_check, chef_check, modeles_check, veille_check,
-                     veille_modeles_check, menage_check, battement_check, bilan_check):
+                     veille_modeles_check, menage_check, battement_check, bilan_check, skills_check, executant_check,
+                     canari_check, optimisation_check):
             try:
                 step()
             except Exception as exc:  # noqa: BLE001 — le démon ne doit jamais mourir sur une erreur ponctuelle
@@ -802,6 +926,32 @@ def handle_update(bot: Bot, chat_id: str, upd: dict) -> None:
                 r = rollback.decider(plan_id, action == "rbok", par="Telegram")
                 verdict = f"↩ Revert fait ({len(r.get('commits', []))} commit(s))" if r["execute"] else "Gardé tel quel"
             except rollback.RollbackError as exc:
+                verdict = f"⚠ {exc}"
+            bot.answer(cb["id"], verdict[:190])
+            msg = cb.get("message", {})
+            if msg.get("message_id"):
+                bot.edit(owner, msg["message_id"], f"{msg.get('text', '')}\n\n{verdict}")
+            return
+        if action in ("skok", "sknon"):
+            from . import skills
+            try:
+                nom, _, jeton = plan_id.partition(":")
+                r = skills.decider(nom, action == "skok", par="Telegram", jeton_attendu=jeton or "?")
+                verdict = "✅ Skill activée" if r["active"] else "✋ Skill refusée (copie supprimée)"
+            except (skills.SkillError, OSError) as exc:
+                verdict = f"⚠ {exc}"
+            bot.answer(cb["id"], verdict[:190])
+            msg = cb.get("message", {})
+            if msg.get("message_id"):
+                bot.edit(owner, msg["message_id"], f"{msg.get('text', '')}\n\n{verdict}")
+            return
+        if action in ("rlok", "rlnon"):
+            from . import versions_roles
+            try:
+                r = versions_roles.decider(plan_id, action == "rlok", par="Telegram")
+                verdict = (f"✅ Essai sur {r['pct']} % des tâches {r['role']}" if r["statut"] == "canari"
+                           else "✋ Brief refusé")
+            except versions_roles.VersionError as exc:
                 verdict = f"⚠ {exc}"
             bot.answer(cb["id"], verdict[:190])
             msg = cb.get("message", {})
@@ -963,6 +1113,14 @@ def telegram_loop(stop: threading.Event) -> None:
 
 
 def run() -> None:
+    global _BAIL
+    from . import bail
+    _BAIL = bail.acquerir()
+    if not _BAIL:
+        b = bail.lire() or {}
+        print(f"Un autre démon Jarvis tient le bail d'orchestrateur ({b.get('titulaire', '?')}, jusqu'à "
+              f"{time.strftime('%H:%M:%S', time.localtime(b.get('expire', 0)))}). Un seul démon à la fois : rien n'est lancé.")
+        raise SystemExit(1)
     stop = threading.Event()
     threads = [
         threading.Thread(target=watch_loop, args=(stop,), name="surveillance", daemon=True),
@@ -982,9 +1140,26 @@ def run() -> None:
     if web_cfg.get("actif", True):
         print(f"Tableau de bord : http://localhost:{int(web_cfg.get('port', 7717))} (lecture seule, ce PC uniquement)")
     print("Laisse cette fenêtre ouverte. Ctrl+C pour arrêter.")
+    import signal
+
+    def _terminer(*_):
+        raise KeyboardInterrupt
+
+    signal.signal(signal.SIGTERM, _terminer)
+    signal.signal(signal.SIGHUP, _terminer)   # fenêtre tmux fermée : on rend le bail
+    perdu = False
     try:
-        while True:
-            time.sleep(3600)
+        while not stop.is_set():
+            stop.wait(3600)
+        perdu = True
+        print("Bail d'orchestrateur perdu ou stockage indisponible : ce démon s'arrête.")
     except KeyboardInterrupt:
         stop.set()
         store.feed_add("systeme", "démon Jarvis arrêté")
+    finally:
+        try:
+            bail.liberer(_BAIL["titulaire"])
+        except Exception:  # noqa: BLE001
+            pass
+    if perdu:
+        raise SystemExit(1)

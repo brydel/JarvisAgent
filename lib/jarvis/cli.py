@@ -575,6 +575,47 @@ def cmd_role_voir(a) -> int:
     return 0
 
 
+def cmd_role_version(a) -> int:
+    """Briefs candidats : proposer, lister, décider (toi), retirer, promouvoir (toi)."""
+    from . import versions_roles as vr
+    try:
+        if a.action == "candidats":
+            if a.cible:
+                p = vr.get(a.cible)
+                if not p:
+                    return _err(f"proposition {a.cible} introuvable")
+                print(vr.diff_complet(p))
+                return 0
+            print(vr.texte())
+            return 0
+        if a.action == "proposer":
+            try:
+                texte = Path(a.fichier).read_text(encoding="utf-8")
+            except OSError as exc:
+                return _err(f"candidat illisible : {exc}")
+            # Aucun score par la ligne de commande : seuls ceux mesurés par l'optimiseur sont affichés.
+            p = vr.proposer(a.cible, texte, a.pourquoi, par=_acteur(), source=a.fichier)
+            print(f"{p['id']} proposé pour {p['role']} : ton humain décide (Telegram). Rien ne change avant.")
+            return 0
+        if a.action == "retirer":
+            p = vr.retirer(a.cible, par=_acteur(), raison=a.pourquoi)
+            print(f"{p['id']} retiré : le rôle {p['role']} reprend son brief stable.")
+            return 0
+        refused = _human_only(f"{a.action} un brief de rôle")
+        if refused is not None:
+            return refused
+        if a.action in ("approuver", "refuser"):
+            p = vr.decider(a.cible, a.action == "approuver", par="humain")
+            print(f"{p['id']} en essai sur {p['pct']} % des tâches {p['role']}." if p["statut"] == "canari"
+                  else f"{p['id']} refusé.")
+            return 0
+        p = vr.promouvoir(a.cible, par="humain")
+        print(f"{p['id']} promu : brief du rôle {p['role']} écrit dans {p['ecrit']}.")
+        return 0
+    except vr.VersionError as exc:
+        return _err(str(exc))
+
+
 def cmd_modele_liste(a) -> int:
     from . import modeles
     print(modeles.texte())
@@ -683,8 +724,13 @@ def cmd_prompt_construire(a) -> int:
             out += ["Ton livrable principal est un ensemble de fichiers, pas du code : dépose-les dans le dossier des "
                     "livrables ci-dessous. La PR ne contient que les sources utiles à versionner (scénarios, "
                     "storyboards, textes) ; s'il n'y en a aucune, ne crée pas de PR et dis-le dans ton commentaire final."]
-    if role["corps"]:
-        out += ["", f"## Ton rôle : {role['titre']}", "", role["corps"]]
+    from . import versions_roles
+    version, corps_candidat = versions_roles.choisir(role["nom"], a.projet, issue)  # essai progressif d'un brief
+    if getattr(a, "brief_sortie", ""):
+        Path(a.brief_sortie).write_text(version, encoding="utf-8")  # la fiche de tâche notera la version reçue
+    corps = corps_candidat if corps_candidat is not None else role["corps"]
+    if corps:
+        out += ["", f"## Ton rôle : {role['titre']}", "", corps]
     out += ["", "## Ton poste", "",
             f"- Projet : {a.projet} · issue : {issue} · branche : {a.branche}",
             f"- Livrables hors dépôt (captures, vidéos, rapports) : `{dossier}` (variable `$JARVIS_LIVRABLES`). "
@@ -709,7 +755,7 @@ def cmd_tache_enregistrer(a) -> int:
                                role=a.role, modele=a.modele, modele_id=a.modele_id, effort=a.effort, repli=a.repli,
                                taille=a.taille, plan=a.plan, revue=a.revue, raison=a.raison, secours=a.secours,
                                classe=a.classe, reservation=a.reservation, jetons_max=int(a.jetons_max or 0),
-                               consignes_empreinte=a.consignes_empreinte, base=a.base)
+                               consignes_empreinte=a.consignes_empreinte, base=a.base, brief=a.brief)
     if a.reservation:
         from . import admission
         admission.confirmer(a.reservation, fiche["id"], a.worktree)
@@ -828,6 +874,8 @@ def _cmd_tache_action(a) -> int:
         print(f"{t['id']} — {t['projet']} {t['issue']} [{r['titre']}, taille {t.get('taille', 'M')}] · {t['agent']} "
               f"{t.get('modele') or ''} · {taches.STATUTS.get(t['statut'], t['statut'])}")
         print(f"  essai {t.get('essai') or '?'} · essais comptés pour cette unité : {len(comptes)}/{maxi}")
+        if t.get("brief", "stable") != "stable":
+            print(f"  brief reçu : {t['brief']} (essai d'un brief candidat, jarvis role candidats)")
         if t.get("echec"):
             e = t["echec"]
             print(f"  échec : {e['classe']} ({taches.CLASSES_ECHEC[e['classe']]}, {'constaté' if e['source'] == 'auto' else 'déclaré'}"
@@ -1057,6 +1105,10 @@ def cmd_chef_preparer(a) -> int:
         root = Path(p["chemin"])
         protected |= {root, root.parent / f"{root.name}__worktrees"}
     protected |= {config.STATE_DIR, config.CONFIG_DIR, config.JARVIS_HOME, chef_dir / ".claude"}
+    # Vague 3 : skills actives, quarantaine, briefs candidats, rapports d'optimisation, dossiers lus par les agents.
+    from . import skills as _skills
+    protected |= {config.DATA_DIR / d for d in ("skills", "skills-quarantaine", "roles-candidats", "optimisation")}
+    protected |= set(_skills.liens_dirs())
     deny_paths = []
     for d in sorted({_rule_path(x) for x in protected}):
         deny_paths += [f"Edit({d}/**)", f"Write({d}/**)"]
@@ -1085,6 +1137,8 @@ def cmd_chef_preparer(a) -> int:
                 "Bash(jarvis secrets verifier *)", "Bash(jarvis rejouer *)", "Bash(jarvis traces)", "Bash(jarvis traces *)",
                 "Bash(jarvis rollback proposer *)", "Bash(jarvis rollback demander *)", "Bash(jarvis eval liste*)",
                 "Bash(jarvis eval verifier*)", "Bash(jarvis eval resultats*)", "Bash(jarvis proxy)", "Bash(jarvis proxy voir)",
+                "Bash(jarvis skill)", "Bash(jarvis skill liste)", "Bash(jarvis skill auditer)", "Bash(jarvis skill installer *)",
+                "Bash(jarvis stockage)", "Bash(jarvis stockage etat)", "Bash(jarvis executant)", "Bash(jarvis executant liste)",
                 # Usine : rôles, routeur, registre, bilan, studio et livrables.
                 "Bash(jarvis role)", "Bash(jarvis role *)", "Bash(jarvis modele)", "Bash(jarvis modele liste)",
                 "Bash(jarvis modele choisir *)", "Bash(jarvis modele proposer *)",
@@ -1117,7 +1171,11 @@ def cmd_chef_preparer(a) -> int:
                 "Bash(jarvis lourd debut *)", "Bash(jarvis lourd exec *)", "Bash(jarvis lourd fin *)",
                 "Bash(jarvis politique appliquer *)", "Bash(jarvis politique deleguer *)", "Bash(jarvis budget definir *)",
                 "Bash(jarvis tache relancer *)", "Bash(jarvis execution *)", "Bash(jarvis rollback executer *)",
-                "Bash(jarvis eval lancer *)", "Bash(jarvis proxy config*)",
+                "Bash(jarvis eval lancer *)", "Bash(jarvis proxy config*)", "Bash(jarvis skill approuver *)",
+                "Bash(jarvis skill refuser *)", "Bash(jarvis skill epingler *)",
+                "Bash(jarvis role approuver *)", "Bash(jarvis role refuser *)", "Bash(jarvis role promouvoir *)",
+                "Bash(jarvis stockage migrer*)", "Bash(jarvis stockage revenir*)", "Bash(jarvis executant declarer *)",
+                "Bash(jarvis executant retirer *)",
                 # Contournements de « jarvis task » et accès directs au noyau.
                 "Bash(workmux add *)", "Bash(workmux run *)", "Bash(python *)", "Bash(python3 *)",
                 "Bash(env *)", "Bash(script *)",
@@ -1586,6 +1644,89 @@ def cmd_proxy(a) -> int:
     return 0
 
 
+def cmd_skill(a) -> int:
+    """Registre des skills : audit, installation en quarantaine, décision humaine, épinglage."""
+    from . import skills
+    try:
+        if a.action in ("liste", "auditer"):
+            audit = skills.auditer()
+            print(skills.texte(audit))
+            pb = skills.problemes(audit)
+            if pb and a.action == "auditer":
+                print(f"\n⚠ {len(pb)} skill(s) à examiner : modifiées, non épinglées ou hors registre.")
+                return 1
+            return 0
+        if not a.quoi:
+            return _err(f"jarvis skill {a.action} : précise la skill (ou la source)")
+        if a.action == "installer":
+            r = skills.installer(a.quoi, par=_acteur())
+            print(f"Skill « {r['nom']} » en quarantaine : {r['quarantaine']}")
+            print(f"{r['fichiers']} fichier(s), empreinte {r['empreinte']}, signature : {r['signature']}.")
+            print("Rien n'est actif. Activation : bouton Telegram ou « jarvis skill approuver " + r["nom"] + " » au terminal."
+                  if r["envoye"] else "Telegram injoignable : approuve au terminal avec « jarvis skill approuver " + r["nom"] + " ».")
+            return 0
+        refused = _human_only(f"{a.action} une skill")
+        if refused is not None:
+            return refused
+        if a.action in ("approuver", "refuser"):
+            r = skills.decider(a.quoi, a.action == "approuver", par="humain")
+            print(f"Skill « {r['nom']} » activée : {r['chemin']}" if r["active"] else f"Skill « {r['nom']} » refusée, copie supprimée.")
+            return 0
+        lock = skills.epingler(a.quoi, version=a.version, auteur=a.auteur, cle=a.signer)
+        print(f"« {lock['nom']} » épinglée : {lock['empreinte']}" + (" (signée)" if lock.get("signature") else " (non signée)"))
+        return 0
+    except skills.SkillError as exc:
+        return _err(str(exc))
+
+
+def cmd_stockage(a) -> int:
+    """État du stockage ; migration JSON → SQLite et retour (toi seulement, démon arrêté)."""
+    from . import stockage
+    if a.action == "etat":
+        e = stockage.etat()
+        print(f"Stockage : {e['backend']} · base {e['base']} "
+              + (f"({e['lignes']} états, {e['taille_ko']} Ko)" if e["base_existe"] else "(pas encore créée)")
+              + f" · {e['fichiers_json']} fichier(s) JSON")
+        return 0
+    refused = _human_only("changer le stockage")
+    if refused is not None:
+        return refused
+    try:
+        if a.action == "migrer":
+            r = stockage.migrer(par="humain")
+            print(f"{r['importes']} état(s) importés dans {r['base']} et vérifiés ; stockage basculé en SQLite.")
+            print(f"Copie des JSON : {r['sauvegarde']}. Retour possible : jarvis stockage revenir.")
+            for i in r["ignores"]:
+                print(f"⚠ ignoré (illisible) : {i}")
+        else:
+            r = stockage.revenir(par="humain")
+            print(f"{r['exportes']} état(s) réécrits en JSON et vérifiés ; stockage rebasculé en JSON ({r['sauvegarde']}).")
+        return 0
+    except stockage.StockageError as exc:
+        return _err(str(exc))
+
+
+def cmd_executant(a) -> int:
+    from . import executants
+    try:
+        if a.action == "liste":
+            print(executants.texte())
+            return 0
+        refused = _human_only("déclarer ou retirer un exécutant")
+        if refused is not None:
+            return refused
+        if not a.nom:
+            return _err("précise le nom de l'exécutant")
+        if a.action == "retirer":
+            return 0 if executants.retirer(a.nom) else _err(f"exécutant « {a.nom} » inconnu")
+        cap = {"coeurs": a.coeurs, "memoire_mo": a.memoire_mo, "agents_max": a.agents_max} if a.nom != "local" else None
+        e = executants.declarer(a.nom, hote=a.hote, capacite=cap, par="humain")
+        print(f"Exécutant « {a.nom} » déclaré ({e.get('hote') or 'hôte inconnu'}). L'admission n'utilise encore que ce poste.")
+        return 0
+    except executants.ExecutantError as exc:
+        return _err(str(exc))
+
+
 def cmd_rollback(a) -> int:
     from . import rollback
     try:
@@ -1828,6 +1969,27 @@ def build_parser() -> argparse.ArgumentParser:
     s.add_argument("tache")
     s.set_defaults(fn=cmd_rollback)
 
+    s = sub.add_parser("skill", help="registre des skills : audit, quarantaine, approbation, épinglage")
+    s.add_argument("action", nargs="?", default="liste", choices=("liste", "auditer", "installer", "approuver", "refuser", "epingler"))
+    s.add_argument("quoi", nargs="?", default="")
+    s.add_argument("--version", default="")
+    s.add_argument("--auteur", default="")
+    s.add_argument("--signer", default="", metavar="CLE_SSH", help="epingler : signer avec cette clé (ssh-keygen -Y sign)")
+    s.set_defaults(fn=cmd_skill)
+
+    s = sub.add_parser("stockage", help="stockage de l'état : JSON (défaut) ou SQLite, migration vérifiée")
+    s.add_argument("action", nargs="?", default="etat", choices=("etat", "migrer", "revenir"))
+    s.set_defaults(fn=cmd_stockage)
+
+    s = sub.add_parser("executant", help="exécutants déclarés (machines) et bail d'orchestrateur")
+    s.add_argument("action", nargs="?", default="liste", choices=("liste", "declarer", "retirer"))
+    s.add_argument("nom", nargs="?", default="")
+    s.add_argument("--hote", default="")
+    s.add_argument("--coeurs", type=int, default=0)
+    s.add_argument("--memoire-mo", type=int, default=0)
+    s.add_argument("--agents-max", type=int, default=0)
+    s.set_defaults(fn=cmd_executant)
+
     s = sub.add_parser("execution", help=argparse.SUPPRESS)
     s.add_argument("action", choices=("lancer",))
     s.add_argument("--projet", required=True)
@@ -1933,6 +2095,19 @@ def build_parser() -> argparse.ArgumentParser:
     s = role_sub.add_parser("voir")
     s.add_argument("nom")
     s.set_defaults(fn=cmd_role_voir)
+    s = role_sub.add_parser("candidats", help="briefs candidats et essais en cours ; avec RB-… : diff complet")
+    s.add_argument("cible", nargs="?", default="", metavar="RB-0001")
+    s.set_defaults(fn=cmd_role_version, action="candidats")
+    s = role_sub.add_parser("proposer", help="proposer un brief candidat (ton humain décide)")
+    s.add_argument("cible", metavar="role")
+    s.add_argument("--fichier", required=True)
+    s.add_argument("--pourquoi", required=True)
+    s.set_defaults(fn=cmd_role_version, action="proposer")
+    for act in ("approuver", "refuser", "retirer", "promouvoir"):
+        s = role_sub.add_parser(act)
+        s.add_argument("cible", metavar="RB-0001")
+        s.add_argument("--pourquoi", default="")
+        s.set_defaults(fn=cmd_role_version, action=act)
 
     modele = sub.add_parser("modele", help="catalogue des modèles et routeur")
     modele.set_defaults(fn=cmd_modele_liste)
@@ -1991,7 +2166,7 @@ def build_parser() -> argparse.ArgumentParser:
     for opt in ("projet", "issue", "agent", "worktree"):
         s.add_argument(f"--{opt}", required=True)
     for opt in ("chemin", "role", "modele", "modele-id", "effort", "repli", "plan", "revue", "raison", "classe", "reservation",
-                "jetons-max", "consignes-empreinte", "base"):
+                "jetons-max", "consignes-empreinte", "base", "brief"):
         s.add_argument(f"--{opt}", default="")
     s.add_argument("--taille", default="M")
     s.add_argument("--secours", action="store_true")
@@ -2005,7 +2180,7 @@ def build_parser() -> argparse.ArgumentParser:
     s = sub.add_parser("prompt-construire", help=argparse.SUPPRESS)
     for opt in ("projet", "issue", "branche", "regles"):
         s.add_argument(f"--{opt}", required=True)
-    for opt in ("role", "revue", "consignes"):
+    for opt in ("role", "revue", "consignes", "brief-sortie"):
         s.add_argument(f"--{opt}", default="")
     s.set_defaults(fn=cmd_prompt_construire)
     s = sub.add_parser("verdict", help="enregistrer le verdict d'une contre-relecture")

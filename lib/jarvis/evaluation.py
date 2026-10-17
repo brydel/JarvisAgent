@@ -88,12 +88,15 @@ def verifier(c: dict, dossier: Path, timeout: int = 180) -> tuple[bool, str]:
     return ok, sortie.replace(jeton, "<jeton>")[-2000:]
 
 
-def exigences_manquantes(c: dict) -> list[str]:
-    from . import roles
-    r = roles.get(c["role"])
-    if not r:
-        return [f"rôle {c['role']} introuvable"]
-    return [e for e in c.get("exigences_brief", []) if not re.search(e, r["corps"], re.I)]
+def exigences_manquantes(c: dict, corps: str | None = None) -> list[str]:
+    """Règles exigées par le cas absentes du brief (`corps` : un brief candidat, sinon celui du rôle)."""
+    if corps is None:
+        from . import roles
+        r = roles.get(c["role"])
+        if not r:
+            return [f"rôle {c['role']} introuvable"]
+        corps = r["corps"]
+    return [e for e in c.get("exigences_brief", []) if not re.search(e, corps, re.I)]
 
 
 def controle(role: str | None = None) -> list[dict]:
@@ -116,10 +119,11 @@ def empreinte_brief(role: str) -> str:
     return hashlib.sha256((r.get("corps") or "").encode("utf-8")).hexdigest()[:12]
 
 
-def consigne_complete(c: dict) -> str:
+def consigne_complete(c: dict, brief: str | None = None) -> str:
+    """Consigne donnée à l'agent évalué. `brief` : un brief candidat à mesurer à la place de celui du rôle."""
     from . import roles
     r = roles.ou_defaut(c["role"])
-    return (f"# Ton rôle : {r['titre']}\n\n{r['corps']}\n\n# Ta tâche\n\n{c['consigne'].strip()}\n\n"
+    return (f"# Ton rôle : {r['titre']}\n\n{brief if brief is not None else r['corps']}\n\n# Ta tâche\n\n{c['consigne'].strip()}\n\n"
             "Travaille uniquement dans le dossier courant. Quand tu as fini, arrête-toi : une vérification "
             "automatique jugera le résultat.")
 
@@ -139,7 +143,7 @@ def commande_agent(agent: str, modele_id: str, consigne: str) -> list[str]:
 
 
 def lancer(nom: str, agent: str, modele: str = "", acteur: str = "humain", garder: bool = False,
-           commande: list[str] | None = None) -> dict:
+           commande: list[str] | None = None, brief: str | None = None) -> dict:
     """Exécution réelle d'un cas par un agent. Passe par l'admission ; enregistre le résultat."""
     from . import admission, modeles
     c = cas(nom)
@@ -160,7 +164,7 @@ def lancer(nom: str, agent: str, modele: str = "", acteur: str = "humain", garde
             preparer(c, d / "projet")
         except (OSError, subprocess.CalledProcessError) as exc:
             raise EvalError(f"préparation du cas impossible : {exc}") from exc
-        cmd = commande or commande_agent(agent, (m or {}).get("id", ""), consigne_complete(c))
+        cmd = commande or commande_agent(agent, (m or {}).get("id", ""), consigne_complete(c, brief))
         try:
             r = subprocess.run(cmd, cwd=d / "projet", capture_output=True, text=True, timeout=duree_max)
             sortie_agent = r.stdout + r.stderr
@@ -177,7 +181,8 @@ def lancer(nom: str, agent: str, modele: str = "", acteur: str = "humain", garde
     suspect = bool(re.search(r"tests/goldens|verifier\.py|/reference/", sortie_agent))
     sortie_agent = sortie_agent[-1500:]
     res = {"ts": time.time(), "cas": nom, "role": c["role"], "agent": agent, "modele": modele or f"{agent}-defaut",
-           "brief": empreinte_brief(c["role"]), "ok": ok, "duree_s": round(time.time() - debut, 1),
+           "brief": (hashlib.sha256(brief.encode("utf-8")).hexdigest()[:12] if brief is not None
+                     else empreinte_brief(c["role"])), "candidat": brief is not None, "ok": ok, "duree_s": round(time.time() - debut, 1),
            "detail": detail[-500:], "sortie_agent": sortie_agent[-300:], "suspect": suspect}
     with store.locked(RESULTATS):
         with store.state_path(RESULTATS).open("a", encoding="utf-8") as fh:

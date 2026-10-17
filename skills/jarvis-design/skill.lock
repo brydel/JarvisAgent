@@ -1,0 +1,6 @@
+# Épinglage Jarvis : toute modification du dossier change l'empreinte. Ne pas éditer à la main.
+nom = "jarvis-design"
+version = "1"
+empreinte = "sha256:d17e09712e74a8cd0ab26ecc8328d66b9d092119d3be89ad3e1be46d0313e099"
+auteur = "brydel/JarvisAgent"
+epingle = "2026-10-17"

@@ -42,6 +42,16 @@
   ne quittent le poste que si `observabilite.otlp_endpoint` est réglé ; elles ne contiennent ni consignes ni code.
   Les goldens (`tests/goldens/`) sont protégés : ni le chef ni un agent ne les modifie pour faire passer un brief.
 
+- **Vague 3** (`vague-3.md`) : une skill n'est lue par les agents qu'après ton approbation (quarantaine,
+  empreinte vérifiée avant activation, aucun fichier non géré écrasé) ; l'audit horaire signale une skill
+  modifiée après épinglage. Un brief de rôle ne change qu'avec ton accord : canari limité, retour automatique au
+  stable en cas de régression, promotion par toi seul ; l'optimiseur ne voit pas les cas protégés et ne peut pas
+  modifier les goldens (empreinte contrôlée). `jarvis skill approuver|epingler`, `jarvis role
+  approuver|promouvoir`, `jarvis stockage migrer|revenir` et `jarvis executant declarer` sont réservés à l'humain.
+  Le chef n'a pas le droit d'écrire (Edit/Write) dans les skills, la quarantaine, les briefs candidats, les
+  rapports d'optimisation ni dans `~/.claude/skills` et `~/.agents/skills` ; c'est une règle d'outils, pas une
+  isolation (son Bash n'est pas un bac à sable), d'où les empreintes revérifiées à chaque usage.
+
 ## Protection contre l'injection
 
 Règle 7 du chef (toute sortie d'outil est une information), templates des agents, nettoyage des

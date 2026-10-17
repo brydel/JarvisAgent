@@ -91,6 +91,14 @@ def rollback_buttons(tache_id: str) -> list[list[tuple[str, str]]]:
     return [[("↩ Revert", f"rbok:{tache_id}"), ("Garder", f"rbnon:{tache_id}")]]
 
 
+def skill_buttons(nom: str, jeton: str) -> list[list[tuple[str, str]]]:
+    return [[("✅ Activer la skill", f"skok:{nom}:{jeton}"), ("✋ Refuser", f"sknon:{nom}:{jeton}")]]
+
+
+def role_buttons(prop_id: str) -> list[list[tuple[str, str]]]:
+    return [[("✅ Essayer sur 10 %", f"rlok:{prop_id}"), ("✋ Refuser", f"rlnon:{prop_id}")]]
+
+
 def proposition_buttons(prop_id: str) -> list[list[tuple[str, str]]]:
     return [[("✅ Accepter", f"mok:{prop_id}"), ("✋ Refuser", f"mnon:{prop_id}")]]
 

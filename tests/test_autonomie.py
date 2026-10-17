@@ -56,12 +56,12 @@ class AutonomieTest(unittest.TestCase):
         cls.server.shutdown()
         config.SETTINGS_FILE.write_text(cls.reglages_initiaux, encoding="utf-8")  # rien ne fuit vers les autres tests
         for name in ETAT:
-            store.state_path(name).unlink(missing_ok=True)
+            store.supprimer(name)
 
     def setUp(self):
         FakeTelegram.calls.clear()
         for name in ETAT:
-            store.state_path(name).unlink(missing_ok=True)
+            store.supprimer(name)
         import shutil
         shutil.rmtree(TMP / "codexhome" / "sessions", ignore_errors=True)
         (config.CONFIG_DIR / "politique.toml").unlink(missing_ok=True)
