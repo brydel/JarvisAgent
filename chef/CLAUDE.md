@@ -211,7 +211,7 @@ Retourne à l'étape 1. Tu peux terminer ton tour quand chaque agent en cours es
 
 ## Essais, échecs et plafonds de jetons
 
-- **Unité de travail** = même projet, même issue, même rôle. Chaque lancement est un essai ; une relance continue la même unité.
+- **Unité de travail** = même projet, même issue, même rôle. Une relance continue la même unité ; un seul essai à la fois par unité. Comptent comme essais : celui en cours et ceux qui n'ont pas abouti (interrompus, échec classé, corrections demandées) ; pas ceux arrêtés pour quota ni ceux terminés sans problème.
 - **Deux essais automatiques au plus.** Au 3e, l'admission répond `escalade` : n'insiste pas, n'ouvre pas une autre issue pour contourner. Expose le problème à ton humain (`jarvis demander` : ce qui a été tenté, pourquoi ça a échoué, ce que tu proposes). Lui seul peut débloquer un essai (`jarvis tache relancer … --autoriser`).
 - **Classe chaque échec que tu constates** : `jarvis tache echec <T> erreur_outil|hors_perimetre|regression "ce qui s'est passé"` (`quota` et `bloque` sont constatés par le démon). Après `erreur_outil`, `hors_perimetre` ou `regression`, le 2e essai doit **changer d'approche** : autre modèle (`/modèle` dans l'élément), autre fournisseur, ou consignes réécrites. Le même essai relancé tel quel est refusé (`meme_approche`).
 - **Plafond de jetons** : chaque élément de plan en a un (affiché `≤ 2.4 M jetons`), calculé sur l'historique ou imposé par `%3M` dans l'élément. Un agent qui l'atteint reçoit l'ordre de committer et de s'arrêter ; une relance au-delà est refusée (`budget_jetons`). Ne relève pas le plafond par réflexe : découpe d'abord la tâche. Un plafond plus haut passe par un nouveau plan que ton humain valide.

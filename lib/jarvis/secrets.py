@@ -33,8 +33,11 @@ NOM_RE = re.compile(r"^[A-Z_][A-Z0-9_]{0,63}$")
 # Variables qui changeraient le comportement du système ou de Jarvis : jamais injectées comme « secret ».
 INTERDITES = {"PATH", "HOME", "SHELL", "USER", "LOGNAME", "PWD", "TERM", "TMUX", "LANG", "LD_PRELOAD",
               "LD_LIBRARY_PATH", "PYTHONPATH", "NODE_OPTIONS", "BASH_ENV", "ENV", "PROMPT_COMMAND",
-              "GIT_DIR", "GIT_WORK_TREE", "HTTPS_PROXY", "HTTP_PROXY", "NO_PROXY", "CODEX_HOME", "CLAUDE_CONFIG_DIR"}
-PREFIXES_INTERDITS = ("JARVIS_", "LD_", "DYLD_", "GIT_CONFIG")
+              "GIT_DIR", "GIT_WORK_TREE", "HTTPS_PROXY", "HTTP_PROXY", "NO_PROXY", "CODEX_HOME", "CLAUDE_CONFIG_DIR",
+              "IFS", "PS1", "PS2", "PS3", "PS4", "CDPATH", "GLOBIGNORE", "SHELLOPTS", "BASHOPTS"}
+# Aussi les variables des fournisseurs d'IA : une clé d'API injectée pour le produit ferait facturer Claude Code
+# ou Codex à l'API au lieu de l'abonnement, et une URL de base détournerait leur trafic.
+PREFIXES_INTERDITS = ("JARVIS_", "LD_", "DYLD_", "GIT_CONFIG", "BASH_", "ANTHROPIC_", "CLAUDE_", "OPENAI_", "CODEX_")
 
 
 class SecretsError(ValueError):
@@ -147,10 +150,36 @@ def verifier(projet: str) -> list[str]:
     return lignes
 
 
-def exclusions_codex(autorises: list[str], env: dict | None = None) -> list[str]:
+def exclusions_codex(autorises: list[str], env: dict | None = None, existantes: list[str] | None = None) -> list[str]:
     """Pour Codex : son filtre par défaut retire des sous-processus toute variable dont le nom contient KEY,
     SECRET ou TOKEN. Pour laisser passer les secrets autorisés SANS élargir le reste, on désactive ce filtre
-    et on exclut nommément les autres variables sensibles présentes. Renvoie ces noms (jamais de valeurs)."""
+    et on exclut nommément les autres variables sensibles présentes, en gardant les exclusions déjà écrites
+    par l'utilisateur dans sa configuration Codex. Renvoie motifs et noms (jamais de valeurs)."""
     env = os.environ if env is None else env
     motif = re.compile(r"KEY|SECRET|TOKEN|PASSWORD|PASSWD|CREDENTIAL", re.I)
-    return sorted(n for n in env if motif.search(n) and n not in set(autorises))
+    noms = {n for n in env if motif.search(n) and n not in set(autorises)}
+    return sorted(noms | {str(x) for x in (existantes or [])})
+
+
+def exclusions_codex_utilisateur() -> list[str]:
+    """Motifs « shell_environment_policy.exclude » de ~/.codex/config.toml (ou $CODEX_HOME)."""
+    base = Path(os.environ.get("CODEX_HOME") or Path.home() / ".codex") / "config.toml"
+    try:
+        with base.open("rb") as fh:
+            data = tomllib.load(fh)
+    except (OSError, tomllib.TOMLDecodeError):
+        return []
+    excl = (data.get("shell_environment_policy") or {}).get("exclude") or []
+    return [str(x) for x in excl if isinstance(x, str)]
+
+
+def valeurs_connues() -> list[str]:
+    """Toutes les valeurs des fichiers <projet>.env (pour les expurger d'un texte). Jamais affichées."""
+    out = []
+    d = dossier()
+    for f in d.glob("*.env") if d.is_dir() else []:
+        try:
+            out += [v for v in _valeurs(f.stem).values() if len(v) >= 6]
+        except SecretsError:
+            continue
+    return out

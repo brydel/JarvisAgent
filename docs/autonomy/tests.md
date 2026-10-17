@@ -42,7 +42,7 @@ chemin d'abandon tardif dans `bin/jarvis`, pause maintenance levée à tort par 
 | File partagée : doublons, exécutant unique, preuve, plafond, import | `test_shared_queue_dedups_single_executor_verified_result` | unitaire |
 | Visibilité (rapport, web, Telegram) | `test_state_shows_pause_causes_reservations_and_exceptions` | intégration simulée |
 
-Vague 1 : `tests/test_vague1.py` (11 tests, voir `vague-1.md`) ; suite complète 124 tests verts.
+Vague 1 : `tests/test_vague1.py` (14 tests, voir `vague-1.md`) ; suite complète 127 tests verts.
 
 Non couvert par un test : le rendu curses du cockpit (vérifié visuellement dans le lot précédent, pas
 re-capturé ici), `gh issue list` réel, `codex cloud`, PowerShell.

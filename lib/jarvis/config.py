@@ -124,7 +124,7 @@ DEFAULTS: dict = {
         # multiplicateur × estimation. L'estimation devient la médiane des tâches terminées de même rôle et
         # taille dès qu'il y en a 5 ; avant, ces valeurs par défaut. Un plan peut imposer « %2M ».
         "actif": True,
-        "multiplicateur": 3,
+        "multiplicateur": 3.0,
         "estimation_s": 300_000,
         "estimation_m": 800_000,
         "estimation_l": 2_000_000,
@@ -217,7 +217,7 @@ def valider(s: dict | None = None) -> list[str]:
     if (s.get("plans") or {}).get("validation") not in ("humain", "auto"):
         erreurs.append("plans.validation doit valoir « humain » ou « auto »")
     import re as _re
-    if not _re.fullmatch(r"([01]\d|2[0-3]):[0-5]\d", str((s.get("bilan") or {}).get("heure", ""))):
+    if not _re.fullmatch(r"([01]?\d|2[0-3]):[0-5]\d", str((s.get("bilan") or {}).get("heure", ""))):
         erreurs.append("bilan.heure doit être une heure HH:MM (ex. 08:00)")
     j = s.get("jetons") or {}
     if isinstance(j.get("alerte"), int) and isinstance(j.get("arret"), int) and j["alerte"] > j["arret"]:

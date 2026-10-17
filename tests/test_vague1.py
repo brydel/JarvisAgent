@@ -229,7 +229,10 @@ class Vague1Test(unittest.TestCase):
     def test_failure_classes_and_bounded_retries(self):
         for classe in taches.CLASSES_ECHEC:
             t = _essai(issue=f"BIS-1{len(classe)}", role="data")
-            self.assertEqual(taches.classer(t["id"], classe)["echec"]["classe"], classe)
+            source = "auto" if classe in taches.CLASSES_AUTO else "declare"
+            self.assertEqual(taches.classer(t["id"], classe, source=source)["echec"]["classe"], classe)
+        t = _essai(issue="BIS-19", role="data")
+        taches.classer(t["id"], "regression")
         with self.assertRaises(ValueError):
             taches.classer(t["id"], "fatigue")
         # Une classe déclarée n'est jamais écrasée par une classe constatée.
@@ -378,6 +381,101 @@ class Vague1Test(unittest.TestCase):
         self.assertIn("GH_TOKEN", exclusion)
         self.assertNotIn("STRIPE_KEY", exclusion)
         self.assertNotIn("sk_test", " ".join(out), "aucune valeur sur la ligne de commande")
+
+
+    # --- Correctifs de la revue indépendante ------------------------------------------------------
+
+    def test_review_fixes_attempts_and_labels(self):
+        # « quota » et « bloque » ne se déclarent pas : sinon la borne des essais se contourne.
+        t = _essai(issue="BIS-30", role="backend", statut="perdue")
+        for classe in ("quota", "bloque"):
+            with self.assertRaises(ValueError):
+                taches.classer(t["id"], classe)
+        # Un essai terminé sans échec ne compte pas ; un essai en cours, si.
+        _essai(issue="BIS-31", role="backend", statut="terminee")
+        _essai(issue="BIS-31", role="backend", statut="terminee", verdict="pret")
+        self.assertIsNone(taches.verifier_reprise("repriceo", "BIS-31", "backend"))
+        _essai(issue="BIS-32", role="backend", statut="terminee", verdict="corrections")
+        _essai(issue="BIS-32", role="backend", statut="terminee", verdict="corrections")
+        self.assertEqual(taches.verifier_reprise("repriceo", "BIS-32", "backend")[0], "escalade")
+        # Un seul essai à la fois par unité, même avec un autre fournisseur.
+        _essai(issue="BIS-33", role="backend", statut="en_cours")
+        with self.assertRaises(admission.Refus) as cm:
+            admission.demander(origine="cli", projet="repriceo", issue="BIS-33", agent="codex", role="backend", worktree="x33")
+        self.assertEqual(cm.exception.code, "doublon")
+        # « bloque » constaté disparaît quand l'agent repart ; la tâche finie compte alors comme livrée.
+        u = taches.enregistrer(projet="repriceo", issue="BIS-34", agent="claude", worktree="bis-34", role="qa")
+        _fixer(u["id"], statut="attente")
+        taches.classer(u["id"], "bloque", source="auto", par="demon")
+        vu = {"project": "repriceo", "worktree": "bis-34", "workdir": "", "kind": "claude", "window": "wm-bis-34"}
+        taches.synchroniser([{**vu, "status": "working"}])
+        self.assertIsNone(taches.get(u["id"])["echec"])
+        taches.synchroniser([{**vu, "status": "done"}])
+        self.assertIn(u["id"], [x["id"] for x in bilan.donnees()["livrees"]])
+
+    def test_review_fixes_tokens_reprise_and_settings(self):
+        # Une relance dans le même worktree ne recompte pas les jetons du 1er essai.
+        wt = TMP / "wt-relance"
+        wt.mkdir(exist_ok=True)
+        import re
+        d = Path(os.environ["CLAUDE_CONFIG_DIR"]) / "projects" / re.sub(r"[^A-Za-z0-9]", "-", str(wt))
+        d.mkdir(parents=True, exist_ok=True)
+        ancien, recent = time.time() - 7200, time.time()
+        def ligne(ts, mid, n):
+            iso = time.strftime("%Y-%m-%dT%H:%M:%S.000Z", time.gmtime(ts))
+            return json.dumps({"timestamp": iso, "requestId": mid, "message": {"id": mid, "usage": {
+                "input_tokens": n, "output_tokens": 0, "cache_creation_input_tokens": 0, "cache_read_input_tokens": 0}}})
+        (d / "a.jsonl").write_text(ligne(ancien, "m1", 1000) + "\n" + ligne(recent, "m2", 10) + "\n")
+        self.assertEqual(usage.claude_task_tokens(str(wt))["total"], 1010)
+        self.assertEqual(usage.claude_task_tokens(str(wt), depuis=recent - 30)["total"], 10)
+        # Reprise après redémarrage : le plafond validé dans le plan (5M) vaut, pas celui par défaut.
+        _essai(issue="BIS-35", role="backend", statut="perdue", jetons=3_000_000, jetons_max=5_000_000)
+        rep = admission.demander(origine="reprise", projet="repriceo", issue="BIS-35", agent="claude", role="backend",
+                                 worktree="bis-35", jetons_max=5_000_000)
+        self.assertEqual(rep["jetons_max"], 5_000_000)
+        # Réglages : multiplicateur décimal accepté, heure H:MM acceptée, valeur invalide refusée.
+        with mock.patch.object(cli, "_human_only", return_value=None), \
+                contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
+            self.assertEqual(cli.main(["regler", "budget_jetons.multiplicateur", "2.5"]), 0)
+            self.assertEqual(cli.main(["regler", "bilan.heure", "8:30"]), 0)
+            self.assertNotEqual(cli.main(["regler", "bilan.heure", "huit heures"]), 0)
+        self.assertEqual(config.settings()["budget_jetons"]["multiplicateur"], 2.5)
+        self.assertEqual(config.settings()["bilan"]["heure"], "8:30")
+
+    def test_review_fixes_secrets_and_memory(self):
+        self._secrets()
+        # lancement-args : réservé aux lanceurs (pas à un agent ni au chef).
+        for var in ("JARVIS_METIER", "JARVIS_ROLE"):
+            with mock.patch.dict(os.environ, {var: "x"}), contextlib.redirect_stderr(io.StringIO()):
+                self.assertEqual(cli.main(["lancement-args", "claude"]), 4)
+        # Variables des fournisseurs d'IA jamais injectables.
+        for nom in ("ANTHROPIC_API_KEY", "OPENAI_BASE_URL", "CLAUDE_CODE_OAUTH_TOKEN", "IFS"):
+            (config.CONFIG_DIR / "secrets" / "repriceo.toml").write_text(f'[role.ia-produit]\nvars = ["{nom}"]\n')
+            with self.assertRaises(jsecrets.SecretsError):
+                jsecrets.autorisations("repriceo")
+        # Le chef n'a pas le droit de lire le dossier des secrets.
+        with contextlib.redirect_stdout(io.StringIO()):
+            cli.main(["chef-preparer"])
+        regles = json.loads((config.DATA_DIR / "chef" / ".claude" / "settings.json").read_text())
+        self.assertTrue(any("/secrets/**" in r for r in regles["permissions"]["deny"]))
+        # Codex : les exclusions de l'utilisateur sont gardées.
+        self.assertEqual(jsecrets.exclusions_codex(["A_KEY"], {"A_KEY": "1", "B_TOKEN": "2"}, existantes=["AWS_*"]),
+                         ["AWS_*", "B_TOKEN"])
+        # Mémoire : expurgation élargie et valeurs connues ; identifiants uniques après coupe.
+        self._secrets()
+        e = memoire.noter(titre="fuites", corps="sk_live_abcdefghijk AKIAABCDEFGHIJKLMNOP github_pat_abcdefghijklmnopqrstuvwx "
+                                                 "postgres://u:motdepasse@h/db eyJhbGciOiJ.eyJzdWIiOiIx.SflKxwRJSMeKKF2 "
+                                                 "valeur sk_test_VALEUR_SECRETE_123")
+        for fuite in ("abcdefghijk", "AKIAABC", "github_pat_a", "motdepasse", "eyJhbGci", "VALEUR_SECRETE"):
+            self.assertNotIn(fuite, json.dumps(e), fuite)
+        ancien = memoire.MAX_ENTREES
+        memoire.MAX_ENTREES = 3
+        try:
+            ids = [memoire.noter(titre=f"n{i}")["id"] for i in range(5)]
+        finally:
+            memoire.MAX_ENTREES = ancien
+        self.assertEqual(len(set(ids)), 5)
+        self.assertEqual(len(memoire.toutes()), 3)
 
 
 if __name__ == "__main__":

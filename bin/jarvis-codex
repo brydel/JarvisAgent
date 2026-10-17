@@ -68,7 +68,8 @@ if [[ "${1:-}" != --tester-commit* ]]; then
     excl="$(PYTHONPATH="$JARVIS_HOME/lib" python3 -c '
 import json, sys
 from jarvis import secrets
-print(json.dumps(secrets.exclusions_codex(sys.argv[1:])))' "${secrets_noms[@]}")"
+print(json.dumps(secrets.exclusions_codex(sys.argv[1:], existantes=secrets.exclusions_codex_utilisateur())))' \
+      "${secrets_noms[@]}")" || { echo "jarvis-codex : impossible de préparer le filtre des secrets, agent non lancé" >&2; exit 1; }
     modele+=(-c "shell_environment_policy.ignore_default_excludes=true" -c "shell_environment_policy.exclude=$excl")
   fi
   if [[ -n "${JARVIS_LIVRABLES:-}" ]]; then

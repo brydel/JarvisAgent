@@ -247,43 +247,81 @@ def _claude_projects_dir() -> Path:
     return Path(os.environ.get("CLAUDE_CONFIG_DIR") or config.HOME / ".claude") / "projects"
 
 
-def claude_task_tokens(workdir: str) -> dict | None:
-    """Jetons des sessions Claude Code ouvertes dans `workdir` (journaux ~/.claude/projects)."""
+_cache_fichiers: dict[tuple, tuple] = {}
+
+
+def _horodatage(texte) -> float | None:
+    if not texte:
+        return None
+    from datetime import datetime
+    try:
+        return datetime.fromisoformat(str(texte).replace("Z", "+00:00")).timestamp()
+    except ValueError:
+        return None
+
+
+def _jetons_fichier_claude(f: Path, depuis: float) -> tuple[dict, dict]:
+    """{clé de message: usage} d'un journal Claude, messages postérieurs à `depuis`. Mis en cache par
+    (chemin, taille, date) : le démon et l'admission relisent souvent les mêmes fichiers."""
+    st = f.stat()
+    cle = (str(f), st.st_size, st.st_mtime, int(depuis))
+    if cle in _cache_fichiers:
+        return _cache_fichiers[cle]
+    messages: dict[str, dict] = {}
+    with f.open(encoding="utf-8", errors="replace") as fh:
+        for line in fh:
+            if '"usage"' not in line:
+                continue
+            try:
+                item = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+            msg = item.get("message") or {}
+            us = msg.get("usage")
+            if not isinstance(us, dict):
+                continue
+            ts = _horodatage(item.get("timestamp"))
+            if depuis and ts is not None and ts < depuis - 60:
+                continue  # message d'un essai précédent dans le même worktree
+            # Un même message est écrit plusieurs fois pendant sa diffusion : compté une fois.
+            messages[f"{msg.get('id')}:{item.get('requestId')}" if msg.get("id") else f"{f.name}:{len(messages)}"] = us
+    res = (messages, {})
+    if len(_cache_fichiers) > 512:
+        _cache_fichiers.clear()
+    _cache_fichiers[cle] = res
+    return res
+
+
+def claude_task_tokens(workdir: str, depuis: float = 0) -> dict | None:
+    """Jetons des sessions Claude Code ouvertes dans `workdir` (journaux ~/.claude/projects), depuis `depuis`.
+
+    Une relance réutilise le même worktree, donc le même dossier de journaux : sans ce filtre, le 2e essai
+    compterait aussi les jetons du 1er.
+    """
     import re
     root = _claude_projects_dir()
     slug = re.sub(r"[^A-Za-z0-9]", "-", str(Path(workdir)))
     d = root / slug
     if not d.is_dir():
         return None
-    vus: set[str] = set()
-    tot = {"entree": 0, "sortie": 0, "cache_lecture": 0, "cache_ecriture": 0}
+    messages: dict[str, dict] = {}
     for f in d.glob("*.jsonl"):
         try:
-            with f.open(encoding="utf-8", errors="replace") as fh:
-                for line in fh:
-                    if '"usage"' not in line:
-                        continue
-                    try:
-                        item = json.loads(line)
-                    except json.JSONDecodeError:
-                        continue
-                    msg = item.get("message") or {}
-                    us = msg.get("usage")
-                    if not isinstance(us, dict):
-                        continue
-                    # Un même message est écrit plusieurs fois pendant sa diffusion : compté une fois.
-                    key = f"{msg.get('id')}:{item.get('requestId')}"
-                    if msg.get("id") and key in vus:
-                        continue
-                    vus.add(key)
-                    tot["entree"] += int(us.get("input_tokens") or 0)
-                    tot["sortie"] += int(us.get("output_tokens") or 0)
-                    tot["cache_lecture"] += int(us.get("cache_read_input_tokens") or 0)
-                    tot["cache_ecriture"] += int(us.get("cache_creation_input_tokens") or 0)
+            if depuis and f.stat().st_mtime < depuis - 60:
+                continue
+            messages.update(_jetons_fichier_claude(f, depuis)[0])
         except OSError:
             continue
-    if not vus:
+    if not messages:
         return None
+    tot = {"entree": 0, "sortie": 0, "cache_lecture": 0, "cache_ecriture": 0}
+    for us in messages.values():
+        tot["entree"] += int(us.get("input_tokens") or 0)
+        tot["sortie"] += int(us.get("output_tokens") or 0)
+        tot["cache_lecture"] += int(us.get("cache_read_input_tokens") or 0)
+        tot["cache_ecriture"] += int(us.get("cache_creation_input_tokens") or 0)
+    # « total » = entrée non servie par le cache + sortie, pour les deux fournisseurs : chez Claude l'entrée
+    # nouvelle se répartit entre input_tokens et l'écriture du cache ; chez Codex elle vaut input − cached.
     tot["total"] = tot["entree"] + tot["sortie"] + tot["cache_ecriture"]
     return tot
 
@@ -350,7 +388,7 @@ def task_tokens(fiche: dict) -> dict | None:
     if not fiche.get("chemin"):
         return None
     if fiche.get("agent") == "claude":
-        return claude_task_tokens(fiche["chemin"])
+        return claude_task_tokens(fiche["chemin"], fiche.get("cree") or 0)
     if fiche.get("agent") == "codex":
         return codex_task_tokens(fiche["chemin"], fiche.get("cree") or 0)
     return None

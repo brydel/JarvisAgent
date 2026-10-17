@@ -26,6 +26,10 @@ FENETRE_JOURS = 90
 POIDS = {"titre": 3, "lecons": 2}
 _SECRETS = [
     re.compile(r"\b(sk|pk|rk)-[A-Za-z0-9_-]{16,}"),
+    re.compile(r"\b(sk|pk|rk|whsec)_(live|test)_[A-Za-z0-9]{8,}"),     # Stripe
+    re.compile(r"\bAKIA[0-9A-Z]{16}\b"),                                # AWS
+    re.compile(r"\bgithub_pat_[A-Za-z0-9_]{20,}"),
+    re.compile(r"\beyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}"),   # JWT
     re.compile(r"\bgh[pousr]_[A-Za-z0-9]{20,}"),
     re.compile(r"\bxox[abprs]-[A-Za-z0-9-]{10,}"),
     re.compile(r"\b\d{6,}:[A-Za-z0-9_-]{30,}\b"),            # jeton de bot Telegram
@@ -37,10 +41,20 @@ _MOTS_VIDES = {"le", "la", "les", "de", "des", "du", "un", "une", "et", "ou", "a
                "dans", "au", "aux", "ce", "ces", "est", "pas", "plus", "que", "qui", "il", "on", "avec", "the", "of"}
 
 
+_URL_IDENTIFIANTS = re.compile(r"(\b[a-z][a-z0-9+.-]*://[^\s:/@]+:)[^\s@/]+@", re.I)
+
+
 def _expurger(texte: str) -> str:
     t = str(texte or "")
     for motif in _SECRETS:
         t = motif.sub("[expurgé]", t)
+    t = _URL_IDENTIFIANTS.sub(r"\1[expurgé]@", t)          # mot de passe dans une URL
+    try:  # valeurs connues des secrets par rôle : retirées telles quelles
+        from . import secrets
+        for v in secrets.valeurs_connues():
+            t = t.replace(v, "[expurgé]")
+    except Exception:  # noqa: BLE001
+        pass
     return t.strip()
 
 
@@ -66,22 +80,29 @@ def noter(*, titre: str, corps: str = "", decisions=None, echecs=None, lecons=No
     """Ajoute une entrée. `decisions`, `echecs`, `lecons` : listes, ou texte séparé par « ; »."""
     titre = _expurger(titre)[:160]
     if not titre:
-        raise ValueError("une entrée de mémoire a un titre")
+        raise ValueError("une entrée de mémoire doit avoir un titre")
     now = now or time.time()
     path = store.state_path(FILE)
     with store.locked(FILE):
-        n = 0
-        if path.exists():
-            with path.open(encoding="utf-8") as fh:
-                n = sum(1 for _ in fh)
-        e = {"id": f"MEM-{n + 1:05d}", "ts": now, "titre": titre, "corps": _expurger(corps)[:4000],
+        lignes = path.read_text(encoding="utf-8").splitlines() if path.exists() else []
+        dernier = 0
+        for ln in reversed(lignes):
+            try:
+                dernier = int(json.loads(ln)["id"].split("-")[1])
+                break
+            except (json.JSONDecodeError, KeyError, IndexError, ValueError):
+                continue
+        n = len(lignes)
+        e = {"id": f"MEM-{dernier + 1:05d}", "ts": now, "titre": titre, "corps": _expurger(corps)[:4000],
              "decisions": _liste(decisions), "echecs": _liste(echecs), "lecons": _liste(lecons),
              "projet": projet[:40], "etiquettes": [_normal(x)[:30] for x in _liste(etiquettes)], "source": source[:20]}
         with path.open("a", encoding="utf-8") as fh:
             fh.write(json.dumps(e, ensure_ascii=False) + "\n")
         if n + 1 > MAX_ENTREES:
-            lignes = path.read_text(encoding="utf-8").splitlines()[-MAX_ENTREES:]
-            path.write_text("\n".join(lignes) + "\n", encoding="utf-8")
+            garde = path.read_text(encoding="utf-8").splitlines()[-MAX_ENTREES:]
+            tmp = path.with_suffix(".tmp")
+            tmp.write_text("\n".join(garde) + "\n", encoding="utf-8")
+            tmp.replace(path)  # écriture atomique
     return e
 
 
@@ -155,9 +176,9 @@ def recherche_semantique(requete: str, limite: int = 8) -> list[dict] | None:
     return None  # branchement à écrire quand Mem0 sera retenu (lot ultérieur)
 
 
-def texte(resultats: list[dict]) -> str:
+def texte(resultats: list[dict], jours: int = FENETRE_JOURS) -> str:
     if not resultats:
-        return "Rien de pertinent dans la mémoire (90 derniers jours)."
+        return f"Rien de pertinent dans la mémoire ({jours} derniers jours)."
     out = []
     for r in resultats:
         e = r["entree"]

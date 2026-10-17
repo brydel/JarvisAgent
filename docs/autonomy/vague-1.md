@@ -68,7 +68,11 @@ comportement réel avec Claude Code, Codex et workmux reste à constater chez to
   longue que `general.blocage_min`) ; `erreur_outil`, `hors_perimetre`, `regression` déclarées par le chef, le
   relecteur ou toi (`jarvis tache echec <T> <classe> [note]`), jamais par l'agent concerné. Une classe déclarée
   n'est pas écrasée par une constatée.
-- Essais comptés par unité : ni les lancements jamais démarrés, ni les arrêts pour quota.
+- Essais comptés par unité : ceux en cours et ceux qui n'ont pas abouti (interrompus, échec déclaré, corrections
+  demandées par la relecture). Ne comptent pas : les lancements jamais démarrés, les arrêts pour quota, les essais
+  terminés sans échec. Un seul essai à la fois par unité (refus `doublon`, même avec l'autre fournisseur).
+- Les classes constatées (`bloque`, `quota`) s'effacent quand l'agent repart ; elles ne peuvent pas être déclarées
+  à la main (sinon déclarer « quota » contournerait la borne).
 - **2 essais automatiques au plus** : au 3e, l'admission refuse `escalade` (sortie 9), l'élément de plan reste
   lançable ; `jarvis tache relancer <T> --autoriser` (humain, terminal) débloque **un** essai de plus.
 - Après `erreur_outil`, `hors_perimetre` ou `regression`, le 2e essai doit changer d'approche : même fournisseur,
@@ -91,15 +95,34 @@ comportement réel avec Claude Code, Codex et workmux reste à constater chez to
   une source tierce citant la documentation officielle : à constater sur ton PC.
 - `jarvis secrets verifier --projet P` : par rôle, les noms qui seraient injectés et s'ils sont définis.
 - Valeurs : jamais dans le prompt, les fichiers d'état, le fil, le journal d'audit ; seuls les noms sont tracés.
+  La mémoire du chef retire aussi toute valeur connue des fichiers `.env` de secrets.
+- Noms jamais injectables, en plus des variables système : `ANTHROPIC_*`, `CLAUDE_*`, `OPENAI_*`, `CODEX_*` (une clé
+  d'API injectée pour le produit ferait facturer les agents à l'API au lieu de l'abonnement), `IFS`, `PS*`, `BASH_*`.
+- `jarvis lancement-args` (qui imprime les valeurs pour le lanceur) refuse de répondre à un agent ou au chef
+  (`JARVIS_METIER` / `JARVIS_ROLE`) ; le chef a une règle de refus de lecture sur `~/.config/jarvis/secrets/`.
+  Les agents, eux, n'ont pas de telle règle (ils tournent en mode automatique) : l'isolation entre rôles reste
+  nominale tant qu'un agent peut lire ton dossier de configuration — documenté, non imposable sous un même
+  utilisateur.
+- Codex : les exclusions déjà écrites dans ta configuration (`shell_environment_policy.exclude`) sont conservées.
 - **Limite** : un agent voit les variables qu'il reçoit. Ce mécanisme réduit ce qui peut fuiter d'une tâche ;
   il n'isole pas un agent de ses propres secrets et n'empêche pas un `.env` que tu copies toi-même dans un worktree.
 
 ## Tests
 
-`tests/test_vague1.py` : 11 tests (plafonds, refus et notification, arrêt démon unique, coûts et estimations,
+`tests/test_vague1.py` : 14 tests (plafonds, refus et notification, arrêt démon unique, coûts et estimations,
 mémoire pondérée et expurgée, bilan et envoi quotidien unique, classes et borne d'essais, droits de
 classement et « bloque » constaté, secrets par rôle et jamais stockés, refus si fichier trop ouvert, lanceur
-Codex). Suite complète : 124 tests verts.
+Codex, et trois tests des correctifs de la revue indépendante). Suite complète : 127 tests verts.
+
+Revue indépendante (second agent, sans contexte de production) : 15 points relevés, corrigés :
+double comptage des jetons Claude lors d'une relance dans le même worktree (filtre par date de début),
+contournement de la borne par « quota » déclaré, classes constatées jamais effacées, reprise jugée sur le
+plafond par défaut au lieu de celui du plan, lecture des secrets d'un autre rôle via `lancement-args`, variables
+des fournisseurs d'IA injectables, exclusions Codex de l'utilisateur écrasées, multiplicateur décimal refusé,
+expurgation incomplète (Stripe, AWS, GitHub, JWT, URL), élément de plan laissé consommé sur erreur imprévue,
+essais réussis comptés, `bilan.heure` « 8:00 » refusée, identifiants de mémoire dupliqués, erreurs du bilan
+répétées à chaque tour. Non retenu : « total » différent entre fournisseurs — les deux mesurent l'entrée non
+servie par le cache plus la sortie (commentaire ajouté dans `usage.py`).
 
 ## Réglages ajoutés
 

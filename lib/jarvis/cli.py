@@ -376,12 +376,12 @@ def cmd_regler(a) -> int:
         return _err(f"{a.cle} accepte : {', '.join(allowed)}")
     if isinstance(current, bool):
         value = a.valeur.lower() in ("1", "true", "oui", "vrai", "on")
-    elif isinstance(current, int):
+    elif isinstance(current, int) and config._BORNES.get((section, key), (int,))[0] is not float:
         try:
             value = int(a.valeur)
         except ValueError:
             return _err(f"{a.cle} attend un nombre entier")
-    elif isinstance(current, float):
+    elif isinstance(current, (int, float)):
         try:
             value = float(a.valeur.replace(",", "."))
         except ValueError:
@@ -729,6 +729,10 @@ def cmd_lancement_args(a) -> int:
     Une ligne « arg<TAB>valeur » par argument du CLI, « env<TAB>NOM=valeur » par variable.
     """
     from . import livrables, modeles, taches
+    if os.environ.get("JARVIS_METIER") or os.environ.get("JARVIS_ROLE"):
+        # Réservé aux lanceurs, qui l'appellent AVANT de démarrer l'agent : un agent ou le chef qui l'appellerait
+        # depuis le worktree d'un autre rôle lirait ses secrets.
+        return _err("lancement-args est réservé aux lanceurs de Jarvis.", 4)
     fiche = taches.par_chemin(os.getcwd())
     if not fiche:
         return 0  # worktree inconnu du registre (lancé à la main) : réglages par défaut du CLI
@@ -841,7 +845,7 @@ def _cmd_tache_action(a) -> int:
         if len(reste) < 2:
             return _err(f"usage : jarvis tache echec <T-xxxxx> <classe> [note] (classes : {', '.join(taches.CLASSES_ECHEC)})")
         if os.environ.get("JARVIS_METIER"):
-            return _err("un agent ne classe pas son propre échec : le chef, le relecteur (dans son verdict) ou ton humain le fait.", 4)
+            return _err("un agent ne classe pas son propre échec : le chef ou ton humain le fait.", 4)
         try:
             taches.classer(t["id"], reste[1], source="declare", par=_acteur(), note=" ".join(reste[2:]))
         except ValueError as exc:
@@ -1059,6 +1063,7 @@ def cmd_chef_preparer(a) -> int:
     secrets = []
     for d in sorted({_rule_path(x) for x in protected if x not in (config.STATE_DIR, config.CONFIG_DIR)}):
         secrets += [f"Read({d}/**/.env)", f"Read({d}/**/.env.*)"]
+    secrets.append(f"Read({_rule_path(config.CONFIG_DIR / 'secrets')}/**)")  # secrets par rôle (vague 1)
 
     settings = {
         "permissions": {
@@ -1474,7 +1479,7 @@ def cmd_memoire(a) -> int:
         elif a.action == "chercher":
             if not a.quoi:
                 return _err("usage : jarvis memoire chercher <mots…> [--projet P] [--jours 90]")
-            print(memoire.texte(memoire.chercher(" ".join(a.quoi), jours=a.jours, projet=a.projet or "", limite=a.n)))
+            print(memoire.texte(memoire.chercher(" ".join(a.quoi), jours=a.jours, projet=a.projet or "", limite=a.n), a.jours))
         else:
             entrees = memoire.toutes()[-a.n:]
             if not entrees:

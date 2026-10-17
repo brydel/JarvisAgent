@@ -170,6 +170,7 @@ def synchroniser(agents: list[dict], jetons_fn=None, now: float | None = None) -
             if t is not derniere[(t["projet"], t["worktree"])]:
                 if t["statut"] in OUVERTS:
                     t["statut"], t["fin"] = "perdue", now
+                    finies.append(dict(t))  # remplacée par une relance : ses jetons sont mesurés quand même
                 continue
             a = _trouver(t, par_chemin, par_cle, par_nom)
             if a is None:
@@ -195,6 +196,9 @@ def synchroniser(agents: list[dict], jetons_fn=None, now: float | None = None) -
                 t["statut"] = {"waiting": "attente", "silent": "silencieuse"}.get(st, "en_cours")
                 t["debut"] = t["debut"] or now
                 t["fin"] = None
+                # L'agent est reparti : une classe constatée par le démon (bloqué, quota) n'est plus d'actualité.
+                if st != "waiting" and (t.get("echec") or {}).get("source") == "auto":
+                    t["echec"] = None
             elif st in ("done", "idle") and t["statut"] in OUVERTS:
                 t["debut"] = t["debut"] or t["cree"]
                 t["statut"], t["fin"] = "terminee", now
@@ -235,10 +239,28 @@ def unite(projet: str, issue: str, role: str, liste: list[dict] | None = None) -
     return [t for t in liste if _cle(t) == cle]
 
 
+def echoue(t: dict) -> bool:
+    """Essai sans succès : interrompu, échec déclaré, ou corrections demandées par la relecture."""
+    e = t.get("echec") or {}
+    return (t["statut"] == "perdue" or (e and e.get("source") == "declare") or t.get("verdict") == "corrections")
+
+
 def _essais_comptes(fiches: list[dict]) -> list[dict]:
-    """Essais qui comptent pour la borne : ni les lancements jamais démarrés, ni les arrêts pour quota
-    (ce n'est pas l'agent qui a échoué, c'est l'abonnement qui s'est vidé)."""
-    return [t for t in fiches if not t.get("jamais_demarre") and (t.get("echec") or {}).get("classe") != "quota"]
+    """Essais qui comptent pour la borne : ceux en cours et ceux qui n'ont pas abouti. Ne comptent pas :
+    les lancements jamais démarrés, les arrêts pour quota (c'est l'abonnement qui s'est vidé, pas l'agent qui
+    a échoué) et les essais terminés sans échec (une nouvelle demande sur la même issue n'est pas une reprise)."""
+    out = []
+    for t in fiches:
+        if t.get("jamais_demarre") or (t.get("echec") or {}).get("classe") == "quota":
+            continue
+        if t["statut"] in OUVERTS or echoue(t):
+            out.append(t)
+    return out
+
+
+def en_vol(projet: str, issue: str, role: str, liste: list[dict] | None = None) -> dict | None:
+    """Essai de cette unité encore ouvert (un seul à la fois par unité de travail)."""
+    return next((t for t in unite(projet, issue, role, liste) if t["statut"] in OUVERTS), None)
 
 
 def autorisations(projet: str, issue: str, role: str) -> int:
@@ -298,6 +320,10 @@ def classer(tache_id: str, classe: str, *, source: str = "declare", par: str = "
     """Classe l'échec d'un essai. Une classe déclarée remplace une classe automatique, jamais l'inverse."""
     if classe not in CLASSES_ECHEC:
         raise ValueError(f"classe inconnue « {classe} » (valeurs : {', '.join(CLASSES_ECHEC)})")
+    if source != "auto" and classe in CLASSES_AUTO:
+        # Sinon déclarer « quota » sur deux échecs suffirait à contourner la borne des essais.
+        raise ValueError(f"« {classe} » est constaté par le démon, il ne se déclare pas "
+                         f"(classes déclarables : {', '.join(c for c in CLASSES_ECHEC if c not in CLASSES_AUTO)})")
 
     def _set(data):
         for t in data["taches"]:

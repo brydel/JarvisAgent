@@ -657,10 +657,14 @@ def bilan_check(now: float | None = None) -> bool:
     st = store.read_json(BILAN_STATE, {})
     if st.get("dernier") == jour:
         return False
-    from . import bilan
-    texte = bilan.quotidien(now)
     st["dernier"] = jour
-    store.write_json(BILAN_STATE, st)  # écrit avant l'envoi : jamais deux bilans le même jour
+    store.write_json(BILAN_STATE, st)  # écrit d'abord : jamais deux bilans, ni une erreur répétée tout le jour
+    from . import bilan
+    try:
+        texte = bilan.quotidien(now)
+    except Exception as exc:  # noqa: BLE001
+        store.feed_add("erreur", f"bilan quotidien impossible : {exc}")
+        return False
     notify.telegram(texte)
     store.feed_add("note", "bilan quotidien envoyé")
     return True

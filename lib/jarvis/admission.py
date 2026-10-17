@@ -46,6 +46,11 @@ class Refus(Exception):
         self.code, self.raison = code, raison
 
 
+def roles_nom(role: str) -> str:
+    from . import roles
+    return roles.ou_defaut(role)["nom"]
+
+
 def classe_pour_role(role: str) -> str:
     return ROLE_CLASSE.get(role or "", "edition")
 
@@ -192,7 +197,8 @@ def demander(*, origine: str, projet: str, issue: str, agent: str, worktree: str
 
         # Unité de travail (projet, issue, rôle) : borne des essais et plafond de jetons, relances comprises.
         # Pour un plan, le rôle, le modèle et le plafond sont ceux que l'humain a validés.
-        role_eff = (fiche or {}).get("role") or role
+        # Une contre-relecture forme sa propre unité, même dans un ancien plan sans rôle explicite.
+        role_eff = (fiche or {}).get("role") or role or ("revue" if relecture else "")
         taille_eff = (fiche or {}).get("taille") or taille or "M"
         from . import couts, taches
 
@@ -203,22 +209,30 @@ def demander(*, origine: str, projet: str, issue: str, agent: str, worktree: str
                 except plans.PlanError:
                     pass
 
-        # Une reprise après redémarrage continue le MÊME essai (même fiche) : elle n'en ouvre pas un nouveau.
-        bloque = None if origine == "reprise" else taches.verifier_reprise(
-            projet, issue, role_eff, agent=agent if fiche else "", modele=(fiche or {}).get("modele", ""),
-            consignes_empreinte=consignes_empreinte)
-        if bloque:
+        try:
+            # Une reprise après redémarrage continue le MÊME essai (même fiche) : elle n'en ouvre pas un nouveau.
+            if origine != "reprise":
+                ouvert = taches.en_vol(projet, issue, role_eff)
+                if ouvert:
+                    raise _refus("doublon", f"{projet} {issue} [{roles_nom(role_eff)}] a déjà un essai en cours "
+                                            f"({ouvert['id']}, {ouvert['agent']}) : un seul à la fois par unité de travail.")
+            bloque = None if origine == "reprise" else taches.verifier_reprise(
+                projet, issue, role_eff, agent=agent if fiche else "", modele=(fiche or {}).get("modele", ""),
+                consignes_empreinte=consignes_empreinte)
+            if bloque:
+                raise _refus(*bloque)
+            plafond = int((fiche or {}).get("jetons_max") or jetons_max or 0) or couts.plafond_defaut(role_eff, taille_eff)[0]
+            if s.get("budget_jetons", {}).get("actif", True):
+                deja = couts.compteur_unite(projet, issue, role_eff)
+                if deja >= plafond:
+                    raise _refus("budget_jetons", f"{projet} {issue} [{role_eff}] a déjà consommé {taches.fmt_jetons(deja)} jetons "
+                                                  f"pour un plafond de {taches.fmt_jetons(plafond)} : pas de relance. Découpe la "
+                                                  f"tâche, change d'approche, ou demande un plafond plus haut dans un nouveau plan "
+                                                  f"(%3M) que ton humain validera.")
+        except BaseException:
+            # Refus ou erreur imprévue : l'élément de plan marqué « lancé » ne doit jamais rester consommé.
             _annuler_plan()
-            raise _refus(*bloque)
-        plafond = int((fiche or {}).get("jetons_max") or jetons_max or 0) or couts.plafond_defaut(role_eff, taille_eff)[0]
-        if s.get("budget_jetons", {}).get("actif", True):
-            deja = couts.compteur_unite(projet, issue, role_eff)
-            if deja >= plafond:
-                _annuler_plan()
-                raise _refus("budget_jetons", f"{projet} {issue} [{role_eff}] a déjà consommé {taches.fmt_jetons(deja)} jetons "
-                                              f"pour un plafond de {taches.fmt_jetons(plafond)} : pas de relance. Découpe la "
-                                              f"tâche, change d'approche, ou demande un plafond plus haut dans un nouveau plan "
-                                              f"(%3M) que ton humain validera.")
+            raise
 
         def _reserver(data):
             data["seq"] += 1

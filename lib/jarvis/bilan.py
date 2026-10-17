@@ -20,12 +20,15 @@ def donnees(now: float | None = None) -> dict:
     def _fini(t, duree):
         return t.get("fin") and now - t["fin"] < duree
 
-    livrees = [t for t in fiches if t["statut"] == "terminee" and _fini(t, JOUR) and not t.get("echec")]
-    echouees = [t for t in fiches if _fini(t, JOUR) and (t["statut"] == "perdue" or t.get("echec"))]
+    livrees = [t for t in fiches if t["statut"] == "terminee" and _fini(t, JOUR) and not taches.echoue(t)
+               and (t.get("echec") or {}).get("classe") != "quota"]
+    echouees = [t for t in fiches if _fini(t, JOUR) and (taches.echoue(t) or (t.get("echec") or {}).get("classe") == "quota")]
     prouvees = [t for t in fiches if t.get("verdict") == "pret" and now - (t.get("verdict_ts") or 0) < JOUR]
     travaux_prouves = [w for w in travaux.tous("terminee") if now - ((w.get("resultat") or {}).get("ts") or 0) < JOUR]
-    semaine = {"livrees": sum(1 for t in fiches if t["statut"] == "terminee" and _fini(t, 7 * JOUR) and not t.get("echec")),
-               "echouees": sum(1 for t in fiches if _fini(t, 7 * JOUR) and (t["statut"] == "perdue" or t.get("echec")))}
+    semaine = {"livrees": sum(1 for t in fiches if t["statut"] == "terminee" and _fini(t, 7 * JOUR) and not taches.echoue(t)
+                              and (t.get("echec") or {}).get("classe") != "quota"),
+               "echouees": sum(1 for t in fiches if _fini(t, 7 * JOUR)
+                               and (taches.echoue(t) or (t.get("echec") or {}).get("classe") == "quota"))}
 
     jour = [t for t in fiches if (t.get("fin") and now - t["fin"] < JOUR) or t["statut"] in taches.OUVERTS]
     lignes = couts.tableau(jour, mesurer_ouvertes=False)
@@ -52,7 +55,7 @@ def donnees(now: float | None = None) -> dict:
         vus.add(cle)
         unite = taches.unite(*cle, liste=fiches)
         dernier = unite[-1]
-        if dernier["statut"] in taches.OUVERTS or (dernier["statut"] == "terminee" and not dernier.get("echec")):
+        if dernier["statut"] in taches.OUVERTS or not taches.echoue(dernier):
             continue
         bloque = taches.verifier_reprise(*cle, liste=fiches)
         if bloque and bloque[0] == "escalade":

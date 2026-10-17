@@ -106,7 +106,9 @@ def reprendre(dry_run: bool = False) -> list[str]:
         agent = (a.get("kind") or (fiche or {}).get("agent") or "").lower() or "claude"
         try:
             adm = admission.demander(origine="reprise", projet=a["project"], issue=(fiche or {}).get("issue") or a["worktree"],
-                                     agent=agent, worktree=a["worktree"], role=(fiche or {}).get("role", ""), acteur="reprise")
+                                     agent=agent, worktree=a["worktree"], role=(fiche or {}).get("role", ""), acteur="reprise",
+                                     taille=(fiche or {}).get("taille") or "M",
+                                     jetons_max=int((fiche or {}).get("jetons_max") or 0))
         except admission.Refus as exc:
             refuses.append(a)
             lignes.append(f"en attente : {label} — {exc.raison}")
