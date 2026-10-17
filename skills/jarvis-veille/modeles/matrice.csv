@@ -1,0 +1,3 @@
+categorie,fonctionnalite,concurrent_a,concurrent_b,concurrent_c,concurrent_d,nous,importance,preuve_importance,effort,decision,source,notes
+Prise en main,Inscription en moins de 60 s,oui,partiel,oui,non,absent,4,https://… (avis : « inscription trop longue »),S,imiter,https://…,
+Cœur du métier,Exemple : alertes de prix multi-conditions,payant (Pro),oui,non,partiel,absent,5,https://… (fil Reddit),M,depasser,https://…,expliquer l'alerte en langage clair (IA)

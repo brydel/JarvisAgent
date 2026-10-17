@@ -83,12 +83,12 @@ Chaque tâche part avec un **rôle**. L'agent reçoit le brief de sa spécialit�
 
 | Équipe | Rôles |
 | --- | --- |
-| Conception | `architecte` (ADR, découpage, refactor transversal), `design` (UI/UX dans le code) |
-| Fabrication | `backend`, `frontend`, `data` (schéma, migrations), `generaliste` |
+| Conception | `architecte` (ADR, découpage, refactor transversal), `design` (direction artistique, écrans clés, porte qualité visuelle) |
+| Fabrication | `backend`, `frontend`, `data` (schéma, migrations), `ia-produit` (fonctions intelligentes dans le produit), `generaliste` |
 | Exploitation | `devops` (CI/CD, Docker, déploiement préparé), `securite` (défensif) |
 | Qualité | `qa` (tests, reproduction de bugs), `revue` (contre-relecture, aucun commit) |
 | Studio | `marketing` (campagne), `video` (vidéo de produit), `redaction` (docs, notes de version) |
-| Veille | `recherche` (étude sourcée) |
+| Veille | `recherche` (étude sourcée, veille concurrentielle approfondie avec la compétence `jarvis-veille`) |
 
 **Un élément de plan s'écrit** `projet:ISSUE:agent[/modèle][@rôle][+taille][:description]` :
 
@@ -233,15 +233,20 @@ Les modèles de Claude Code et de Codex changent tous les quelques mois, et un i
 
 N'invente jamais un identifiant de modèle : copie-le depuis la source officielle.
 
-## Veille concurrentielle
+## Veille concurrentielle : démonter, pas résumer
 
-Le démon te la rappelle (`[JARVIS veille] …`) tous les quelques jours pour chaque projet. Fais-la seulement si la marge Claude dépasse 30 %, et sinon reporte-la.
+Le démon te la rappelle (`[JARVIS veille] …`) tous les quelques jours pour chaque projet. Une veille superficielle (cinq concurrents, trois idées) donne un produit fade : ton humain l'a constaté. La veille est donc une **vraie tâche**, jamais un sous-agent rapide.
 
-1. Lance **un sous-agent de recherche** (outil Task) avec un mandat précis (pour une étude lourde, préfère une vraie tâche `auto@recherche` dans un plan : elle a son budget et son rapport dans les livrables) : les 5 concurrents directs du projet (description dans `jarvis projet liste` et son README), leurs fonctionnalités et leur positionnement prix, leurs nouveautés récentes (changelogs, annonces, avis d'utilisateurs), et ce que les utilisateurs réclament et qu'aucun ne fait bien. Chaque affirmation doit avoir sa source (URL).
-2. Écris un **document Linear** « Veille <projet> — <date> » : tableau des concurrents, tendances, et 3 à 5 opportunités classées par valeur pour l'utilisateur / effort / différenciation.
-3. Crée les **issues** des opportunités retenues (étiquettes `jarvis` + `veille`), chacune avec le problème utilisateur, la preuve (lien vers la source), une proposition de solution, des critères d'acceptation et une estimation.
-4. Les meilleures entrent dans tes prochaines vagues, toujours via un plan.
-5. `jarvis veille fait <projet>`, puis un `jarvis note --envoyer` de 5 lignes : ce que font les concurrents, les opportunités retenues et pourquoi.
+1. Crée l'issue Linear « Veille <projet> — <date> » et propose-la dans un plan : `<projet>:<ISSUE>:auto@recherche+L:veille`. Dans tes consignes : les concurrents déjà connus, les écrans clés de NOTRE produit et comment le lancer en local, et l'exigence de suivre la compétence `jarvis-veille` (matrice de parité ≥ 40 lignes sourcées, captures côte à côte, démontage écran par écran, décisions imiter / dépasser / ignorer, une fonctionnalité signature).
+2. À la fin, ouvre le rapport, la matrice et **regarde les planches** (`$JARVIS_LIVRABLES/veille/captures/planche-bureau.png`). Livre les planches et le résumé à ton humain : `jarvis livrer …/planche-bureau.png --titre "Veille <projet> : nous face aux concurrents"`.
+3. Vérifie le backlog produit : une issue par élément retenu, avec captures de référence, état actuel et critères visuels. Complète ce qui manque.
+4. Si la planche montre un écart visuel net, ou si `design/direction.md` n'existe pas dans le projet, la **première** tâche de la vague suivante est `@design+L` (direction artistique, compétence `jarvis-design`). Ne lance pas de nouveaux écrans avant.
+5. Les paris « dépasser » qui reposent sur l'IA partent en `@ia-produit` ; leur mise en service avec une API payante reste une décision de ton humain (budget).
+6. `jarvis veille fait <projet>`, puis `jarvis note --envoyer` : parité actuelle, les trois plus grands écarts, la signature proposée, les trois prochaines tâches.
+
+**Équilibre des vagues.** Sur un produit en développement actif, au moins un élément sur trois de chaque vague fait progresser ce que l'utilisateur voit et retient (parité attendue, signature, niveau visuel, fonction IA), tiré de la dernière veille. Les corrections et la dette passent aussi, mais une vague faite uniquement de plomberie se justifie dans `--pourquoi`.
+
+**Porte qualité visuelle.** Une PR qui touche l'interface n'est « prête » qu'avec ses captures avant / après et la grille de notation de `jarvis-design` au seuil, refaite indépendamment par le relecteur.
 
 ---
 

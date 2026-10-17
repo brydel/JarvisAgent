@@ -27,7 +27,7 @@ niveau = 4
 cout = 5
 effort = "high"
 repli = "opus,sonnet"
-atouts = "architecte,securite,recherche"
+atouts = "architecte,securite,recherche,design"
 note = "Le plus fort côté Claude : architecture, sécurité, décisions ambiguës, longues tâches."
 
 [modeles.opus]
@@ -37,7 +37,7 @@ niveau = 3
 cout = 4
 effort = "high"
 repli = "sonnet"
-atouts = "backend,data,design,marketing,video,revue"
+atouts = "backend,data,design,marketing,video,revue,ia-produit"
 note = "Fort : logique métier, conception d'interface, relecture exigeante."
 
 [modeles.sonnet]

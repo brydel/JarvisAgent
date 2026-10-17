@@ -249,12 +249,22 @@ Exemple : `jarvis regler general.max_agents 4`. Les réglages vivent dans `~/.co
 
 | Équipe | Rôles (`jarvis role`) |
 | --- | --- |
-| Conception | `architecte` · `design` |
-| Fabrication | `backend` · `frontend` · `data` · `generaliste` |
+| Conception | `architecte` · `design` (direction artistique, porte qualité visuelle) |
+| Fabrication | `backend` · `frontend` · `data` · `ia-produit` (fonctions intelligentes dans le produit) · `generaliste` |
 | Exploitation | `devops` · `securite` |
 | Qualité | `qa` · `revue` (contre-relecture, aucun commit) |
 | Studio | `marketing` · `video` · `redaction` |
 | Veille | `recherche` |
+
+### Veille approfondie, design et IA produit
+
+Trois compétences (skills) liées pour Claude Code et Codex par `./install.sh` :
+
+- **`jarvis-veille`** : la veille concurrentielle démonte au lieu de résumer. Matrice de parité sourcée (40 fonctionnalités au moins), captures côte à côte des pages publiques des concurrents et de notre produit (`capturer.cjs` : bureau et mobile, `robots.txt` respecté, une page toutes les 3 s, planche de comparaison), démontage écran par écran, décisions imiter / dépasser / ignorer, une fonctionnalité signature, et un backlog avec captures et critères visuels. On imite des fonctionnalités et des motifs d'interface, jamais le code, les textes ou l'identité visuelle d'un concurrent.
+- **`jarvis-design`** : une direction artistique écrite dans le dépôt (`design/direction.md` + jetons), proposée en 2 à 3 variantes que tu choisis, puis une grille de notation sur captures que l'auteur ET le relecteur remplissent. Un écran clé sous le seuil repart en corrections.
+- **`ia-produit`** (rôle) : ajoute de l'intelligence au produit (analyse expliquée, recherche en langage naturel, alertes, résumés) derrière un drapeau désactivé par défaut, avec couche fournisseur, jeu d'essai, coût par 1 000 utilisateurs, et un fournisseur simulé tant qu'aucun budget d'API n'existe.
+
+Le chef lance désormais la veille comme une vraie tâche (`@recherche+L`), te livre les planches, met une tâche `@design+L` en tête si l'écart visuel est net, et réserve au moins un élément sur trois de chaque vague à ce qui se voit (parité, signature, design, IA).
 
 Un rôle est un fichier `roles/<nom>.md` : un en-tête (titre, équipe, couleur, niveau attendu, fournisseur préféré) et le **brief** que l'agent reçoit en plus des consignes du chef. Pour adapter un rôle ou en créer un, dépose un fichier du même format dans `~/.config/jarvis/roles/` : il remplace ou complète ceux du dépôt, sans toucher au code.
 

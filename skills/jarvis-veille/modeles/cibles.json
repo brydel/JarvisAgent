@@ -1,0 +1,14 @@
+{
+  "formats": ["bureau", "mobile"],
+  "pleine_page": false,
+  "cibles": [
+    { "nom": "concurrent-a", "ecran": "accueil", "url": "https://www.exemple-a.com/" },
+    { "nom": "concurrent-a", "ecran": "tarifs", "url": "https://www.exemple-a.com/pricing/" },
+    { "nom": "concurrent-a", "ecran": "fonction-phare", "url": "https://www.exemple-a.com/features/screener/" },
+    { "nom": "concurrent-b", "ecran": "accueil", "url": "https://www.exemple-b.com/" },
+    { "nom": "concurrent-b", "ecran": "tarifs", "url": "https://www.exemple-b.com/plans" },
+    { "nom": "nous", "ecran": "accueil", "url": "http://localhost:3000/" },
+    { "nom": "nous", "ecran": "tarifs", "url": "http://localhost:3000/pricing" },
+    { "nom": "nous", "ecran": "fonction-phare", "url": "http://localhost:3000/screener" }
+  ]
+}
