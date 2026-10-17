@@ -16,9 +16,18 @@
 # repli        Claude uniquement : modèles de repli si le premier est indisponible ou surchargé
 # atouts       rôles pour lesquels ce modèle est préféré (voir « jarvis role liste »)
 #
+# prix_*       tarifs API publics en dollars US par million de jetons (entrée, sortie, lecture et
+#              écriture du cache). Servent à « jarvis cout » : un ÉQUIVALENT API, pas ce que tu paies
+#              avec tes abonnements. Absent = « estimation » (tarif de référence du fournisseur).
+#
 # Identifiants relevés dans la documentation officielle le 2026-10-13 :
 #   Claude Code : alias de « claude --model » (fable, opus, sonnet, haiku)
 #   Codex : https://developers.openai.com/codex/models
+# Tarifs relevés le 2026-10-17 :
+#   Claude : https://platform.claude.com/docs/models/fable-5-1 (tableau officiel entrée/sortie de tous
+#            les modèles ; cache officiel pour Fable seulement, les autres caches en estimation)
+#   Codex : tableau tiers (morphllm.com, d'après https://developers.openai.com/api/docs/pricing,
+#           vérifié le 2026-10-15) : À REVÉRIFIER sur la page officielle
 
 [modeles.fable]
 fournisseur = "claude"
@@ -29,6 +38,12 @@ effort = "high"
 repli = "opus,sonnet"
 atouts = "architecte,securite,recherche,design"
 note = "Le plus fort côté Claude : architecture, sécurité, décisions ambiguës, longues tâches."
+prix_in = 10.0
+prix_out = 50.0
+prix_cache_lecture = 0.25
+prix_cache_ecriture = 12.5
+prix_source = "officiel : platform.claude.com/docs/models/fable-5-1"
+prix_date = "2026-10-17"
 
 [modeles.opus]
 fournisseur = "claude"
@@ -39,6 +54,10 @@ effort = "high"
 repli = "sonnet"
 atouts = "backend,data,design,marketing,video,revue,ia-produit"
 note = "Fort : logique métier, conception d'interface, relecture exigeante."
+prix_in = 4.0
+prix_out = 20.0
+prix_source = "officiel (entrée/sortie) : platform.claude.com/docs/models/fable-5-1"
+prix_date = "2026-10-17"
 
 [modeles.sonnet]
 fournisseur = "claude"
@@ -48,6 +67,10 @@ cout = 2
 effort = "medium"
 atouts = "generaliste,frontend,qa,redaction"
 note = "Courant : le bon rapport qualité / jetons pour le travail quotidien."
+prix_in = 2.0
+prix_out = 10.0
+prix_source = "officiel (entrée/sortie) : platform.claude.com/docs/models/fable-5-1"
+prix_date = "2026-10-17"
 
 [modeles.haiku]
 fournisseur = "claude"
@@ -57,6 +80,10 @@ cout = 1
 effort = ""
 atouts = ""
 note = "Léger : petites corrections, renommages, tâches mécaniques."
+prix_in = 0.1
+prix_out = 0.5
+prix_source = "officiel (entrée/sortie, « à partir de ») : platform.claude.com/docs/models/fable-5-1"
+prix_date = "2026-10-17"
 
 [modeles.claude-defaut]
 fournisseur = "claude"
@@ -75,6 +102,11 @@ cout = 5
 effort = "high"
 atouts = "architecte,securite"
 note = "Le plus fort côté Codex : travail complexe sur le code, raisonnement avancé."
+prix_in = 10.0
+prix_out = 50.0
+prix_cache_lecture = 1.0
+prix_source = "tiers, à revérifier : morphllm.com/openai-api-pricing"
+prix_date = "2026-10-17"
 
 [modeles.sol]
 fournisseur = "codex"
@@ -84,6 +116,11 @@ cout = 3
 effort = "high"
 atouts = "backend,frontend,devops,data,qa"
 note = "Fort et endurant : longues tâches de code répétées, proche du plus fort pour moins cher."
+prix_in = 2.0
+prix_out = 10.0
+prix_cache_lecture = 0.1
+prix_source = "tiers, à revérifier : morphllm.com/openai-api-pricing"
+prix_date = "2026-10-17"
 
 [modeles.luna]
 fournisseur = "codex"
@@ -93,6 +130,11 @@ cout = 1
 effort = "medium"
 atouts = "redaction"
 note = "Léger et rapide : tâches ciblées à fort volume."
+prix_in = 0.1
+prix_out = 0.5
+prix_cache_lecture = 0.01
+prix_source = "tiers, à revérifier : morphllm.com/openai-api-pricing"
+prix_date = "2026-10-17"
 
 [modeles.codex-defaut]
 fournisseur = "codex"

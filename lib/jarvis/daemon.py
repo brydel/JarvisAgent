@@ -179,10 +179,17 @@ def budget_check() -> list[str]:
             ag.chef_inject(f"[JARVIS jetons] {name} ÉPUISÉ jusqu'à {reprise} : ne lui assigne plus aucune tâche "
                            f"(jarvis task la refusera). Ses agents en cours ont reçu l'ordre de committer et de s'arrêter.")
             if cfg.get("arret_agents", True):
+                from . import taches
+                fiches = taches.toutes()
                 for a in agents_now or []:
                     if a["status"] in ("working", "untracked", "silent") and p in (a["kind"] or "").lower():
                         ok, _ = ag.send(ag.target(a), STOP_MSG)
                         store.feed_add("systeme", f"arrêt demandé à {a['project']}/{a['worktree']} (jetons {name})")
+                        fiche = taches.pour_agent(a["project"], a["worktree"], fiches, a.get("workdir", ""))
+                        if fiche:
+                            # Arrêt pour quota : ce n'est pas un échec de l'agent, l'essai ne compte pas.
+                            taches.classer(fiche["id"], "quota", source="auto", par="demon",
+                                           note=f"jetons {name} épuisés", remplacer=False)
         elif old == "epuise":
             events.append(f"{name} rétabli")
             notify.alert("plan_ok", f"Jetons {name} rétablis ({_pct(u)}) : il peut reprendre du travail.",
@@ -260,7 +267,16 @@ def blocage_check(now: float | None = None) -> list[str]:
     st = store.read_json(BLOCAGE_STATE, {})
     encore: dict[str, list[str]] = {}
     events = []
+    from . import taches
+    fiches = None
     for a in found:
+        if a["status"] == "waiting" and silence_max > 0 and a["elapsed"] >= silence_max:
+            # Attend une réponse depuis longtemps : l'essai est « bloqué » (attend l'humain ou le chef).
+            fiches = taches.toutes() if fiches is None else fiches
+            fiche = taches.pour_agent(a["project"], a["worktree"], fiches, a.get("workdir", ""))
+            if fiche and not fiche.get("echec"):
+                taches.classer(fiche["id"], "bloque", source="auto", par="demon",
+                               note=f"attend une réponse depuis {ag.fmt_elapsed(a['elapsed'])}", remplacer=False)
         if a["status"] != "working":
             continue
         key = ag.target(a)
@@ -566,6 +582,90 @@ def batterie_check(now: float | None = None) -> list[str]:
     return []
 
 
+JETONS_STATE = "jetons_garde.json"
+PLAFOND_MSG = ("[JARVIS] Ta tâche a atteint son plafond de jetons. Termine l'étape en cours, committe ton travail "
+               "(préfixe WIP si c'est inachevé), pousse ta branche, commente l'état dans l'issue Linear (ce qui est "
+               "fait, ce qui reste, pourquoi c'est plus long que prévu), puis arrête-toi.")
+
+
+def jetons_check(now: float | None = None, agents: list[dict] | None = None) -> list[str]:
+    """Plafond de jetons pendant le travail : l'agent qui dépasse reçoit l'ordre de committer et de s'arrêter,
+    le chef est prévenu. Une seule fois par tâche. Relu toutes les budget_jetons.verification_min minutes."""
+    cfg = config.settings().get("budget_jetons", {})
+    if not cfg.get("actif", True):
+        return []
+    now = now or time.time()
+    st = store.read_json(JETONS_STATE, {"ts": 0, "signales": []})
+    if now - st.get("ts", 0) < 60 * int(cfg.get("verification_min", 5)):
+        return []
+    st["ts"] = now
+    if agents is None:
+        agents, _ = ag.status_all()
+    if agents is None:
+        store.write_json(JETONS_STATE, st)
+        return []
+    from . import couts, taches
+    fiches = taches.toutes()
+    signales = set(st.get("signales", []))
+    events = []
+    for a in agents:
+        if a["status"] not in ag.BUSY:
+            continue
+        fiche = taches.pour_agent(a["project"], a["worktree"], fiches, a.get("workdir", ""))
+        if not fiche or fiche["statut"] not in taches.OUVERTS or fiche["id"] in signales:
+            continue
+        plafond = int(fiche.get("jetons_max") or 0) or couts.plafond_defaut(fiche.get("role", ""), fiche.get("taille", "M"))[0]
+        deja = couts.compteur_unite(fiche["projet"], fiche["issue"], fiche.get("role", ""))
+        if deja < plafond:
+            continue
+        signales.add(fiche["id"])
+        events.append(fiche["id"])
+        ag.send(ag.target(a), PLAFOND_MSG)
+        msg = (f"{fiche['projet']} {fiche['issue']} ({fiche['id']}) a atteint son plafond : {taches.fmt_jetons(deja)} / "
+               f"{taches.fmt_jetons(plafond)} jetons. L'agent committe et s'arrête.")
+        store.feed_add("erreur", msg)
+        ag.chef_inject(f"[JARVIS jetons] {msg} Lis son compte rendu : découpe la tâche ou change d'approche ; un plafond "
+                       f"plus haut passe par un nouveau plan (%…).")
+        try:
+            from . import journal
+            journal.ecrire("budget", acteur="demon", objet=fiche["id"], decision="plafond_jetons",
+                           raison=f"{deja}/{plafond}")
+        except Exception:  # noqa: BLE001
+            pass
+    st["signales"] = sorted(signales)[-500:]
+    store.write_json(JETONS_STATE, st)
+    return events
+
+
+BILAN_STATE = "bilan_quotidien.json"
+
+
+def bilan_check(now: float | None = None) -> bool:
+    """Envoie le bilan quotidien sur Telegram une fois par jour, à partir de bilan.heure (heure locale)."""
+    cfg = config.settings().get("bilan", {})
+    if not cfg.get("actif", True) or not config.settings()["telegram"].get("chat_id"):
+        return False
+    now = now or time.time()
+    local = time.localtime(now)
+    jour = time.strftime("%Y-%m-%d", local)
+    try:
+        h, m = (int(x) for x in str(cfg.get("heure", "08:00")).split(":"))
+    except ValueError:
+        return False
+    if (local.tm_hour, local.tm_min) < (h, m):
+        return False
+    st = store.read_json(BILAN_STATE, {})
+    if st.get("dernier") == jour:
+        return False
+    from . import bilan
+    texte = bilan.quotidien(now)
+    st["dernier"] = jour
+    store.write_json(BILAN_STATE, st)  # écrit avant l'envoi : jamais deux bilans le même jour
+    notify.telegram(texte)
+    store.feed_add("note", "bilan quotidien envoyé")
+    return True
+
+
 RESSOURCES_STATE = "ressources.json"
 
 
@@ -644,8 +744,8 @@ def watch_loop(stop: threading.Event) -> None:
     first = True
     while not stop.is_set():
         for step in (battement_demon, lambda: watch_once(first=first), ag.chef_flush_queue, budget_check,
-                     prevision_check, blocage_check, chef_check, modeles_check, veille_check,
-                     veille_modeles_check, menage_check, battement_check):
+                     prevision_check, blocage_check, jetons_check, chef_check, modeles_check, veille_check,
+                     veille_modeles_check, menage_check, battement_check, bilan_check):
             try:
                 step()
             except Exception as exc:  # noqa: BLE001 — le démon ne doit jamais mourir sur une erreur ponctuelle

@@ -38,7 +38,8 @@ LOURDE_DUREE_MAX = 4 * 3600  # une opération lourde jamais clôturée est oubli
 
 
 class Refus(Exception):
-    """Lancement refusé. `code` : config, pause, observation, capacite, lourde, doublon, budget, plan, origine."""
+    """Lancement refusé. `code` : config, pause, observation, capacite, lourde, doublon, budget, plan, origine,
+    budget_jetons (plafond de l'unité atteint), escalade (2 essais faits), meme_approche (2e essai identique au 1er)."""
 
     def __init__(self, code: str, raison: str):
         super().__init__(raison)
@@ -97,6 +98,7 @@ def _journal(decision: str, objet: str, raison: str, acteur: str, **extra) -> No
 
 def demander(*, origine: str, projet: str, issue: str, agent: str, worktree: str = "", classe: str = "",
              role: str = "", plan: str = "", relecture: bool = False, acteur: str = "", forcer: bool = False,
+             taille: str = "M", consignes_empreinte: str = "", jetons_max: int = 0,
              now: float | None = None) -> dict:
     """Demande l'admission d'un départ. Renvoie {"reservation", "fiche", "avertissements"} ou lève Refus.
 
@@ -188,6 +190,36 @@ def demander(*, origine: str, projet: str, issue: str, agent: str, worktree: str
         elif agent not in ("claude", "codex", "auto"):
             raise _refus("config", f"agent inconnu « {agent} »")
 
+        # Unité de travail (projet, issue, rôle) : borne des essais et plafond de jetons, relances comprises.
+        # Pour un plan, le rôle, le modèle et le plafond sont ceux que l'humain a validés.
+        role_eff = (fiche or {}).get("role") or role
+        taille_eff = (fiche or {}).get("taille") or taille or "M"
+        from . import couts, taches
+
+        def _annuler_plan():
+            if fiche and plan:
+                try:
+                    plans.release(plan, projet, issue, fiche["agent"])
+                except plans.PlanError:
+                    pass
+
+        # Une reprise après redémarrage continue le MÊME essai (même fiche) : elle n'en ouvre pas un nouveau.
+        bloque = None if origine == "reprise" else taches.verifier_reprise(
+            projet, issue, role_eff, agent=agent if fiche else "", modele=(fiche or {}).get("modele", ""),
+            consignes_empreinte=consignes_empreinte)
+        if bloque:
+            _annuler_plan()
+            raise _refus(*bloque)
+        plafond = int((fiche or {}).get("jetons_max") or jetons_max or 0) or couts.plafond_defaut(role_eff, taille_eff)[0]
+        if s.get("budget_jetons", {}).get("actif", True):
+            deja = couts.compteur_unite(projet, issue, role_eff)
+            if deja >= plafond:
+                _annuler_plan()
+                raise _refus("budget_jetons", f"{projet} {issue} [{role_eff}] a déjà consommé {taches.fmt_jetons(deja)} jetons "
+                                              f"pour un plafond de {taches.fmt_jetons(plafond)} : pas de relance. Découpe la "
+                                              f"tâche, change d'approche, ou demande un plafond plus haut dans un nouveau plan "
+                                              f"(%3M) que ton humain validera.")
+
         def _reserver(data):
             data["seq"] += 1
             r = {"id": f"R-{data['seq']:05d}", "ts": now, "expire": now + 60 * int(s["admission"].get("reservation_min", 15)),
@@ -201,7 +233,8 @@ def demander(*, origine: str, projet: str, issue: str, agent: str, worktree: str
         r = store.update_json(RESERVATIONS, _vide_res(), _reserver)
     _journal("admis", objet, f"{origine}, classe {classe}, {total + 1}/{cap['max']} places", acteur or origine,
              reservation=r["id"], origine=origine, plan=plan or None)
-    return {"reservation": r["id"], "fiche": fiche, "avertissements": avertissements, "classe": classe}
+    return {"reservation": r["id"], "fiche": fiche, "avertissements": avertissements, "classe": classe,
+            "jetons_max": plafond}
 
 
 def confirmer(res_id: str, tache_id: str, worktree: str = "") -> bool:

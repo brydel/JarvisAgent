@@ -45,6 +45,13 @@ ${C_CYAN}Agents${C_OFF}
   jarvis reprendre [--essai]            Relance les agents interrompus par un redémarrage (même admission)
   jarvis lourd debut|fin|exec|liste     Déclare une opération lourde (compilation, tests, navigateur, vidéo)
   jarvis tache [n] · jarvis bilan       Registre des tâches · ce que l'usine a produit
+  jarvis tache voir|echec <T-…>         Détail d'une tâche (essais, échec, jetons) · classer un échec
+  jarvis tache relancer <T-…> --autoriser
+                                        Débloquer un essai de plus après une escalade (toi seulement)
+  jarvis bilan quotidien                Le bilan du matin (aussi envoyé sur Telegram à 08:00)
+  jarvis cout [tache <T>|projet <P>]    Équivalent API des tâches (pas une dépense : tu es à l'abonnement)
+  jarvis budget-jetons voir <T-…>       Jetons consommés par une unité de travail face à son plafond
+  jarvis memoire noter|chercher|liste   Mémoire du chef : décisions, échecs, leçons, recherche pondérée
   jarvis verdict <projet> <ISSUE> pret|corrections [note]
                                         Verdict d'une contre-relecture
   jarvis board · jarvis status          Tableau de bord workmux · tâches du projet courant
@@ -85,6 +92,7 @@ ${C_CYAN}Autonomie et garde-fous${C_OFF}
 ${C_CYAN}Poste${C_OFF}
   jarvis sante                          Mémoire, disque, Docker, batterie, redémarrage Windows
   jarvis diagnostic                     Inventaire léger du poste (WSL vs Windows), rapport expurgé
+  jarvis secrets verifier --projet P    Variables secrètes que recevrait chaque rôle (noms seuls)
   jarvis profil [appliquer <nom>]       Profils : laptop-conservative, workstation
   jarvis autostart installer|retirer|etat
                                         Démarrer Jarvis tout seul à l'ouverture de session Windows
@@ -340,13 +348,17 @@ cmd_task() {
   # (pauses, observation, capacité + réservations, opérations lourdes, doublons, jetons) :
   #  - avec un plan : l'affectation validée par l'humain, marquée lancée sous le même verrou ;
   #  - à la main : réservation d'abord, puis le routeur choisit selon le rôle, la taille et les jetons.
+  # Empreinte des consignes : un 2e essai après un échec doit changer d'approche (modèle ou consignes).
+  local empreinte=""
+  [[ -n "$consignes" ]] && empreinte="$(sha256sum "$consignes" | cut -c1-16)"
   local fiche reservation=""
   if ((guarded)); then
-    fiche="$(py plan verifier "$plan" "$projet" "$issue" "$who" --worktree "$branch" ${revue:+--revue})" || exit $?
+    fiche="$(py plan verifier "$plan" "$projet" "$issue" "$who" --worktree "$branch" --consignes-empreinte "$empreinte" ${revue:+--revue})" || exit $?
   else
     [[ -n "$revue" && -z "$role" ]] && role="revue"
     local admis
-    admis="$(py admission demander "$projet" "$issue" "$who" --origine cli --worktree "$branch" --role "$role")" || exit $?
+    admis="$(py admission demander "$projet" "$issue" "$who" --origine cli --worktree "$branch" --role "$role" \
+             --taille "${taille:-M}" --consignes-empreinte "$empreinte")" || exit $?
     reservation="$(sed -n 's/^reservation=//p' <<<"$admis")"
     local -a choix=(--shell --agent "$who" --taille "${taille:-M}")
     [[ -n "$role" ]] && choix+=(--role "$role")
@@ -354,6 +366,7 @@ cmd_task() {
     [[ -n "$revue" && "$who" == "auto" ]] && choix+=(--relit "$projet:$issue")
     fiche="$(py modele choisir "${choix[@]}")" || { py admission liberer "$reservation" "routeur en échec" >/dev/null || true; exit 1; }
     fiche+=$'\n'"reservation=$reservation"$'\n'"classe=$(sed -n 's/^classe=//p' <<<"$admis")"
+    fiche+=$'\n'"jetons_max=$(sed -n 's/^jetons_max=//p' <<<"$admis")"
   fi
   local -A F=()
   local cle valeur
@@ -401,7 +414,8 @@ cmd_task() {
                   --role "${F[role]:-}" --modele "${F[modele]:-}" --modele-id "${F[modele_id]:-}"
                   --effort "${F[effort]:-}" --repli "${F[repli]:-}" --taille "${F[taille]:-M}"
                   --plan "$plan" --revue "$revue" --raison "${F[raison]:-}"
-                  --classe "${F[classe]:-}" --reservation "$reservation")
+                  --classe "${F[classe]:-}" --reservation "$reservation"
+                  --jetons-max "${F[jetons_max]:-}" --consignes-empreinte "$empreinte")
   [[ "${F[par_secours]:-0}" == "1" ]] && targs+=(--secours)
   tache_id="$(py tache-enregistrer "${targs[@]}")" || abandon "impossible d'enregistrer la tâche."
 
@@ -579,7 +593,8 @@ main() {
     task|t)       cmd_task "$@" ;;
     cockpit|etat|plan|fil|projet|telegram|regler|capacite|demander|note|journal|daemon|voir|jetons|veille|\
     fermer|reprendre|sante|reparer-git|role|modele|tache|verdict|bilan|usine|studio|livrer|livrables|web|\
-    admission|pause|profil|lourd|audit|diagnostic|politique|budget|fournisseurs|proposition)
+    admission|pause|profil|lourd|audit|diagnostic|politique|budget|fournisseurs|proposition|\
+    budget-jetons|cout|memoire|secrets)
                   py "$cmd" "$@" ;;
     chef-lancer)  cmd_chef_lancer "$@" ;;
     relancer)     cmd_relancer "$@" ;;

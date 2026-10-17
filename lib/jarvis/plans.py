@@ -17,11 +17,25 @@ PLANS_FILE = "plans.json"
 AGENTS = {"claude": "claude", "cc": "claude", "codex": "codex", "cx": "codex", "auto": "auto"}
 VALIDITE = {"vague": 24 * 3600, "nuit": 16 * 3600}  # durée de validité après approbation
 
-# projet:ISSUE:agent[/modèle][@rôle][+taille][:description]
+# projet:ISSUE:agent[/modèle][@rôle][+taille][%jetons][:description]
 _ITEM_RE = re.compile(
     r"^(?P<projet>[\w.-]+):(?P<issue>[A-Za-z]+-\d+):(?P<agent>[a-z]+)"
     r"(?:/(?P<modele>[A-Za-z0-9._-]+))?(?:@(?P<role>[a-z-]+))?(?:\+(?P<taille>[SMLsml]))?"
+    r"(?:%(?P<jetons>\d+(?:[.,]\d+)?[kKmM]?))?"
     r"(?::(?P<desc>.+))?$")
+
+
+def lire_jetons(texte: str) -> int:
+    """« 800k » → 800 000 ; « 2.5M » → 2 500 000 ; « 120000 » → 120 000."""
+    t = texte.strip().lower().replace(",", ".")
+    mult = {"k": 1_000, "m": 1_000_000}.get(t[-1:], 1)
+    try:
+        n = int(float(t.rstrip("km")) * mult)
+    except ValueError:
+        raise PlanError(f"plafond de jetons illisible « {texte} » (ex. 800k, 2M)") from None
+    if not 10_000 <= n <= 100_000_000:
+        raise PlanError(f"plafond de jetons hors bornes : {n} (entre 10k et 100M)")
+    return n
 
 
 _DESC_REVUE = re.compile(r"^(revue|relecture)(-pr-\d+)?$")
@@ -44,7 +58,7 @@ def parse_item(spec: str) -> dict:
     m = _ITEM_RE.match(spec.strip())
     if not m:
         raise PlanError(f"élément invalide « {spec} » "
-                        "(attendu projet:ISSUE:agent[/modèle][@rôle][+taille][:description])")
+                        "(attendu projet:ISSUE:agent[/modèle][@rôle][+taille][%jetons][:description])")
     agent = AGENTS.get(m["agent"])
     if not agent:
         raise PlanError(f"agent inconnu « {m['agent']} » dans « {spec} » (claude, codex ou auto)")
@@ -56,6 +70,7 @@ def parse_item(spec: str) -> dict:
         "role": (m["role"] or "").lower(),
         "taille": (m["taille"] or "M").upper(),
         "desc": (m["desc"] or "").strip(),
+        "jetons_max": lire_jetons(m["jetons"]) if m["jetons"] else 0,
         "lance": False,
         "lance_ts": None,
     }
@@ -89,6 +104,12 @@ def resoudre(items: list[dict], usage_resume: dict | None = None) -> list[dict]:
         it.update(agent=choix["agent"], modele=choix["modele"], modele_id=choix["modele_id"],
                   effort=choix["effort"], repli=choix["repli"], role=choix["role"], taille=choix["taille"],
                   raison=choix["raison"], secours=choix["secours"])
+        if not it.get("jetons_max"):
+            # Plafond de l'unité de travail, fixé et affiché au moment où l'humain valide le plan.
+            from . import couts
+            it["jetons_max"], it["jetons_source"] = couts.plafond_defaut(it["role"], it["taille"])
+        else:
+            it["jetons_source"] = "imposé par le plan"
         key = (it["projet"], it["issue"], it["agent"])
         if key in vus:
             raise PlanError(f"{it['projet']}:{it['issue']} apparaît deux fois pour {it['agent']} : "
@@ -356,6 +377,9 @@ def format_plan(p: dict, detail: bool = True) -> str:
             if i.get("role"):
                 r = roles.ou_defaut(i["role"])
                 ligne += f"  [{r['emoji']} {r['titre']}, taille {i.get('taille', 'M')}]"
+            if i.get("jetons_max"):
+                from . import taches
+                ligne += f"  ≤ {taches.fmt_jetons(i['jetons_max'])} jetons"
             lines.append(ligne + desc)
             if i.get("secours") and not i["lance"]:
                 s = i["secours"]

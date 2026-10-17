@@ -268,7 +268,7 @@ Le chef lance désormais la veille comme une vraie tâche (`@recherche+L`), te l
 
 Un rôle est un fichier `roles/<nom>.md` : un en-tête (titre, équipe, couleur, niveau attendu, fournisseur préféré) et le **brief** que l'agent reçoit en plus des consignes du chef. Pour adapter un rôle ou en créer un, dépose un fichier du même format dans `~/.config/jarvis/roles/` : il remplace ou complète ceux du dépôt, sans toucher au code.
 
-Dans un plan, une tâche s'écrit `projet:ISSUE:agent[/modèle][@rôle][+taille][:description]` :
+Dans un plan, une tâche s'écrit `projet:ISSUE:agent[/modèle][@rôle][+taille][%jetons][:description]` (`%3M` : plafond de jetons imposé) :
 
 ```bash
 jarvis plan nouveau --titre "Vague auth" --pourquoi "…" \

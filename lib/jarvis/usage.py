@@ -356,6 +356,19 @@ def task_tokens(fiche: dict) -> dict | None:
     return None
 
 
+def compteur_tache(tache_id: str, mesurer: bool = True) -> dict | None:
+    """Consommation de l'unité de travail d'une tâche (même projet, issue et rôle, relances comprises)
+    face à son plafond : {"tache", "jetons", "plafond", "reste", "depasse"}. None si la tâche est inconnue."""
+    from . import couts, taches
+    fiche = taches.get(tache_id)
+    if not fiche:
+        return None
+    jetons = couts.compteur_unite(fiche["projet"], fiche["issue"], fiche.get("role", ""), mesurer=mesurer)
+    plafond = int(fiche.get("jetons_max") or 0) or couts.plafond_defaut(fiche.get("role", ""), fiche.get("taille", "M"))[0]
+    return {"tache": fiche["id"], "jetons": jetons, "plafond": plafond, "reste": max(0, plafond - jetons),
+            "depasse": jetons >= plafond}
+
+
 def fmt_reset(ts: int | None) -> str:
     if not ts:
         return ""

@@ -119,6 +119,29 @@ DEFAULTS: dict = {
         "pression_memoire_pct": 25,
         "hysterese_min": 5,
     },
+    "budget_jetons": {
+        # Plafond de jetons par unité de travail (projet, issue, rôle), relances comprises :
+        # multiplicateur × estimation. L'estimation devient la médiane des tâches terminées de même rôle et
+        # taille dès qu'il y en a 5 ; avant, ces valeurs par défaut. Un plan peut imposer « %2M ».
+        "actif": True,
+        "multiplicateur": 3,
+        "estimation_s": 300_000,
+        "estimation_m": 800_000,
+        "estimation_l": 2_000_000,
+        # Le démon relit la consommation des tâches ouvertes toutes les N minutes.
+        "verification_min": 5,
+    },
+    "couts": {
+        # « jarvis cout » : équivalent API, jamais une dépense. Tarifs en dollars US (config/modeles.toml) ;
+        # taux = unités de la devise pour 1 dollar US (0 = non réglé : affichage en dollars US).
+        "devise": "EUR",
+        "taux": 0.0,
+    },
+    "bilan": {
+        # Bilan quotidien envoyé sur Telegram par le démon, une fois par jour à cette heure (HH:MM, heure locale).
+        "actif": True,
+        "heure": "08:00",
+    },
     "propositions": {
         # File de travaux partagée : au plus N propositions acceptées par source et par jour.
         "max_par_jour": 3,
@@ -169,6 +192,12 @@ _BORNES: dict[tuple[str, str], tuple[type, float, float]] = {
     ("sante", "batterie_arret_pct"): (int, 0, 100),
     ("jetons", "alerte"): (int, 1, 100),
     ("jetons", "arret"): (int, 1, 100),
+    ("budget_jetons", "multiplicateur"): (float, 1, 20),
+    ("budget_jetons", "estimation_s"): (int, 10_000, 100_000_000),
+    ("budget_jetons", "estimation_m"): (int, 10_000, 100_000_000),
+    ("budget_jetons", "estimation_l"): (int, 10_000, 100_000_000),
+    ("budget_jetons", "verification_min"): (int, 1, 120),
+    ("couts", "taux"): (float, 0, 1000),
 }
 
 
@@ -187,6 +216,9 @@ def valider(s: dict | None = None) -> list[str]:
             erreurs.append(f"{table}.{cle} = {v} hors bornes [{mini:g}, {maxi:g}]")
     if (s.get("plans") or {}).get("validation") not in ("humain", "auto"):
         erreurs.append("plans.validation doit valoir « humain » ou « auto »")
+    import re as _re
+    if not _re.fullmatch(r"([01]\d|2[0-3]):[0-5]\d", str((s.get("bilan") or {}).get("heure", ""))):
+        erreurs.append("bilan.heure doit être une heure HH:MM (ex. 08:00)")
     j = s.get("jetons") or {}
     if isinstance(j.get("alerte"), int) and isinstance(j.get("arret"), int) and j["alerte"] > j["arret"]:
         erreurs.append("jetons.alerte doit être inférieur ou égal à jetons.arret")
