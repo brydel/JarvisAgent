@@ -35,6 +35,12 @@
   autorisés, `<projet>.env` (600) les valeurs ; les lanceurs n'injectent que ceux du rôle de la tâche. Un agent voit
   ce qu'il reçoit : c'est une réduction de ce qui peut fuiter, pas une isolation. Un `.env` copié à la main dans un
   worktree n'est pas empêché.
+- **Vague 2** (`vague-2.md`) : `jarvis execution lancer` exige une réservation d'admission active ; `jarvis eval
+  lancer`, `jarvis proxy config` et `jarvis rollback executer` sont réservés à l'humain (refus si `JARVIS_ROLE` ou
+  `JARVIS_METIER`, et interdits au chef). Un rollback n'a lieu qu'après ton clic Telegram ou ta commande, sur une
+  branche inchangée et propre. La configuration LiteLLM ne contient que des références `os.environ/…`. Les traces
+  ne quittent le poste que si `observabilite.otlp_endpoint` est réglé ; elles ne contiennent ni consignes ni code.
+  Les goldens (`tests/goldens/`) sont protégés : ni le chef ni un agent ne les modifie pour faire passer un brief.
 
 ## Protection contre l'injection
 

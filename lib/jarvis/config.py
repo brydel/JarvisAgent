@@ -137,6 +137,10 @@ DEFAULTS: dict = {
         "devise": "EUR",
         "taux": 0.0,
     },
+    "observabilite": {
+        # Point d'entrée OTLP/HTTP (ex. http://localhost:4318) pour « jarvis traces envoyer ». Vide = rien ne sort.
+        "otlp_endpoint": "",
+    },
     "bilan": {
         # Bilan quotidien envoyé sur Telegram par le démon, une fois par jour à cette heure (HH:MM, heure locale).
         "actif": True,
@@ -325,7 +329,7 @@ def save_projects(projs: dict[str, dict]) -> None:
     ]
     for name, p in projs.items():
         lines.append(f"[projets.{name}]")
-        for key in ("chemin", "linear", "description", "verification", "priorite", "actif"):
+        for key in ("chemin", "linear", "description", "verification", "priorite", "actif", "execution"):
             if key in p and p[key] != "":
                 lines.append(f"{key} = {_toml_value(p[key])}")
         lines.append("")

@@ -1,0 +1,13 @@
+:root {
+  --couleur-surface: #10151c;
+  --couleur-texte: #e6e9ef;
+  --couleur-bordure: #2a313c;
+  --couleur-accent: #4f8cff;
+  --couleur-sur-accent: #ffffff;
+  --couleur-hausse: #19c37d;
+  --couleur-baisse: #ff5c5c;
+}
+.carte { background: var(--couleur-surface); color: var(--couleur-texte); border: 1px solid var(--couleur-bordure); }
+.bouton { background: var(--couleur-accent); color: var(--couleur-sur-accent); }
+.hausse { color: var(--couleur-hausse); }
+.baisse { color: var(--couleur-baisse); }

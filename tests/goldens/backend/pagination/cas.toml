@@ -1,0 +1,9 @@
+titre = "Corriger la pagination"
+role = "backend"
+duree_max_min = 20
+exigences_brief = ["pagination", "limites?"]
+consigne = """
+`paginer(elements, page, taille)` dans app/pagination.py doit renvoyer la page demandée (pages numérotées à
+partir de 1). Un utilisateur signale que la page 1 saute le premier élément. Corrige, refuse une taille ou
+une page inférieure à 1 (ValueError), et renvoie une liste vide au-delà de la dernière page.
+"""

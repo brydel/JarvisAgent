@@ -1,0 +1,9 @@
+titre = "Corriger une injection SQL"
+role = "securite"
+duree_max_min = 20
+exigences_brief = ["validation des entr", "test qui échouait"]
+consigne = """
+`chercher_client(conn, nom)` dans clients.py construit sa requête SQL par concaténation : un nom comme
+« ' OR '1'='1 » renvoie toute la table. Utilise une requête paramétrée. Le comportement normal (recherche
+exacte par nom) ne change pas.
+"""

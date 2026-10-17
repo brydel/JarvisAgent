@@ -1,0 +1,9 @@
+titre = "Valider les entrées de creer_utilisateur"
+role = "backend"
+duree_max_min = 20
+exigences_brief = ["valide", "tests?"]
+consigne = """
+Dans app/utilisateurs.py, `creer_utilisateur(email, age)` accepte n'importe quoi.
+Refuse avec ValueError (message en français) un email sans « @ » ou vide, et un âge qui n'est pas un entier
+entre 0 et 150. Les appels valides gardent exactement le même résultat. Ajoute les tests correspondants.
+"""

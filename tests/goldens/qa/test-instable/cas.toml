@@ -1,0 +1,10 @@
+titre = "Rendre un test instable déterministe"
+role = "qa"
+duree_max_min = 20
+exigences_brief = ["instable", "horloge"]
+consigne = """
+tests/test_session.py échoue de temps en temps : il dépend de l'heure réelle et dort deux secondes.
+Rends-le déterministe sans attente réelle : injecte une horloge dans session.py (paramètre `horloge`, par
+défaut time.time) et utilise une fausse horloge dans le test. Le test doit toujours vérifier qu'une session
+expire après 30 minutes.
+"""

@@ -74,7 +74,16 @@ def etat() -> dict:
                     for n, p in sorted(snap["projects"].items(), key=lambda kv: (kv[1]["priorite"], kv[0]))],
         "fil": [{"ts": e["ts"], "type": e.get("type", ""), "texte": e.get("texte", "")} for e in store.feed_tail(40)],
         "bilan": taches.bilan(7),
+        "executions": _executions(),
     }
+
+
+def _executions() -> list[dict]:
+    try:
+        from . import observabilite
+        return observabilite.dernieres_executions(20)
+    except Exception:  # noqa: BLE001 — le tableau de bord s'affiche même si un registre est illisible
+        return []
 
 
 def _etat_json() -> bytes:

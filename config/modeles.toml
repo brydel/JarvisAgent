@@ -16,6 +16,7 @@
 # repli        Claude uniquement : modèles de repli si le premier est indisponible ou surchargé
 # atouts       rôles pour lesquels ce modèle est préféré (voir « jarvis role liste »)
 #
+# api_id       identifiant de l'API du fournisseur (pour le proxy des fonctions IA des produits, pas pour le CLI)
 # prix_*       tarifs API publics en dollars US par million de jetons (entrée, sortie, lecture et
 #              écriture du cache). Servent à « jarvis cout » : un ÉQUIVALENT API, pas ce que tu paies
 #              avec tes abonnements. Absent = « estimation » (tarif de référence du fournisseur).
@@ -44,6 +45,7 @@ prix_cache_lecture = 0.25
 prix_cache_ecriture = 12.5
 prix_source = "officiel : platform.claude.com/docs/models/fable-5-1"
 prix_date = "2026-10-17"
+api_id = "claude-fable-5-1"
 
 [modeles.opus]
 fournisseur = "claude"
@@ -58,6 +60,7 @@ prix_in = 4.0
 prix_out = 20.0
 prix_source = "officiel (entrée/sortie) : platform.claude.com/docs/models/fable-5-1"
 prix_date = "2026-10-17"
+api_id = "claude-opus-5-5"
 
 [modeles.sonnet]
 fournisseur = "claude"
@@ -71,6 +74,7 @@ prix_in = 2.0
 prix_out = 10.0
 prix_source = "officiel (entrée/sortie) : platform.claude.com/docs/models/fable-5-1"
 prix_date = "2026-10-17"
+api_id = "claude-sonnet-5-5"
 
 [modeles.haiku]
 fournisseur = "claude"
@@ -84,6 +88,7 @@ prix_in = 0.1
 prix_out = 0.5
 prix_source = "officiel (entrée/sortie, « à partir de ») : platform.claude.com/docs/models/fable-5-1"
 prix_date = "2026-10-17"
+api_id = "claude-haiku-5-5"
 
 [modeles.claude-defaut]
 fournisseur = "claude"
@@ -107,6 +112,7 @@ prix_out = 50.0
 prix_cache_lecture = 1.0
 prix_source = "tiers, à revérifier : morphllm.com/openai-api-pricing"
 prix_date = "2026-10-17"
+api_id = "gpt-6-astra"
 
 [modeles.sol]
 fournisseur = "codex"
@@ -121,6 +127,7 @@ prix_out = 10.0
 prix_cache_lecture = 0.1
 prix_source = "tiers, à revérifier : morphllm.com/openai-api-pricing"
 prix_date = "2026-10-17"
+api_id = "gpt-6.1-sol"
 
 [modeles.luna]
 fournisseur = "codex"
@@ -135,6 +142,7 @@ prix_out = 0.5
 prix_cache_lecture = 0.01
 prix_source = "tiers, à revérifier : morphllm.com/openai-api-pricing"
 prix_date = "2026-10-17"
+api_id = "gpt-6-luna"
 
 [modeles.codex-defaut]
 fournisseur = "codex"
@@ -144,3 +152,11 @@ cout = 3
 effort = ""
 atouts = "generaliste"
 note = "Modèle par défaut de Codex : filet de sécurité, toujours disponible."
+
+# Proxy LiteLLM pour les fonctions IA des PRODUITS (jamais pour les agents, qui sont sur abonnement).
+# Désactivé : « jarvis proxy config » génère seulement sa configuration. Voir lib/jarvis/proxy.py.
+[proxy]
+actif = false
+port = 4000
+nouvelles_tentatives = 2
+delai_s = 120

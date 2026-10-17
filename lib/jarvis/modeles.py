@@ -30,7 +30,7 @@ FOURNISSEURS = ("claude", "codex")
 EFFORTS = ("low", "medium", "high", "xhigh")
 TAILLES = {"S": -1, "M": 0, "L": 1}
 CHAMPS = ("fournisseur", "id", "niveau", "cout", "effort", "repli", "atouts", "note", "actif",
-          "prix_in", "prix_out", "prix_cache_lecture", "prix_cache_ecriture", "prix_source", "prix_date")
+          "prix_in", "prix_out", "prix_cache_lecture", "prix_cache_ecriture", "prix_source", "prix_date", "api_id")
 PRIX = ("prix_in", "prix_out", "prix_cache_lecture", "prix_cache_ecriture")
 _NOM_RE = re.compile(r"^[a-z0-9][a-z0-9._-]{0,39}$")
 _ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:\[\]/-]{0,79}$")
@@ -92,6 +92,7 @@ def _normaliser(nom: str, brut: dict) -> dict | None:
         # None = inconnu. Voir couts.py.
         **{k: _prix(brut.get(k)) for k in PRIX},
         "prix_source": str(brut.get("prix_source") or ""),
+        "api_id": str(brut.get("api_id") or "").strip(),  # identifiant d'API (proxy des produits), pas celui du CLI
         "prix_date": str(brut.get("prix_date") or ""),
     }
 
@@ -143,6 +144,16 @@ def enregistrer_perso(nom: str, champs: dict) -> None:
         for key in CHAMPS:
             if key in perso[name]:
                 lines.append(f"{key} = {_toml(perso[name][key])}")
+        lines.append("")
+    # La table [proxy] du catalogue personnel (réglages du proxy des produits) est conservée telle quelle.
+    try:
+        with CATALOGUE_PERSO.open("rb") as fh:
+            proxy_perso = tomllib.load(fh).get("proxy") or {}
+    except (OSError, tomllib.TOMLDecodeError):
+        proxy_perso = {}
+    if proxy_perso:
+        lines.append("[proxy]")
+        lines += [f"{k} = {_toml(v)}" for k, v in proxy_perso.items() if isinstance(v, (bool, int, float, str))]
         lines.append("")
     config.CONFIG_DIR.mkdir(parents=True, exist_ok=True)
     tmp = CATALOGUE_PERSO.with_suffix(".tmp")

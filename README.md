@@ -203,6 +203,11 @@ Tu reçois aussi les questions du chef (❓), ses bilans (📝) et les **livrabl
 | `jarvis memoire noter\|chercher\|liste` | Mémoire du chef : décisions, échecs, leçons, recherche pondérée |
 | `jarvis bilan quotidien [--envoyer]` | Le bilan du matin (envoyé seul sur Telegram à `bilan.heure`) |
 | `jarvis secrets verifier --projet P` | Secrets que recevrait chaque rôle (noms seuls) |
+| `jarvis eval liste\|verifier\|resultats` · `jarvis eval lancer <role/cas> --agent claude --confirmer` | Harnais d'évaluation des rôles (15 cas jugés par scripts) · un vrai essai d'agent (consomme du quota, toi seulement) |
+| `jarvis rejouer <T> [--depuis N]` | Chronologie d'une tâche : plan, admission, tours, verdict, fin (reconstruction, rien n'est relancé) |
+| `jarvis traces [exporter\|envoyer]` | Dernières exécutions avec durée, jetons, équivalent API · export OpenTelemetry (fichier ou collecteur) |
+| `jarvis rollback proposer\|demander\|executer <T>` | Défaire par `git revert` les commits d'une tâche : proposition, demande Telegram (bouton Revert), exécution (toi seulement) |
+| `jarvis proxy voir\|config` | Configuration LiteLLM pour les fonctions IA des produits (désactivée, jamais pour les agents) |
 
 ### Réglages
 
@@ -242,6 +247,9 @@ Tu reçois aussi les questions du chef (❓), ses bilans (📝) et les **livrabl
 | `budget_jetons.multiplicateur` · `budget_jetons.estimation_s/m/l` | `3` · `300000/800000/2000000` | Plafond de jetons par unité de travail = multiplicateur × estimation (médiane de l'historique dès 5 tâches) |
 | `couts.devise` · `couts.taux` | `EUR` · `0` | Affichage de l'équivalent API ; 0 = en dollars US |
 | `bilan.actif` · `bilan.heure` | `true` · `08:00` | Bilan quotidien sur Telegram |
+| `observabilite.otlp_endpoint` | vide | Collecteur OpenTelemetry (ex. `http://localhost:4318`) pour `jarvis traces envoyer` ; vide = rien ne sort |
+
+Par projet, `execution = "e2b"` dans `projects.toml` choisit le backend E2B (service payant : refusé sans SDK, clé `E2B_API_KEY` et budget `infrastructure`) ; par défaut `workmux`.
 
 Exemple : `jarvis regler general.max_agents 4`. Les réglages vivent dans `~/.config/jarvis/settings.toml` (permissions 600, jamais dans le dépôt).
 
@@ -457,5 +465,6 @@ python3 -m unittest discover -s tests -v
 - [x] Phase 2.5 : reprise après redémarrage, démarrage automatique, santé du PC, battement du chef, images Telegram
 - [x] Phase 3 : l'usine — rôles spécialisés, routeur de modèles, secours, registre des tâches et bilan, studio vidéo et livrables, cockpit par ateliers, tableau de bord web, prévision des jetons, capacité adaptée au PC, chiens de garde
 - [x] Autonomie, lot 0–1 et fondations du lot 2 : admission commune, pauses indépendantes, agents silencieux, profils, diagnostic, politique de délégation, budgets, journal d'audit, adaptateurs fournisseurs, file de travaux partagée (`docs/autonomy/`)
+- [x] Prompt maître, vagues 1–2 : plafonds de jetons, coûts, mémoire, bilan quotidien, échecs bornés, secrets par rôle ; évaluation par goldens, backend d'exécution, replay, traces, rollback assisté (`docs/autonomy/vague-*.md`)
 - [ ] Autonomie, lots 3–4 : parcours commercial d'un produit en simulation, exploitation, amélioration mesurée des agents, migration vers la station (`docs/autonomy/feuille-de-route.md`)
 - [ ] Phase 4 : PR fusionnées par jour et par projet dans le bilan, voix off et sous-titres dans le studio, approbation des plans depuis le tableau de bord web

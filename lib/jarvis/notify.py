@@ -87,6 +87,10 @@ def plan_buttons(plan_id: str) -> list[list[tuple[str, str]]]:
     return [[("✅ Approuver", f"ok:{plan_id}"), ("✋ Refuser", f"non:{plan_id}")]]
 
 
+def rollback_buttons(tache_id: str) -> list[list[tuple[str, str]]]:
+    return [[("↩ Revert", f"rbok:{tache_id}"), ("Garder", f"rbnon:{tache_id}")]]
+
+
 def proposition_buttons(prop_id: str) -> list[list[tuple[str, str]]]:
     return [[("✅ Accepter", f"mok:{prop_id}"), ("✋ Refuser", f"mnon:{prop_id}")]]
 

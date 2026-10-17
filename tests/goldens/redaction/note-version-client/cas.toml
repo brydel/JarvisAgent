@@ -1,0 +1,10 @@
+titre = "Note de version pour les clients"
+role = "redaction"
+duree_max_min = 20
+exigences_brief = ["notes de version", "phrases courtes"]
+consigne = """
+Écris docs/note-version-1.3.md : une note pour les clients (pas pour l'équipe technique), en français, de
+150 mots au plus, avec un titre. Elle présente les alertes de prix par courriel, l'export CSV du portefeuille et
+la correction de la déconnexion sur mobile. Aucun jargon de développeur (pas de « PR », « refactor »,
+« endpoint », « backend », « commit », « API »).
+"""

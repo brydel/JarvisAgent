@@ -1,0 +1,9 @@
+titre = "Bloquer la traversée de répertoire"
+role = "securite"
+duree_max_min = 20
+exigences_brief = ["contrôle d'accès|validation des entr"]
+consigne = """
+`lire_document(base, nom)` dans documents.py ouvre `base/nom`. Un nom comme « ../secret.txt » ou un chemin
+absolu permet de lire n'importe quel fichier. N'autorise que les fichiers situés DANS le dossier `base`
+(après résolution des liens et des « .. ») ; sinon lève PermissionError.
+"""
