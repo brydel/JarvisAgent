@@ -1,0 +1,10 @@
+titre = "Reproduire un bug signalé par un test"
+role = "qa"
+duree_max_min = 20
+exigences_brief = ["reproduit", "échoue"]
+consigne = """
+Un utilisateur signale : « une date saisie 03/04/2026 est enregistrée au 4 mars au lieu du 3 avril ».
+La fonction est `lire_date(texte)` dans dates.py (format jour/mois/année attendu). Écris le test qui
+reproduit ce bug dans tests/test_dates.py, SANS corriger dates.py : le test doit échouer aujourd'hui et
+passer une fois le bug corrigé.
+"""

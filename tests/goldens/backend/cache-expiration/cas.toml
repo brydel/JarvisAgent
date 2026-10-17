@@ -1,0 +1,9 @@
+titre = "Ajouter une expiration au cache"
+role = "backend"
+duree_max_min = 20
+exigences_brief = ["tests?"]
+consigne = """
+La classe `Cache` (app/cache.py) garde les valeurs pour toujours. Ajoute une durée de vie en secondes
+(`Cache(ttl=60, horloge=time.monotonic)`) : une valeur expirée n'est plus renvoyée (get renvoie None) et
+est retirée. L'horloge doit être injectable pour les tests. Le comportement sans expiration (ttl=None) reste.
+"""

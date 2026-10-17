@@ -11,9 +11,7 @@ humaine**, puis la rentabilité des produits. Pas de nouveaux agents sans preuve
   volontairement manuel pour le premier essai.
 - Bilan quotidien automatique — **fait en vague 1** (`vague-1.md`).
 - Vague 2 (prompt maître) : harnais d'évaluation, backend d'exécution abstrait, replay, observabilité, rollback
-  assisté — à faire. Attention : E2B (service payant), promptfoo et GEPA (appels d'API payants) restent hors runtime
-  et désactivés sans budget ; un proxy LiteLLM ne s'applique pas aux agents sur abonnement (il les ferait passer
-  sur des clés API), seulement aux fonctions IA des produits.
+  assisté — **fait** (`vague-2.md`). E2B réel, promptfoo exécuté et GEPA restent conçus, désactivés sans budget.
 - Dépendances explicites entre éléments de plan (A avant B) — conçu.
 
 ## Lot 3 — un parcours commercial pour un seul produit, en simulation

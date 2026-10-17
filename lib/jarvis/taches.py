@@ -74,7 +74,11 @@ def enregistrer(*, projet: str, issue: str, agent: str, worktree: str, chemin: s
         data["taches"] = data["taches"][-MAX:]
         return dict(fiche)
 
-    return store.update_json(FILE, _vide(), _add)
+    fiche = store.update_json(FILE, _vide(), _add)
+    from . import evenements
+    evenements.sans_echec(fiche["id"], "lance", ts=fiche["cree"], projet=projet, issue=fiche["issue"], role=fiche["role"],
+                          agent=agent, modele=modele, plan=plan, essai=fiche["essai"], jetons_max=fiche["jetons_max"] or None)
+    return fiche
 
 
 def par_chemin(chemin: str) -> dict | None:
@@ -132,7 +136,11 @@ def noter_verdict(projet: str, issue: str, verdict: str, note: str = "") -> dict
                 return dict(t)
         return None
 
-    return store.update_json(FILE, _vide(), _set)
+    t = store.update_json(FILE, _vide(), _set)
+    if t:
+        from . import evenements
+        evenements.sans_echec(t["id"], "verdict", verdict=verdict, note=note.strip()[:120] or None)
+    return t
 
 
 def _trouver(t: dict, par_chemin: dict, par_cle: dict, par_nom: dict) -> dict | None:
@@ -159,6 +167,7 @@ def synchroniser(agents: list[dict], jetons_fn=None, now: float | None = None) -
     for a in agents:
         par_nom.setdefault(a["worktree"], []).append(a)
     finies: list[dict] = []
+    transitions: list[tuple] = []
 
     def _sync(data):
         # Une seule fiche vivante par worktree : la plus récente. Les plus anciennes encore ouvertes
@@ -189,6 +198,7 @@ def synchroniser(agents: list[dict], jetons_fn=None, now: float | None = None) -
                 continue
             t.pop("absent", None)
             st = a["status"]
+            avant = t["statut"]
             if st in ("working", "untracked", "waiting", "silent"):
                 # Un agent qui reprend après une consigne corrective (ou un redémarrage) rouvre sa
                 # fiche : sa durée et ses jetons couvrent tout son travail, pas seulement le premier tour.
@@ -203,8 +213,21 @@ def synchroniser(agents: list[dict], jetons_fn=None, now: float | None = None) -
                 t["debut"] = t["debut"] or t["cree"]
                 t["statut"], t["fin"] = "terminee", now
                 finies.append(dict(t))
+            if t["statut"] != avant:
+                transitions.append((t["id"], avant, t["statut"]))
 
     store.update_json(FILE, _vide(), _sync)
+    from . import evenements
+    for tid, avant, apres in transitions:
+        if apres == "attente":
+            evenements.sans_echec(tid, "tour_agent", ts=now, etat="attend une réponse")
+        elif apres == "terminee":
+            evenements.sans_echec(tid, "tour_agent", ts=now, etat="a fini son tour")
+        elif apres in ("en_cours", "silencieuse") and avant in ("attente", "perdue", "terminee"):
+            evenements.sans_echec(tid, "reprise", ts=now, depuis=avant)
+    for t in finies:
+        evenements.sans_echec(t["id"], "termine" if t["statut"] == "terminee" else "perdue", ts=now,
+                              jamais_demarre=True if t.get("jamais_demarre") else None)
     a_mesurer = [t for t in finies if not t.get("jamais_demarre")]
     if jetons_fn and a_mesurer:
         mesures = {}
@@ -338,6 +361,8 @@ def classer(tache_id: str, classe: str, *, source: str = "declare", par: str = "
 
     t = store.update_json(FILE, _vide(), _set)
     if t:
+        from . import evenements
+        evenements.sans_echec(t["id"], "echec", classe=classe, source=source, par=par or None, note=note[:120] or None)
         store.feed_add("erreur" if classe != "bloque" else "question",
                        f"{t['projet']} {t['issue']} ({t['id']}) : {CLASSES_ECHEC[classe]}" + (f" — {note}" if note else ""))
     return t

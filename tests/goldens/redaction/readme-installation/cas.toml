@@ -1,0 +1,10 @@
+titre = "Section d'installation du README"
+role = "redaction"
+duree_max_min = 20
+exigences_brief = ["commande", "lecteur"]
+consigne = """
+Le README n'explique pas comment installer le projet. Ajoute une section « ## Installation » : prérequis
+(Python 3.11 ou plus), puis les étapes numérotées avec les commandes dans un bloc de code :
+`python3 -m venv .venv`, `source .venv/bin/activate`, `pip install -r requirements.txt`, `python3 -m app`.
+Termine par ce que le lecteur doit voir si tout va bien : « Serveur prêt sur http://localhost:8000 ».
+"""

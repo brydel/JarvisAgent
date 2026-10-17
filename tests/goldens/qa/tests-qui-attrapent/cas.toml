@@ -1,0 +1,9 @@
+titre = "Écrire des tests qui attrapent les régressions de remise"
+role = "qa"
+duree_max_min = 20
+exigences_brief = ["limites", "comportement"]
+consigne = """
+calcul.py contient `remise(prix, pct)`. Écris tests/test_calcul.py (unittest) qui couvre le comportement :
+cas nominal, 0 %, 100 %, arrondi au centime, et refus d'un pourcentage hors de 0..100. Ne modifie pas calcul.py.
+Tes tests seront rejoués contre des versions volontairement cassées : ils doivent les détecter.
+"""

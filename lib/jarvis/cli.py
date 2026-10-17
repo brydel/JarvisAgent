@@ -1082,7 +1082,9 @@ def cmd_chef_preparer(a) -> int:
                 "Bash(jarvis budget)", "Bash(jarvis budget *)", "Bash(jarvis fournisseurs)", "Bash(jarvis fournisseurs *)",
                 "Bash(jarvis proposition *)", "Bash(jarvis memoire)", "Bash(jarvis memoire *)",
                 "Bash(jarvis cout)", "Bash(jarvis cout *)", "Bash(jarvis budget-jetons *)",
-                "Bash(jarvis secrets verifier *)",
+                "Bash(jarvis secrets verifier *)", "Bash(jarvis rejouer *)", "Bash(jarvis traces)", "Bash(jarvis traces *)",
+                "Bash(jarvis rollback proposer *)", "Bash(jarvis rollback demander *)", "Bash(jarvis eval liste*)",
+                "Bash(jarvis eval verifier*)", "Bash(jarvis eval resultats*)", "Bash(jarvis proxy)", "Bash(jarvis proxy voir)",
                 # Usine : rôles, routeur, registre, bilan, studio et livrables.
                 "Bash(jarvis role)", "Bash(jarvis role *)", "Bash(jarvis modele)", "Bash(jarvis modele liste)",
                 "Bash(jarvis modele choisir *)", "Bash(jarvis modele proposer *)",
@@ -1114,7 +1116,8 @@ def cmd_chef_preparer(a) -> int:
                 "Bash(jarvis profil appliquer *)", "Bash(jarvis admission demander *)", "Bash(jarvis admission liberer *)",
                 "Bash(jarvis lourd debut *)", "Bash(jarvis lourd exec *)", "Bash(jarvis lourd fin *)",
                 "Bash(jarvis politique appliquer *)", "Bash(jarvis politique deleguer *)", "Bash(jarvis budget definir *)",
-                "Bash(jarvis tache relancer *)",
+                "Bash(jarvis tache relancer *)", "Bash(jarvis execution *)", "Bash(jarvis rollback executer *)",
+                "Bash(jarvis eval lancer *)", "Bash(jarvis proxy config*)",
                 # Contournements de « jarvis task » et accès directs au noyau.
                 "Bash(workmux add *)", "Bash(workmux run *)", "Bash(python *)", "Bash(python3 *)",
                 "Bash(env *)", "Bash(script *)",
@@ -1456,6 +1459,146 @@ def cmd_proposition(a) -> int:
     return 0
 
 
+def cmd_eval(a) -> int:
+    from . import evaluation
+    try:
+        if a.action == "liste":
+            for c in evaluation.cas_tous(a.role or None):
+                print(f"{c['nom']:<36} {c['titre']}")
+            return 0
+        if a.action == "verifier":
+            res = evaluation.controle(a.role or None)
+            for r in res:
+                etat = "✔" if r["ok"] else "✘"
+                motifs = []
+                if not r["depart_refuse"]:
+                    motifs.append("la vérification accepte le départ")
+                if not r["reference_acceptee"]:
+                    motifs.append("la vérification refuse la référence : " + r["detail"][:200])
+                if r["exigences_manquantes"]:
+                    motifs.append("brief du rôle sans : " + ", ".join(r["exigences_manquantes"]))
+                print(f"{etat} {r['cas']}" + (f" — {' ; '.join(motifs)}" if motifs else ""))
+            ko = sum(1 for r in res if not r["ok"])
+            print(f"{len(res) - ko}/{len(res)} cas sains.")
+            return 1 if ko else 0
+        if a.action == "resultats":
+            res = evaluation.resultats(a.n)
+            if not res:
+                print("Aucune évaluation réelle lancée (jarvis eval lancer <rôle>/<cas> --agent claude --confirmer).")
+            for r in res:
+                quand = time.strftime("%d/%m %H:%M", time.localtime(r["ts"]))
+                print(f"{quand} {'✔' if r['ok'] else '✘'} {r['cas']:<34} {r['agent']}/{r['modele']:<12} brief {r['brief']} "
+                      f"· {r['duree_s']:.0f} s")
+            return 0
+        if a.action == "promptfoo":
+            print(evaluation.promptfoo_config())
+            return 0
+        # lancer : un vrai agent consomme le quota de l'abonnement
+        if os.environ.get("JARVIS_METIER") or os.environ.get("JARVIS_ROLE"):
+            return _err("une évaluation réelle se lance par ton humain, pas par un agent ni par le chef.", 4)
+        if not a.confirmer:
+            return _err("une évaluation réelle consomme ton quota : ajoute --confirmer.")
+        if not a.quoi:
+            return _err("usage : jarvis eval lancer <rôle>/<cas> [--agent claude|codex] [--modele M] --confirmer")
+        from . import admission
+        try:
+            r = evaluation.lancer(a.quoi[-1], a.agent, a.modele or "", acteur=_acteur(), garder=a.garder)
+        except admission.Refus as exc:
+            return _err(exc.raison, _CODES_REFUS.get(exc.code, 2))
+        if a.sortie_brute:
+            print("VERDICT: OK" if r["ok"] else "VERDICT: ECHEC\n" + r["detail"])
+        else:
+            print(f"{'✔ réussi' if r['ok'] else '✘ échoué'} — {r['cas']} par {r['agent']}/{r['modele']} en {r['duree_s']:.0f} s"
+                  f" (brief {r['brief']})")
+            if not r["ok"]:
+                print(r["detail"])
+            if r.get("dossier"):
+                print(f"Projet conservé : {r['dossier']}")
+        return 0 if r["ok"] else 1
+    except evaluation.EvalError as exc:
+        return _err(str(exc))
+
+
+def cmd_execution(a) -> int:
+    """`jarvis execution lancer` : appelé par bin/jarvis pour démarrer un agent sur le backend du projet."""
+    from . import admission, execution
+    # Seul un départ admis peut partir : la réservation doit exister, être active et viser ce worktree.
+    if not any(r["id"] == (a.reservation or "").upper() and (r.get("worktree") or "").lower() == a.branche.lower()
+               for r in admission.en_attente()):
+        return _err("aucune réservation d'admission active pour ce lancement : passe par « jarvis task ».", 4)
+    try:
+        backend = execution.pour_projet(a.projet)
+        r = backend.lancer(projet=a.projet, chemin=os.getcwd(), branche=a.branche, profil=a.agent, prompt=a.prompt)
+    except execution.NonDisponible as exc:
+        return _err(str(exc), 1)
+    if backend.nom != "workmux":
+        print(f"backend={r['backend']} cible={r['cible']}")
+    return 0
+
+
+def cmd_rejouer(a) -> int:
+    from . import evenements
+    try:
+        evs = evenements.chronologie(a.tache)
+    except ValueError as exc:
+        return _err(str(exc))
+    print(f"Chronologie de {a.tache.upper()} (reconstruction à partir des registres ; rien n'est réexécuté)")
+    print(evenements.texte(evs, a.depuis))
+    return 0
+
+
+def cmd_traces(a) -> int:
+    from . import observabilite
+    if a.action == "exporter":
+        print(f"Traces OpenTelemetry (JSON) écrites : {observabilite.exporter_fichier(a.jours)}")
+        return 0
+    if a.action == "envoyer":
+        ok, msg = observabilite.envoyer(a.jours)
+        print(("✔ " if ok else "✘ ") + msg)
+        return 0 if ok else 1
+    from . import couts, taches
+    for r in observabilite.dernieres_executions(a.n):
+        print(f"{r['id']} {r['projet']} {r['issue']:<10} {r['role']:<12} {r['modele']:<14} "
+              f"{taches.STATUTS.get(r['statut'], r['statut']):<12} {r['duree_min']:>6.1f} min "
+              f"{taches.fmt_jetons(r['jetons']):>7} {couts.monnaie(r['usd'])}{' *' if r['estimation'] else ''}"
+              + (f" · échec {r['echec']}" if r["echec"] else ""))
+    return 0
+
+
+def cmd_proxy(a) -> int:
+    from . import proxy
+    if a.action == "config":
+        chemin = proxy.ecrire()
+        r = proxy.reglages()
+        print(f"Configuration LiteLLM écrite : {chemin}")
+        print("Pour les fonctions IA des PRODUITS seulement (jamais pour les agents, qui sont sur abonnement).")
+        print("État : " + ("activé dans ton catalogue" if r["actif"] else "désactivé (proxy.actif = false)")
+              + f". Lancer toi-même : litellm --config {chemin} --port {r['port']} (installation et clés d'API à ta charge).")
+        return 0
+    print(json.dumps(proxy.configuration(), ensure_ascii=False, indent=2))
+    return 0
+
+
+def cmd_rollback(a) -> int:
+    from . import rollback
+    try:
+        if a.action == "proposer":
+            print(rollback.texte(rollback.proposer(a.tache)))
+        elif a.action == "demander":
+            p = rollback.demander(a.tache, par=_acteur())
+            print(rollback.texte(p))
+            print("\nEnvoyé à ton humain sur Telegram (boutons Revert / Garder). Rien n'est fait sans son clic.")
+        else:
+            refused = _human_only("exécuter un rollback")
+            if refused is not None:
+                return refused
+            r = rollback.executer(a.tache, par="humain", autorise_terminal=True)
+            print(f"↩ {len(r['commits'])} commit(s) défaits par revert dans le worktree de {r['tache']}.")
+    except rollback.RollbackError as exc:
+        return _err(str(exc))
+    return 0
+
+
 def cmd_secrets(a) -> int:
     from . import secrets
     if not a.projet:
@@ -1640,6 +1783,47 @@ def build_parser() -> argparse.ArgumentParser:
     s.add_argument("texte", nargs="+")
     s.add_argument("--envoyer", action="store_true", help="envoyer aussi le bilan sur Telegram")
     s.set_defaults(fn=cmd_note)
+
+    s = sub.add_parser("eval", help="harnais d'évaluation des rôles (cas fixes jugés par scripts)")
+    s.add_argument("action", nargs="?", default="liste", choices=("liste", "verifier", "lancer", "resultats", "promptfoo"))
+    s.add_argument("quoi", nargs="*")
+    s.add_argument("--role", default="")
+    s.add_argument("--agent", default="claude", choices=("claude", "codex"))
+    s.add_argument("--modele", default="")
+    s.add_argument("--confirmer", action="store_true", help="lancer : accepter de consommer du quota")
+    s.add_argument("--garder", action="store_true", help="lancer : conserver le projet produit par l'agent")
+    s.add_argument("--sortie-brute", action="store_true", help=argparse.SUPPRESS)
+    s.add_argument("-n", type=int, default=30)
+    s.set_defaults(fn=cmd_eval)
+
+    s = sub.add_parser("rejouer", help="chronologie d'une tâche (plan, admission, tours, verdict, fin)")
+    s.add_argument("tache")
+    s.add_argument("--depuis", type=int, default=1)
+    s.set_defaults(fn=cmd_rejouer)
+
+    s = sub.add_parser("traces", help="observabilité : dernières exécutions, export OpenTelemetry")
+    s.add_argument("action", nargs="?", default="liste", choices=("liste", "exporter", "envoyer"))
+    s.add_argument("--jours", type=float, default=7)
+    s.add_argument("-n", type=int, default=20)
+    s.set_defaults(fn=cmd_traces)
+
+    s = sub.add_parser("proxy", help="configuration LiteLLM pour les fonctions IA des produits (désactivé)")
+    s.add_argument("action", nargs="?", default="voir", choices=("voir", "config"))
+    s.set_defaults(fn=cmd_proxy)
+
+    s = sub.add_parser("rollback", help="défaire par revert les commits d'une tâche (toujours avec ton accord)")
+    s.add_argument("action", choices=("proposer", "demander", "executer"))
+    s.add_argument("tache")
+    s.set_defaults(fn=cmd_rollback)
+
+    s = sub.add_parser("execution", help=argparse.SUPPRESS)
+    s.add_argument("action", choices=("lancer",))
+    s.add_argument("--projet", required=True)
+    s.add_argument("--branche", required=True)
+    s.add_argument("--agent", required=True, choices=("cc", "cx"))
+    s.add_argument("--prompt", required=True)
+    s.add_argument("--reservation", default="")
+    s.set_defaults(fn=cmd_execution)
 
     s = sub.add_parser("secrets", help="secrets minimaux par rôle : ce que recevrait chaque agent (noms seuls)")
     s.add_argument("action", choices=("verifier",))

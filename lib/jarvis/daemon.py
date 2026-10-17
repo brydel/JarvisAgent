@@ -620,6 +620,8 @@ def jetons_check(now: float | None = None, agents: list[dict] | None = None) -> 
             continue
         signales.add(fiche["id"])
         events.append(fiche["id"])
+        from . import evenements
+        evenements.sans_echec(fiche["id"], "plafond", jetons=deja, plafond=plafond)
         ag.send(ag.target(a), PLAFOND_MSG)
         msg = (f"{fiche['projet']} {fiche['issue']} ({fiche['id']}) a atteint son plafond : {taches.fmt_jetons(deja)} / "
                f"{taches.fmt_jetons(plafond)} jetons. L'agent committe et s'arrête.")
@@ -793,6 +795,18 @@ def handle_update(bot: Bot, chat_id: str, upd: dict) -> None:
                     bot.edit(owner, msg["message_id"], f"{msg.get('text', '')}\n\n{verdict}")
             except modeles.RoutageError as exc:
                 bot.answer(cb["id"], str(exc))
+            return
+        if action in ("rbok", "rbnon"):
+            from . import rollback
+            try:
+                r = rollback.decider(plan_id, action == "rbok", par="Telegram")
+                verdict = f"↩ Revert fait ({len(r.get('commits', []))} commit(s))" if r["execute"] else "Gardé tel quel"
+            except rollback.RollbackError as exc:
+                verdict = f"⚠ {exc}"
+            bot.answer(cb["id"], verdict[:190])
+            msg = cb.get("message", {})
+            if msg.get("message_id"):
+                bot.edit(owner, msg["message_id"], f"{msg.get('text', '')}\n\n{verdict}")
             return
         if action not in ("ok", "non"):
             bot.answer(cb["id"], "Bouton inconnu")

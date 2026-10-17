@@ -1,0 +1,194 @@
+{
+  "description": "Rôles JarvisAgent — cas fixes jugés par scripts (tests/goldens)",
+  "prompts": [
+    "{{cas}}"
+  ],
+  "providers": [
+    {
+      "id": "exec: ./bin/jarvis eval lancer --sortie-brute --confirmer",
+      "label": "jarvis-eval"
+    }
+  ],
+  "tests": [
+    {
+      "description": "backend/cache-expiration",
+      "vars": {
+        "cas": "backend/cache-expiration"
+      },
+      "assert": [
+        {
+          "type": "contains",
+          "value": "VERDICT: OK"
+        }
+      ]
+    },
+    {
+      "description": "backend/pagination",
+      "vars": {
+        "cas": "backend/pagination"
+      },
+      "assert": [
+        {
+          "type": "contains",
+          "value": "VERDICT: OK"
+        }
+      ]
+    },
+    {
+      "description": "backend/validation-entrees",
+      "vars": {
+        "cas": "backend/validation-entrees"
+      },
+      "assert": [
+        {
+          "type": "contains",
+          "value": "VERDICT: OK"
+        }
+      ]
+    },
+    {
+      "description": "frontend/etat-vide-et-echappement",
+      "vars": {
+        "cas": "frontend/etat-vide-et-echappement"
+      },
+      "assert": [
+        {
+          "type": "contains",
+          "value": "VERDICT: OK"
+        }
+      ]
+    },
+    {
+      "description": "frontend/formulaire-accessible",
+      "vars": {
+        "cas": "frontend/formulaire-accessible"
+      },
+      "assert": [
+        {
+          "type": "contains",
+          "value": "VERDICT: OK"
+        }
+      ]
+    },
+    {
+      "description": "frontend/jetons-de-design",
+      "vars": {
+        "cas": "frontend/jetons-de-design"
+      },
+      "assert": [
+        {
+          "type": "contains",
+          "value": "VERDICT: OK"
+        }
+      ]
+    },
+    {
+      "description": "qa/reproduire-un-bug",
+      "vars": {
+        "cas": "qa/reproduire-un-bug"
+      },
+      "assert": [
+        {
+          "type": "contains",
+          "value": "VERDICT: OK"
+        }
+      ]
+    },
+    {
+      "description": "qa/test-instable",
+      "vars": {
+        "cas": "qa/test-instable"
+      },
+      "assert": [
+        {
+          "type": "contains",
+          "value": "VERDICT: OK"
+        }
+      ]
+    },
+    {
+      "description": "qa/tests-qui-attrapent",
+      "vars": {
+        "cas": "qa/tests-qui-attrapent"
+      },
+      "assert": [
+        {
+          "type": "contains",
+          "value": "VERDICT: OK"
+        }
+      ]
+    },
+    {
+      "description": "redaction/changelog",
+      "vars": {
+        "cas": "redaction/changelog"
+      },
+      "assert": [
+        {
+          "type": "contains",
+          "value": "VERDICT: OK"
+        }
+      ]
+    },
+    {
+      "description": "redaction/note-version-client",
+      "vars": {
+        "cas": "redaction/note-version-client"
+      },
+      "assert": [
+        {
+          "type": "contains",
+          "value": "VERDICT: OK"
+        }
+      ]
+    },
+    {
+      "description": "redaction/readme-installation",
+      "vars": {
+        "cas": "redaction/readme-installation"
+      },
+      "assert": [
+        {
+          "type": "contains",
+          "value": "VERDICT: OK"
+        }
+      ]
+    },
+    {
+      "description": "securite/injection-sql",
+      "vars": {
+        "cas": "securite/injection-sql"
+      },
+      "assert": [
+        {
+          "type": "contains",
+          "value": "VERDICT: OK"
+        }
+      ]
+    },
+    {
+      "description": "securite/secret-en-dur",
+      "vars": {
+        "cas": "securite/secret-en-dur"
+      },
+      "assert": [
+        {
+          "type": "contains",
+          "value": "VERDICT: OK"
+        }
+      ]
+    },
+    {
+      "description": "securite/traversee-chemin",
+      "vars": {
+        "cas": "securite/traversee-chemin"
+      },
+      "assert": [
+        {
+          "type": "contains",
+          "value": "VERDICT: OK"
+        }
+      ]
+    }
+  ]
+}

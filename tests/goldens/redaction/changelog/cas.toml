@@ -1,0 +1,10 @@
+titre = "Entrée de journal des modifications"
+role = "redaction"
+duree_max_min = 20
+exigences_brief = ["notes de version", "utilisateur"]
+consigne = """
+Ajoute en tête de CHANGELOG.md l'entrée de la version 1.3.0 datée du 2026-10-17, au même format que les
+précédentes, en français, avec les sections « Ajouté » et « Corrigé ». Changements : ajout des alertes de prix
+par courriel ; ajout de l'export CSV du portefeuille ; correction de l'affichage des montants négatifs ;
+correction de la déconnexion qui ne fonctionnait pas sur mobile. Écris pour l'utilisateur, pas pour le développeur.
+"""

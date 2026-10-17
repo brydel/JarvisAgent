@@ -52,6 +52,10 @@ ${C_CYAN}Agents${C_OFF}
   jarvis cout [tache <T>|projet <P>]    Équivalent API des tâches (pas une dépense : tu es à l'abonnement)
   jarvis budget-jetons voir <T-…>       Jetons consommés par une unité de travail face à son plafond
   jarvis memoire noter|chercher|liste   Mémoire du chef : décisions, échecs, leçons, recherche pondérée
+  jarvis rejouer <T-…>                  Chronologie d'une tâche (plan, admission, tours, verdict, fin)
+  jarvis rollback proposer|demander <T> Défaire par revert les commits d'une tâche (bouton Revert sur Telegram)
+  jarvis traces [exporter|envoyer]      Dernières exécutions (jetons, durée, coût) · export OpenTelemetry
+  jarvis eval liste|verifier|lancer     Harnais d'évaluation des rôles (cas fixes jugés par scripts)
   jarvis verdict <projet> <ISSUE> pret|corrections [note]
                                         Verdict d'une contre-relecture
   jarvis board · jarvis status          Tableau de bord workmux · tâches du projet courant
@@ -424,8 +428,10 @@ cmd_task() {
   [[ -n "${F[effort]:-}" ]] && affiche+=" · ${F[effort]}"
   printf '%s▶%s %s → %s [%s] (branche %s)\n' "$C_CYAN" "$C_OFF" "$issue" "$affiche" "${F[role]:-generaliste}" "$branch"
   [[ "${F[par_secours]:-0}" == "1" ]] && warn "lancé avec le secours : le fournisseur prévu est épuisé."
-  if ! workmux add "$branch" -a "$agent" -b -P "$prompt_file"; then
-    abandon "workmux add a échoué."
+  # Backend d'exécution du projet (workmux par défaut, sur ce PC ; voir lib/jarvis/execution.py).
+  if ! py execution lancer --projet "$projet" --branche "$branch" --agent "$agent" --prompt "$prompt_file" \
+       --reservation "$reservation"; then
+    abandon "le lancement de l'agent a échoué."
   fi
   # Le fichier de prompt reste dans /tmp : workmux peut le relire au démarrage de l'agent.
   py evenement task "$projet $issue lancé → $affiche [${F[role]:-generaliste}]${plan:+ ($plan)}"
@@ -594,7 +600,7 @@ main() {
     cockpit|etat|plan|fil|projet|telegram|regler|capacite|demander|note|journal|daemon|voir|jetons|veille|\
     fermer|reprendre|sante|reparer-git|role|modele|tache|verdict|bilan|usine|studio|livrer|livrables|web|\
     admission|pause|profil|lourd|audit|diagnostic|politique|budget|fournisseurs|proposition|\
-    budget-jetons|cout|memoire|secrets)
+    budget-jetons|cout|memoire|secrets|eval|rejouer|traces|proxy|rollback|execution)
                   py "$cmd" "$@" ;;
     chef-lancer)  cmd_chef_lancer "$@" ;;
     relancer)     cmd_relancer "$@" ;;

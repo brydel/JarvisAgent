@@ -150,6 +150,7 @@
       <section class="bloc"><h2>À valider <span id="nb-plans"></span></h2><div class="contenu" id="plans"></div></section>
       <section class="bloc"><h2>Livrables <span id="nb-livrables"></span></h2><div class="contenu" id="livrables"></div></section>
       <section class="bloc"><h2>Sept derniers jours</h2><div class="contenu" id="bilan"></div></section>
+      <section class="bloc"><h2>Dernières exécutions <span>équivalent API</span></h2><div class="contenu" id="executions"></div></section>
       <section class="bloc"><h2>Fil d'activité</h2><div class="contenu"><div class="fil" id="fil"></div></div></section>
     </aside>
   </div>
@@ -289,6 +290,18 @@
     $('bilan').innerHTML = `<table><tr><th>Fournisseur</th><th>Terminées</th><th>Durée moyenne</th><th>Jetons</th></tr>${lignes}</table>${sans}`;
   }
 
+  function executions(e) {
+    const r = e.executions || [];
+    if (!r.length) { $('executions').innerHTML = '<div class="vide">Aucune exécution enregistrée.</div>'; return; }
+    const usd = (x) => (x === null || x === undefined ? '—' : `${x.toFixed(2)} $`);
+    const lignes = r.map((x) => `<tr><td title="${t(x.id)}">${t(x.issue)}</td><td>${t(x.role)}</td><td>${t(x.modele)}</td>`
+      + `<td>${t(ETATS_TACHE[x.statut] || x.statut)}${x.echec ? ` · ${t(x.echec)}` : ''}</td><td>${Math.round(x.duree_min)} min</td>`
+      + `<td>${jetons(x.jetons)}</td><td>${usd(x.usd)}${x.estimation ? '*' : ''}</td></tr>`).join('');
+    $('executions').innerHTML = `<table><tr><th>Issue</th><th>Rôle</th><th>Modèle</th><th>État</th><th>Durée</th><th>Jetons</th><th>Équiv. API</th></tr>${lignes}</table>`
+      + '<div class="consigne">Équivalent API : ce que ces tâches auraient coûté hors abonnement, pas une dépense. * estimation.</div>';
+  }
+  const ETATS_TACHE = { lancee: 'lancée', en_cours: 'en cours', attente: 'attend', silencieuse: 'silencieuse', terminee: 'terminée', perdue: 'interrompue' };
+
   function fil(e) {
     $('fil').innerHTML = e.fil.slice().reverse().map((x) => `<div><time>${heure(x.ts)}</time><span class="${t(x.type)}">${t(x.texte)}</span></div>`).join('');
   }
@@ -298,7 +311,7 @@
       const rep = await fetch('/api/etat', { cache: 'no-store' });
       const e = await rep.json();
       if (e.erreur) throw new Error(e.erreur);
-      cartouche(e); reservoirs(e); plan(e); plans(e); livrables(e); bilan(e); fil(e);
+      cartouche(e); reservoirs(e); plan(e); plans(e); livrables(e); bilan(e); executions(e); fil(e);
     } catch (err) {
       const b = $('bandeau');
       b.className = 'bandeau visible grave';

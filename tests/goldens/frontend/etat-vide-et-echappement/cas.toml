@@ -1,0 +1,10 @@
+titre = "État vide utile et échappement HTML"
+role = "frontend"
+duree_max_min = 20
+exigences_brief = ["vide", "erreur"]
+consigne = """
+`rendreListe(elements)` (liste.js, exporté avec module.exports) renvoie le HTML d'une liste d'alertes.
+Avec une liste vide, il renvoie « <ul></ul> » : affiche à la place un état vide utile (un texte qui dit quoi
+faire et un bouton « Créer une alerte » avec la classe « action »). Et le nom d'une alerte est inséré tel
+quel : échappe-le (un nom contenant <script> ne doit jamais produire de balise).
+"""

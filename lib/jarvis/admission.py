@@ -260,10 +260,14 @@ def confirmer(res_id: str, tache_id: str, worktree: str = "") -> bool:
                 r["etat"], r["tache"] = "confirmee", tache_id
                 if worktree:
                     r["worktree"] = worktree
-                return True
-        return False
+                return dict(r)
+        return None
 
-    return store.update_json(RESERVATIONS, _vide_res(), _set)
+    r = store.update_json(RESERVATIONS, _vide_res(), _set)
+    if r:
+        from . import evenements
+        evenements.sans_echec(tache_id, "admis", ts=r["ts"], reservation=r["id"], origine=r["origine"], classe=r["classe"])
+    return bool(r)
 
 
 def liberer(res_id: str, raison: str = "", acteur: str = "") -> bool:

@@ -50,4 +50,5 @@ politique de délégation, de budget monétaire, ni de journal d'audit ; quota p
 - `tests.md` — ce que couvrent les tests, unitaires / intégration simulée / vérifications réelles.
 - `feuille-de-route.md` — lots 3 et 4, prochaines actions.
 - `vague-1.md` — plafonds de jetons, coûts (équivalent API), mémoire du chef, bilan quotidien, échecs bornés, secrets par rôle.
+- `vague-2.md` — harnais d'évaluation (goldens), backend d'exécution, replay, proxy LiteLLM des produits, traces OpenTelemetry, rollback assisté.
 - `handoff.md` — reprise de session en une page.
