@@ -15,6 +15,7 @@ La vérification vit hors du dossier donné à l'agent : il ne peut ni la lire n
 from __future__ import annotations
 
 import hashlib
+import secrets
 import json
 import os
 import re
@@ -71,14 +72,20 @@ def preparer(c: dict, dossier: Path, avec_reference: bool = False) -> Path:
 
 
 def verifier(c: dict, dossier: Path, timeout: int = 180) -> tuple[bool, str]:
-    """Lance la vérification cachée du cas dans `dossier`. (réussi, sortie)."""
+    """Lance la vérification cachée du cas dans `dossier`. (réussi, sortie).
+
+    Réussi = code 0 ET la ligne « VERDICT: OK <jeton> » avec le jeton aléatoire passé sur l'entrée standard :
+    un code évalué qui imprime « VERDICT: OK » et quitte au chargement ne suffit pas."""
+    jeton = secrets.token_hex(12)
     try:
         r = subprocess.run([sys.executable, "-I", str(c["dossier"] / "verifier.py")], cwd=dossier, capture_output=True,
-                           text=True, timeout=timeout, env={k: v for k, v in os.environ.items() if not k.startswith("JARVIS_")})
+                           input=jeton + "\n", text=True, timeout=timeout,
+                           env={k: v for k, v in os.environ.items() if not k.startswith("JARVIS_")})
     except subprocess.TimeoutExpired:
         return False, f"vérification interrompue après {timeout} s"
     sortie = (r.stdout + r.stderr).strip()
-    return r.returncode == 0, sortie[-2000:]
+    ok = r.returncode == 0 and f"VERDICT: OK {jeton}" in r.stdout.splitlines()
+    return ok, sortie.replace(jeton, "<jeton>")[-2000:]
 
 
 def exigences_manquantes(c: dict) -> list[str]:
@@ -119,8 +126,11 @@ def consigne_complete(c: dict) -> str:
 
 def commande_agent(agent: str, modele_id: str, consigne: str) -> list[str]:
     if agent == "claude":
+        # Les cas (références et vérifications) ne doivent pas être lus par l'agent évalué.
+        cache = str(RACINE)
+        refus = [f"{outil}({cache}/**)" for outil in ("Read", "Grep", "Glob", "Edit", "Write")]
         cmd = ["claude", "-p", consigne, "--permission-mode", "acceptEdits",
-               "--settings", json.dumps({"disableAllHooks": True})]
+               "--settings", json.dumps({"disableAllHooks": True, "permissions": {"deny": refus}})]
         return cmd + (["--model", modele_id] if modele_id else [])
     if agent == "codex":
         cmd = ["codex", "exec", "--sandbox", "workspace-write", "--skip-git-repo-check"]
@@ -138,15 +148,22 @@ def lancer(nom: str, agent: str, modele: str = "", acteur: str = "humain", garde
         raise EvalError(f"modèle inconnu « {modele} » (jarvis modele liste)")
     adm = admission.demander(origine="cli", projet="jarvis-eval", issue=f"EVAL-{zlib.crc32(nom.encode()) % 10000}",
                              agent=agent, role=c["role"], worktree=f"eval-{nom.replace('/', '-')}", acteur=acteur)
-    d = Path(tempfile.mkdtemp(prefix="jarvis-eval-"))
+    duree_max = 60 * int(c.get("duree_max_min", 20))
+    d = None
     debut = time.time()
     try:
-        preparer(c, d / "projet")
+        # L'agent évalué n'apparaît jamais dans workmux : sans prolongation, le démon expirerait la réservation
+        # (et rendrait la place) au bout de admission.reservation_min, en plein essai.
+        admission.prolonger(adm["reservation"], duree_max + 600)
+        d = Path(tempfile.mkdtemp(prefix="jarvis-eval-"))
+        try:
+            preparer(c, d / "projet")
+        except (OSError, subprocess.CalledProcessError) as exc:
+            raise EvalError(f"préparation du cas impossible : {exc}") from exc
         cmd = commande or commande_agent(agent, (m or {}).get("id", ""), consigne_complete(c))
         try:
-            r = subprocess.run(cmd, cwd=d / "projet", capture_output=True, text=True,
-                               timeout=60 * int(c.get("duree_max_min", 20)))
-            sortie_agent = (r.stdout + r.stderr)[-1500:]
+            r = subprocess.run(cmd, cwd=d / "projet", capture_output=True, text=True, timeout=duree_max)
+            sortie_agent = r.stdout + r.stderr
         except subprocess.TimeoutExpired:
             sortie_agent = "agent interrompu : durée maximale dépassée"
         except FileNotFoundError as exc:
@@ -154,11 +171,14 @@ def lancer(nom: str, agent: str, modele: str = "", acteur: str = "humain", garde
         ok, detail = verifier(c, d / "projet")
     finally:
         admission.liberer(adm["reservation"], "évaluation terminée", acteur=acteur)
-        if not garder:
+        if d is not None and not garder:
             shutil.rmtree(d, ignore_errors=True)
+    # Indice de triche : l'agent a cherché les cas eux-mêmes (références, vérifications) au lieu de travailler.
+    suspect = bool(re.search(r"tests/goldens|verifier\.py|/reference/", sortie_agent))
+    sortie_agent = sortie_agent[-1500:]
     res = {"ts": time.time(), "cas": nom, "role": c["role"], "agent": agent, "modele": modele or f"{agent}-defaut",
            "brief": empreinte_brief(c["role"]), "ok": ok, "duree_s": round(time.time() - debut, 1),
-           "detail": detail[-500:], "sortie_agent": sortie_agent[-300:]}
+           "detail": detail[-500:], "sortie_agent": sortie_agent[-300:], "suspect": suspect}
     with store.locked(RESULTATS):
         with store.state_path(RESULTATS).open("a", encoding="utf-8") as fh:
             fh.write(json.dumps(res, ensure_ascii=False) + "\n")

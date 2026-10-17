@@ -19,6 +19,7 @@ from . import store
 
 FILE = "rollbacks.json"
 VALIDITE = 24 * 3600
+MAX_COMMITS = 30
 
 
 class RollbackError(ValueError):
@@ -32,8 +33,14 @@ def _git(chemin: str, *args: str, ok_codes=(0,)) -> str:
     return r.stdout.strip()
 
 
-def _base(chemin: str) -> str:
-    for ref in ("origin/main", "main", "origin/master", "master", "origin/HEAD"):
+def _base(chemin: str, enregistree: str = "") -> str:
+    """Base de la branche : le commit noté au lancement (point de départ réel), sinon la branche principale LOCALE
+    d'abord (workmux part du dépôt local : des commits de main non poussés ne sont pas ceux de la tâche)."""
+    if enregistree:
+        r = subprocess.run(["git", "-C", chemin, "merge-base", "HEAD", enregistree], capture_output=True, text=True, timeout=30)
+        if r.returncode == 0 and r.stdout.strip():
+            return r.stdout.strip()
+    for ref in ("main", "master", "origin/main", "origin/master", "origin/HEAD"):
         r = subprocess.run(["git", "-C", chemin, "merge-base", "HEAD", ref], capture_output=True, text=True, timeout=30)
         if r.returncode == 0 and r.stdout.strip():
             return r.stdout.strip()
@@ -49,7 +56,7 @@ def proposer(tache_id: str) -> dict:
     chemin = t.get("chemin") or ""
     if not chemin or not Path(chemin).is_dir():
         raise RollbackError(f"worktree de {t['id']} introuvable ({chemin or 'inconnu'})")
-    base = _base(chemin)
+    base = _base(chemin, t.get("base") or "")
     tete = _git(chemin, "rev-parse", "HEAD")
     lignes = _git(chemin, "log", "--format=%H %s", "--no-merges", f"{base}..HEAD").splitlines()
     commits = [(ln[:40], ln[41:]) for ln in lignes if ln]
@@ -74,14 +81,26 @@ def texte(p: dict) -> str:
 def demander(tache_id: str, par: str = "chef") -> dict:
     """Enregistre la proposition (en attente) et l'envoie sur Telegram avec les boutons Revert / Garder."""
     p = proposer(tache_id)
+    from . import notify
+    from .telegram import MAX_LEN
+    if len(p["commits"]) > MAX_COMMITS:
+        raise RollbackError(f"{len(p['commits'])} commits : trop pour une validation par bouton (max {MAX_COMMITS}). "
+                            "Relis « jarvis rollback proposer » et fais le revert toi-même au terminal.")
+    message = "↩ " + texte(p)
+    if len(message) > MAX_LEN:
+        # Tous les commits doivent être visibles avant le clic : on retire le diffstat, jamais la liste.
+        message = "↩ " + texte({**p, "diffstat": "(diffstat omis : trop long, voir jarvis rollback proposer)"})
+    if len(message) > MAX_LEN:
+        raise RollbackError("proposition trop longue pour Telegram : fais le revert toi-même au terminal")
 
     def _set(data):
-        data[p["tache"]] = {"ts": time.time(), "statut": "en_attente", "tete": p["tete"], "par": par,
-                            "commits": [sha for sha, _ in p["commits"]]}
+        data[p["tache"]] = {"ts": time.time(), "statut": "en_attente", "tete": p["tete"], "base": p["base"],
+                            "par": par, "commits": [sha for sha, _ in p["commits"]], "envoye": False}
 
     store.update_json(FILE, {}, _set)
-    from . import notify
-    notify.telegram("↩ " + texte(p), notify.rollback_buttons(p["tache"]))
+    envoye = bool(notify.telegram(message, notify.rollback_buttons(p["tache"])))
+    store.update_json(FILE, {}, lambda data: data[p["tache"]].update(envoye=envoye))
+    p["envoye"] = envoye
     try:
         from . import journal
         journal.ecrire("politique", acteur=par, objet=f"rollback:{p['tache']}", decision="demande",
@@ -126,6 +145,9 @@ def executer(tache_id: str, par: str, autorise_terminal: bool = False) -> dict:
     p = proposer(tache_id)
     if d.get("tete") and d["tete"] != p["tete"]:
         raise RollbackError("la branche a bougé depuis la proposition : refais « jarvis rollback demander »")
+    if d.get("commits") and [sha for sha, _ in p["commits"]] != d["commits"]:
+        raise RollbackError("la liste des commits a changé depuis la proposition (base déplacée) : rien n'est fait, "
+                            "refais « jarvis rollback demander »")
     if p["sale"]:
         raise RollbackError("le worktree contient des modifications non commitées : revert refusé")
     t = taches.get(tache_id)
@@ -135,11 +157,18 @@ def executer(tache_id: str, par: str, autorise_terminal: bool = False) -> dict:
     if any(a["status"] in ag.BUSY and (a.get("workdir") == p["chemin"] or a["worktree"] == t["worktree"]) for a in agents):
         raise RollbackError("un agent travaille encore dans ce worktree : arrête-le d'abord")
     shas = [sha for sha, _ in p["commits"]]
-    r = subprocess.run(["git", "-C", p["chemin"], "-c", "user.name=Jarvis", "-c", "user.email=jarvis@localhost",
-                        "revert", "--no-edit", *shas], capture_output=True, text=True, timeout=120)
-    if r.returncode != 0:
+    try:
+        r = subprocess.run(["git", "-C", p["chemin"], "-c", "user.name=Jarvis", "-c", "user.email=jarvis@localhost",
+                            "revert", "--no-edit", *shas], capture_output=True, text=True, timeout=300)
+        echec = (r.stderr or r.stdout).strip()[:300] if r.returncode != 0 else ""
+    except subprocess.TimeoutExpired:
+        echec = "git revert trop long (5 min)"
+    if echec:
+        # Revenir exactement à la tête proposée : ni revert partiel, ni état « revert en cours ».
         subprocess.run(["git", "-C", p["chemin"], "revert", "--abort"], capture_output=True, text=True, timeout=60)
-        raise RollbackError("revert en conflit, annulé sans rien changer : " + (r.stderr or r.stdout).strip()[:300])
+        subprocess.run(["git", "-C", p["chemin"], "reset", "--hard", "-q", p["tete"]], capture_output=True, text=True,
+                       timeout=60)
+        raise RollbackError("revert interrompu, worktree remis à son état d'avant : " + echec)
 
     def _set(data):
         data.setdefault(tache_id, {}).update(statut="execute", execute=time.time(), execute_par=par)

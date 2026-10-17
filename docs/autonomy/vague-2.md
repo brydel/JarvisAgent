@@ -26,7 +26,13 @@ configuration existe, rien ne s'exécute.
 - `jarvis eval lancer <role/cas> --agent claude|codex [--modele M] --confirmer` : lance un vrai agent en mode
   non interactif sur une copie du départ, puis la vérification. Passe par l'admission (pauses, quota, capacité,
   une réservation projet `jarvis-eval`), consomme du quota, d'où `--confirmer`. Interdit au chef et aux agents.
-  Résultats dans `jarvis eval resultats` et le journal d'audit.
+  Résultats dans `jarvis eval resultats` et le journal d'audit. La réservation est prolongée de la durée du cas
+  (l'essai n'apparaît pas dans workmux) et toujours rendue à la fin.
+- Anti-triche : la vérification reçoit un jeton aléatoire avant de charger le code évalué et doit le réimprimer
+  (un code qui affiche « VERDICT: OK » et quitte échoue) ; Claude reçoit l'interdiction de lire `tests/goldens/` ;
+  une sortie d'agent qui cite les cas est marquée **suspecte**. **Limite honnête** : Codex (`workspace-write`) peut
+  lire tout le disque, donc les références ; et un code qui lirait la vérification pourrait retrouver le jeton.
+  L'évaluation mesure un agent coopératif, elle ne prouve rien contre un agent qui cherche à tricher.
 - `jarvis eval promptfoo` régénère `outils/promptfoo/promptfooconfig.yaml` (fournisseur `exec:` = `jarvis eval
   lancer`) : **conçu, non exécuté**. GEPA (optimisation de prompts) : non intégré ; les goldens protégés seront
   son garde-fou au lot 4 (le candidat ne modifie ni les cas ni leurs vérifications).
@@ -37,8 +43,12 @@ configuration existe, rien ne s'exécute.
 - `WorkmuxBackend` reprend exactement la commande d'avant (`workmux add <branche> -a <profil> -b -P <prompt>`) :
   `jarvis task` lance désormais par `jarvis execution lancer`, qui exige une réservation d'admission active pour
   cette branche (sinon code 4) — aucun lancement ne contourne l'admission. Toute la suite existante reste verte.
+- `jarvis execution lancer` n'accepte qu'une réservation **confirmée** (fiche de tâche créée), active, du même
+  projet et du même worktree, **une seule fois** ; refusé à un agent (`JARVIS_METIER`).
 - `E2BBackend` : désactivé. Activable par projet (`execution = "e2b"` dans `projects.toml`) seulement avec le SDK
-  `e2b` installé, la clé et un budget `infrastructure`. **Les vrais appels au SDK E2B n'ont jamais été faits** :
+  `e2b` installé, la clé et un budget `infrastructure`. Chaque lancement engage une dépense estimée
+  (`e2b_cout_estime`, 1 $ par défaut) : l'enveloppe baisse et finit par refuser. Un échec après création arrête le
+  bac à sable ; l'arrêt (`fermer`) n'exige jamais de budget. **Les vrais appels au SDK E2B n'ont jamais été faits** :
   noms de méthodes repris de la documentation publique, à vérifier avant tout usage.
 
 ## P2.3 — Événements et replay — implémenté/testé
@@ -74,14 +84,19 @@ configuration existe, rien ne s'exécute.
   exacte. Rien ne bouge.
 - `jarvis rollback demander <T>` (niveau 2) : la proposition part sur Telegram avec « ↩ Revert » / « Garder ».
   Seul ton clic (valable 24 h) ou `jarvis rollback executer <T>` dans ton terminal fait le `git revert`.
-- Refusé si un agent travaille dans le worktree, si des modifications ne sont pas commitées, ou si la branche a
-  bougé depuis la proposition. Un revert en conflit est annulé (`revert --abort`). Le revert crée des commits :
+- Base exacte : le commit du dépôt principal noté au lancement de la tâche (sinon `main` local avant
+  `origin/main`) : des commits de main non poussés ne sont jamais défaits. Au-delà de 30 commits, pas de bouton
+  (revert à faire au terminal) ; le message Telegram montre toujours la liste complète.
+- Refusé si un agent travaille dans le worktree, si des modifications ne sont pas commitées, si la branche a bougé
+  ou si la liste des commits diffère de celle approuvée. Un revert en conflit ou trop long est annulé et le
+  worktree remis à la tête proposée. Si Telegram est injoignable, `demander` le dit (code 1) au lieu d'« Envoyé ». Le revert crée des commits :
   rien n'est effacé, rien n'est poussé.
 
 ## Tests
 
-`tests/test_vague2.py` : 8 tests (goldens et protection des briefs, évaluation via admission, backends, replay,
-proxy, traces et collecteur local, rollback approuvé, rollback refusé). Suite complète : voir `tests.md`.
+`tests/test_vague2.py` : 9 tests (goldens et protection des briefs, évaluation via admission et anti-triche,
+backends et usage unique des réservations, replay, proxy, traces et collecteur local, rollback approuvé, base et
+liste approuvée, rollback refusé). Une relecture indépendante a trouvé 10 problèmes, tous corrigés. Suite complète : voir `tests.md`.
 
 ## Ce qui reste
 

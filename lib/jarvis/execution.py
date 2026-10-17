@@ -63,22 +63,37 @@ class E2BBackend:
     """Bac à sable distant E2B (facultatif). `sdk` : module e2b_code_interpreter, ou un double pour les tests."""
 
     nom = "e2b"
+    # Dépense estimée engagée à chaque lancement (dollars) : un bac à sable pour une tâche de quelques heures.
+    # Réglable par projet (`e2b_cout_estime` dans projects.toml). Comparée au réel quand la facture arrive.
+    COUT_ESTIME = 1.0
 
     def __init__(self, sdk=None):
         self._sdk = sdk
 
+    def _charger_sdk(self):
+        if self._sdk is not None:
+            return self._sdk
+        try:
+            import e2b_code_interpreter as sdk  # noqa: PLC0415 — dépendance facultative, jamais requise
+        except ImportError:
+            return None
+        return sdk
+
+    def _cout(self, projet: str) -> float:
+        try:
+            return float((config.projects().get(projet) or {}).get("e2b_cout_estime") or self.COUT_ESTIME)
+        except (TypeError, ValueError):
+            return self.COUT_ESTIME
+
     def _verifier(self, projet: str):
         raisons = []
-        sdk = self._sdk
+        sdk = self._charger_sdk()
         if sdk is None:
-            try:
-                import e2b_code_interpreter as sdk  # noqa: PLC0415 — dépendance facultative, jamais requise
-            except ImportError:
-                raisons.append("SDK absent (pip install e2b-code-interpreter)")
+            raisons.append("SDK absent (pip install e2b-code-interpreter)")
         if not os.environ.get("E2B_API_KEY"):
             raisons.append("clé E2B_API_KEY absente (à fournir par les secrets du rôle)")
         from . import budgets
-        ok, pourquoi = budgets.verifier("infrastructure", 0.01, projet=projet)
+        ok, pourquoi = budgets.verifier("infrastructure", self._cout(projet), projet=projet)
         if not ok:
             raisons.append(f"aucun budget « infrastructure » pour {projet} ({pourquoi})")
         if raisons:
@@ -87,14 +102,25 @@ class E2BBackend:
 
     def lancer(self, *, projet: str, chemin: str, branche: str, profil: str, prompt: str) -> dict:
         sdk = self._verifier(projet)
+        with open(prompt, encoding="utf-8") as fh:
+            consigne = fh.read()
+        from . import budgets, store
+        # La dépense est comptée AVANT la création : l'enveloppe baisse, et finit par refuser.
+        budgets.engager("infrastructure", self._cout(projet), projet=projet, libelle=f"bac à sable E2B {branche}",
+                        par="jarvis", estime=True)
         sandbox = sdk.Sandbox.create(metadata={"jarvis_projet": projet, "jarvis_branche": branche})
         ident = getattr(sandbox, "sandbox_id", "") or getattr(sandbox, "id", "")
-        with open(prompt, encoding="utf-8") as fh:
-            sandbox.files.write("/home/user/jarvis-prompt.md", fh.read())
-        commande = "claude -p \"$(cat /home/user/jarvis-prompt.md)\"" if profil == "cc" else \
-            "codex exec \"$(cat /home/user/jarvis-prompt.md)\""
-        sandbox.commands.run(commande, background=True)
-        from . import store
+        try:
+            sandbox.files.write("/home/user/jarvis-prompt.md", consigne)
+            commande = "claude -p \"$(cat /home/user/jarvis-prompt.md)\"" if profil == "cc" else \
+                "codex exec \"$(cat /home/user/jarvis-prompt.md)\""
+            sandbox.commands.run(commande, background=True)
+        except Exception as exc:  # noqa: BLE001 — un bac à sable créé ne doit jamais continuer de coûter seul
+            try:
+                sdk.Sandbox.kill(ident)
+            except Exception:  # noqa: BLE001
+                store.feed_add("erreur", f"E2B : bac à sable {ident} peut-être encore actif, à arrêter à la main")
+            raise NonDisponible(f"lancement E2B échoué, bac à sable arrêté : {exc}") from exc
         store.feed_add("task", f"{projet} {branche} lancé dans E2B ({ident})")
         return {"backend": self.nom, "cible": ident}
 
@@ -105,7 +131,10 @@ class E2BBackend:
         return "(aperçu indisponible pour un agent E2B dans cette version)"
 
     def fermer(self, agent: dict):
-        sdk = self._verifier(agent.get("project", ""))
+        # Arrêter n'exige ni budget ni clé de plus : on doit toujours pouvoir stopper ce qui coûte.
+        sdk = self._charger_sdk()
+        if sdk is None:
+            return False, "SDK E2B absent : arrête le bac à sable depuis la console E2B"
         sdk.Sandbox.kill(agent.get("worktree", ""))
         return True, "bac à sable arrêté"
 

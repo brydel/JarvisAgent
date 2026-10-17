@@ -270,6 +270,36 @@ def confirmer(res_id: str, tache_id: str, worktree: str = "") -> bool:
     return bool(r)
 
 
+def prolonger(res_id: str, secondes: float) -> bool:
+    """Repousse l'expiration d'une réservation active (essai d'évaluation, qui n'apparaît pas dans workmux)."""
+
+    def _set(data):
+        for r in data["reservations"]:
+            if r["id"] == res_id.upper() and r["etat"] in ("reservee", "confirmee"):
+                r["expire"] = max(r["expire"], time.time() + secondes)
+                return True
+        return False
+
+    return bool(store.update_json(RESERVATIONS, _vide_res(), _set))
+
+
+def marquer_lance(res_id: str, projet: str, worktree: str) -> dict | None:
+    """Usage unique d'une réservation par le backend d'exécution. La réservation doit être confirmée (fiche de
+    tâche créée), active, viser ce projet et ce worktree, et n'avoir jamais servi. Atomique."""
+    now = time.time()
+
+    def _set(data):
+        for r in data["reservations"]:
+            if (r["id"] == (res_id or "").upper() and r["etat"] == "confirmee" and r.get("tache")
+                    and now < r["expire"] and r["projet"] == projet
+                    and (r.get("worktree") or "").lower() == worktree.lower() and not r.get("lance")):
+                r["lance"] = now
+                return dict(r)
+        return None
+
+    return store.update_json(RESERVATIONS, _vide_res(), _set)
+
+
 def liberer(res_id: str, raison: str = "", acteur: str = "") -> bool:
     """Le lancement a échoué avant de démarrer : la place est rendue tout de suite."""
 

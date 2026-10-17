@@ -64,11 +64,13 @@ def spans_tache(fiche: dict, now: float | None = None) -> list[dict]:
     evs = evenements.lire(fiche["id"])
     debut_tour = fiche.get("debut") or fiche["cree"]
     n_tour = 0
+    admis_vu = False
     for e in evs:
-        if e["type"] == "admis":
+        if e["type"] == "admis" and not admis_vu:   # une reprise reconfirme : seule la première admission compte
+            admis_vu = True
             spans.append({"traceId": trace, "spanId": _id(f"{fiche['id']}:admis", 16), "parentSpanId": racine,
                           "name": "admission", "kind": "SPAN_KIND_INTERNAL", "startTimeUnixNano": _ns(e["ts"]),
-                          "endTimeUnixNano": _ns(fiche["cree"]), "attributes": [_attr("jarvis.reservation", e.get("reservation", ""))]})
+                          "endTimeUnixNano": _ns(max(e["ts"], fiche["cree"])), "attributes": [_attr("jarvis.reservation", e.get("reservation", ""))]})
         elif e["type"] == "tour_agent":
             n_tour += 1
             spans.append({"traceId": trace, "spanId": _id(f"{fiche['id']}:tour{n_tour}", 16), "parentSpanId": racine,

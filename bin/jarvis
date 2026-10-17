@@ -421,6 +421,10 @@ cmd_task() {
                   --classe "${F[classe]:-}" --reservation "$reservation"
                   --jetons-max "${F[jetons_max]:-}" --consignes-empreinte "$empreinte")
   [[ "${F[par_secours]:-0}" == "1" ]] && targs+=(--secours)
+  # Point de départ de la branche (workmux la crée depuis le dépôt principal) : base exacte d'un rollback.
+  local base_sha
+  base_sha="$(git -C "$root" rev-parse HEAD 2>/dev/null || true)"
+  [[ -n "$base_sha" ]] && targs+=(--base "$base_sha")
   tache_id="$(py tache-enregistrer "${targs[@]}")" || abandon "impossible d'enregistrer la tâche."
 
   local affiche="$who"

@@ -8,8 +8,9 @@ elle parle à http://localhost:4000 et LiteLLM gère nouvelles tentatives, repli
 `jarvis proxy config` écrit la configuration (JSON, donc YAML valide) à partir du catalogue : un modèle par entrée
 qui a un identifiant d'API (`api_id`), replis tirés de `repli` (Claude) puis du niveau inférieur du même
 fournisseur. Les clés ne sont jamais écrites : `os.environ/ANTHROPIC_API_KEY`, `os.environ/OPENAI_API_KEY`.
-Activer réellement le proxy (installer LiteLLM, le lancer) est ton choix et une dépense d'API : désactivé tant que
-`[proxy] actif = true` n'est pas posé dans ton catalogue personnel et qu'aucun budget « services » n'existe.
+Jarvis n'installe ni ne lance jamais LiteLLM : écrire ce fichier ne coûte rien. `[proxy] actif` est indicatif
+(affiché par `jarvis proxy voir`). Le lancer (`litellm --config …`) est ton choix et une dépense d'API : prévois une
+enveloppe « services » dans `jarvis budget` pour le produit concerné.
 """
 
 from __future__ import annotations

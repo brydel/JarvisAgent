@@ -3,6 +3,9 @@ import importlib.util, os, subprocess, sys
 from pathlib import Path
 
 ECHECS = []
+# Jeton aléatoire transmis par le harnais sur l'entrée standard, lu AVANT de charger le code évalué : un code qui
+# imprime lui-même « VERDICT: OK » puis quitte ne le connaît pas, et le harnais exige le jeton.
+JETON = "" if sys.stdin is None or sys.stdin.isatty() else sys.stdin.readline().strip()
 
 def verifier(cond, msg):
     if not cond:
@@ -18,7 +21,7 @@ def fin():
     if ECHECS:
         print("ÉCHEC :\n- " + "\n- ".join(ECHECS))
         sys.exit(1)
-    print("VERDICT: OK")
+    print(f"VERDICT: OK {JETON}".rstrip())
     sys.exit(0)
 
 import re

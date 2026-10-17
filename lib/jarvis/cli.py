@@ -709,7 +709,7 @@ def cmd_tache_enregistrer(a) -> int:
                                role=a.role, modele=a.modele, modele_id=a.modele_id, effort=a.effort, repli=a.repli,
                                taille=a.taille, plan=a.plan, revue=a.revue, raison=a.raison, secours=a.secours,
                                classe=a.classe, reservation=a.reservation, jetons_max=int(a.jetons_max or 0),
-                               consignes_empreinte=a.consignes_empreinte)
+                               consignes_empreinte=a.consignes_empreinte, base=a.base)
     if a.reservation:
         from . import admission
         admission.confirmer(a.reservation, fiche["id"], a.worktree)
@@ -1502,16 +1502,21 @@ def cmd_eval(a) -> int:
             return _err("usage : jarvis eval lancer <rôle>/<cas> [--agent claude|codex] [--modele M] --confirmer")
         from . import admission
         try:
-            r = evaluation.lancer(a.quoi[-1], a.agent, a.modele or "", acteur=_acteur(), garder=a.garder)
+            r = evaluation.lancer(a.quoi[0], a.agent, a.modele or "", acteur=_acteur(), garder=a.garder)
         except admission.Refus as exc:
             return _err(exc.raison, _CODES_REFUS.get(exc.code, 2))
         if a.sortie_brute:
-            print("VERDICT: OK" if r["ok"] else "VERDICT: ECHEC\n" + r["detail"])
+            # promptfoo (fournisseur exec:) : la sortie est jugée par l'assertion ; un code non nul serait une erreur.
+            print("VERDICT: OK" if r["ok"] and not r["suspect"] else "VERDICT: ECHEC\n" + r["detail"])
+            return 0
         else:
             print(f"{'✔ réussi' if r['ok'] else '✘ échoué'} — {r['cas']} par {r['agent']}/{r['modele']} en {r['duree_s']:.0f} s"
                   f" (brief {r['brief']})")
             if not r["ok"]:
                 print(r["detail"])
+            if r["suspect"]:
+                print("⚠ Suspect : la sortie de l'agent mentionne les cas d'évaluation (références ou vérifications). "
+                      "Résultat à ne pas compter avant relecture.")
             if r.get("dossier"):
                 print(f"Projet conservé : {r['dossier']}")
         return 0 if r["ok"] else 1
@@ -1522,10 +1527,12 @@ def cmd_eval(a) -> int:
 def cmd_execution(a) -> int:
     """`jarvis execution lancer` : appelé par bin/jarvis pour démarrer un agent sur le backend du projet."""
     from . import admission, execution
-    # Seul un départ admis peut partir : la réservation doit exister, être active et viser ce worktree.
-    if not any(r["id"] == (a.reservation or "").upper() and (r.get("worktree") or "").lower() == a.branche.lower()
-               for r in admission.en_attente()):
-        return _err("aucune réservation d'admission active pour ce lancement : passe par « jarvis task ».", 4)
+    if os.environ.get("JARVIS_METIER"):
+        return _err("un agent ne lance pas d'autre agent : propose la tâche au chef d'orchestre.", 4)
+    # Seul un départ admis peut partir, une seule fois : réservation confirmée (fiche de tâche créée), active,
+    # pour ce projet et ce worktree, jamais utilisée.
+    if not admission.marquer_lance(a.reservation, a.projet, a.branche):
+        return _err("aucune réservation d'admission confirmée et inutilisée pour ce lancement : passe par « jarvis task ».", 4)
     try:
         backend = execution.pour_projet(a.projet)
         r = backend.lancer(projet=a.projet, chemin=os.getcwd(), branche=a.branche, profil=a.agent, prompt=a.prompt)
@@ -1587,7 +1594,12 @@ def cmd_rollback(a) -> int:
         elif a.action == "demander":
             p = rollback.demander(a.tache, par=_acteur())
             print(rollback.texte(p))
-            print("\nEnvoyé à ton humain sur Telegram (boutons Revert / Garder). Rien n'est fait sans son clic.")
+            if p.get("envoye"):
+                print("\nEnvoyé à ton humain sur Telegram (boutons Revert / Garder). Rien n'est fait sans son clic.")
+            else:
+                print("\n⚠ Telegram injoignable ou non configuré : rien n'est parti. La demande est notée ; ton humain peut "
+                      "exécuter « jarvis rollback executer " + p["tache"] + " » dans son terminal.")
+                return 1
         else:
             refused = _human_only("exécuter un rollback")
             if refused is not None:
@@ -1979,7 +1991,7 @@ def build_parser() -> argparse.ArgumentParser:
     for opt in ("projet", "issue", "agent", "worktree"):
         s.add_argument(f"--{opt}", required=True)
     for opt in ("chemin", "role", "modele", "modele-id", "effort", "repli", "plan", "revue", "raison", "classe", "reservation",
-                "jetons-max", "consignes-empreinte"):
+                "jetons-max", "consignes-empreinte", "base"):
         s.add_argument(f"--{opt}", default="")
     s.add_argument("--taille", default="M")
     s.add_argument("--secours", action="store_true")

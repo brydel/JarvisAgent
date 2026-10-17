@@ -49,11 +49,12 @@ def toutes() -> list[dict]:
 def enregistrer(*, projet: str, issue: str, agent: str, worktree: str, chemin: str = "", role: str = "",
                 modele: str = "", modele_id: str = "", effort: str = "", repli: str = "", taille: str = "M",
                 plan: str = "", revue: str = "", raison: str = "", secours: bool = False, classe: str = "",
-                reservation: str = "", jetons_max: int = 0, consignes_empreinte: str = "") -> dict:
+                reservation: str = "", jetons_max: int = 0, consignes_empreinte: str = "", base: str = "") -> dict:
     """Crée la fiche d'un lancement. `chemin` : dossier du worktree (clé des lanceurs).
 
     `jetons_max` : plafond de jetons de l'unité de travail (projet, issue, rôle), toutes relances comprises.
     `consignes_empreinte` : empreinte du fichier de consignes, pour savoir si un nouvel essai change d'approche.
+    `base` : commit du dépôt principal au lancement (point de départ de la branche), pour le rollback.
     """
     chemin = str(Path(chemin).resolve()) if chemin else ""
     role_nom = roles.ou_defaut(role)["nom"]
@@ -67,7 +68,7 @@ def enregistrer(*, projet: str, issue: str, agent: str, worktree: str, chemin: s
             "repli": repli, "taille": taille, "plan": plan, "revue": str(revue or ""), "raison": raison,
             "secours": bool(secours), "worktree": worktree, "chemin": chemin, "statut": "lancee",
             "classe": classe, "reservation": reservation, "jetons_max": int(jetons_max or 0),
-            "consignes_empreinte": consignes_empreinte, "essai": len(precedents) + 1, "echec": None,
+            "consignes_empreinte": consignes_empreinte, "base": base, "essai": len(precedents) + 1, "echec": None,
             "cree": time.time(), "debut": None, "fin": None, "jetons": None, "verdict": "", "verdict_note": "",
         }
         data["taches"].append(fiche)

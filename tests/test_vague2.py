@@ -102,7 +102,12 @@ class Vague2Test(unittest.TestCase):
         self.assertTrue(r["ok"], r["detail"])
         rien = evaluation.lancer("backend/pagination", "claude", commande=[sys.executable, "-c", "pass"])
         self.assertFalse(rien["ok"])
-        self.assertEqual([x["ok"] for x in evaluation.resultats()], [True, False])
+        # Un code qui imprime lui-même « VERDICT: OK » et quitte au chargement ne trompe pas le harnais.
+        tricheur = ("import pathlib; p = pathlib.Path('app/pagination.py'); p.parent.mkdir(exist_ok=True); "
+                    "p.write_text('import os\\nprint(\"VERDICT: OK\")\\nos._exit(0)\\n')")
+        triche = evaluation.lancer("backend/pagination", "claude", commande=[sys.executable, "-c", tricheur])
+        self.assertFalse(triche["ok"], triche["detail"])
+        self.assertEqual([x["ok"] for x in evaluation.resultats()], [True, False, False])
         self.assertEqual(admission.en_attente(), [], "la réservation est rendue après l'évaluation")
         from jarvis import pauses
         pauses.poser("humain", par="test")
@@ -151,10 +156,38 @@ class Vague2Test(unittest.TestCase):
         self.assertEqual(r, {"backend": "e2b", "cible": "sbx-1"})
         self.assertEqual([a[0] for a in appels], ["creer", "ecrire", "lancer"])
         self.assertTrue(appels[2][2], "agent lancé en arrière-plan")
+        self.assertIn("1", budgets.texte(), "chaque lancement engage une dépense estimée")
+        # Échec après création : le bac à sable est arrêté, jamais laissé à coûter.
+        tues = []
+        FauxSandbox.kill = staticmethod(lambda ident: tues.append(ident))
+        FauxSandbox.files.write = staticmethod(lambda *a: (_ for _ in ()).throw(OSError("réseau")))
+        with mock.patch.dict(os.environ, {"E2B_API_KEY": "x"}), self.assertRaises(execution.NonDisponible):
+            execution.E2BBackend(sdk=sdk).lancer(projet="repriceo", chemin=".", branche="bis-2", profil="cc", prompt=str(prompt))
+        self.assertEqual(tues, ["sbx-1"])
+        # Arrêter ne demande ni budget ni clé.
+        budgets.definir("infrastructure", 0, projet="repriceo")
+        with mock.patch.dict(os.environ, {}, clear=False):
+            os.environ.pop("E2B_API_KEY", None)
+            self.assertTrue(execution.E2BBackend(sdk=sdk).fermer({"project": "repriceo", "worktree": "sbx-9"})[0])
+        self.assertEqual(tues[-1], "sbx-9")
         # Sans réservation d'admission active, aucun lancement direct.
         with contextlib.redirect_stderr(io.StringIO()):
             rc = cli.main(["execution", "lancer", "--projet", "repriceo", "--branche", "x", "--agent", "cc", "--prompt", str(prompt)])
         self.assertEqual(rc, 4)
+        # Une réservation confirmée sert une seule fois, pour son projet et son worktree.
+        adm = admission.demander(origine="cli", projet="repriceo", issue="BIS-9", agent="claude", worktree="bis-9")
+        with contextlib.redirect_stderr(io.StringIO()):
+            args = ["execution", "lancer", "--projet", "repriceo", "--branche", "bis-9", "--agent", "cc",
+                    "--prompt", str(prompt), "--reservation", adm["reservation"]]
+            self.assertEqual(cli.main(args), 4, "réservation non confirmée (aucune fiche de tâche)")
+            admission.confirmer(adm["reservation"], "T-09999", "bis-9")
+            with mock.patch.object(execution.WorkmuxBackend, "lancer", return_value={"backend": "workmux", "cible": "x"}) as lw:
+                self.assertEqual(cli.main(args[:3] + ["autre"] + args[4:]), 4, "mauvais projet")
+                self.assertEqual(cli.main(args), 0)
+                self.assertEqual(cli.main(args), 4, "usage unique")
+                with mock.patch.dict(os.environ, {"JARVIS_METIER": "backend"}):
+                    self.assertEqual(cli.main(args), 4)
+            self.assertEqual(lw.call_count, 1)
 
     # --- P2.3 événements et replay ---------------------------------------------------------------
 
@@ -287,6 +320,27 @@ class Vague2Test(unittest.TestCase):
         self.assertEqual(store.read_json(rollback.FILE, {})[t["id"]]["statut"], "execute")
         with self.assertRaises(rollback.RollbackError):
             rollback.decider(t["id"], True, par="Telegram")              # une seule fois
+
+    def test_rollback_base_and_approved_list(self):
+        t, wt = self._depot_avec_tache("302")
+        repo = TMP / "rb-302"
+        # La base notée au lancement prime : un commit de main non poussé n'est jamais compté comme celui de la tâche.
+        _fixer(t["id"], base=_git(wt, "rev-parse", "HEAD~2"))
+        p = rollback.proposer(t["id"])
+        self.assertEqual(len(p["commits"]), 2)
+        with mock.patch("jarvis.notify.telegram", return_value=False):
+            out, err = io.StringIO(), io.StringIO()
+            with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
+                self.assertEqual(cli.main(["rollback", "demander", t["id"]]), 1)
+            self.assertIn("rien n'est parti", out.getvalue())
+        # La base se déplace (la tâche « récupère » un commit) sans que la tête bouge : refus, rien n'est fait.
+        _fixer(t["id"], base=_git(wt, "rev-parse", "HEAD~1"))
+        store.update_json(rollback.FILE, {}, lambda d: d[t["id"]].update(statut="approuve"))
+        with self.assertRaises(rollback.RollbackError) as cm:
+            rollback.executer(t["id"], par="Telegram")
+        self.assertIn("liste des commits a changé", str(cm.exception))
+        self.assertEqual((wt / "a.txt").read_text(), "v2\n")
+        del repo
 
     def test_rollback_refused_when_unsafe(self):
         t, wt = self._depot_avec_tache("301")

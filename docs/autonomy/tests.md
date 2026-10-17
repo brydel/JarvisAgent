@@ -43,8 +43,8 @@ chemin d'abandon tardif dans `bin/jarvis`, pause maintenance levée à tort par 
 | Visibilité (rapport, web, Telegram) | `test_state_shows_pause_causes_reservations_and_exceptions` | intégration simulée |
 
 Vague 1 : `tests/test_vague1.py` (14 tests, voir `vague-1.md`).
-Vague 2 : `tests/test_vague2.py` (8 tests, voir `vague-2.md`) ; `jarvis eval verifier` contrôle les 15 goldens.
-Suite complète : 135 tests verts.
+Vague 2 : `tests/test_vague2.py` (9 tests, voir `vague-2.md`) ; `jarvis eval verifier` contrôle les 15 goldens.
+Suite complète : 136 tests verts.
 
 Non couvert par un test : le rendu curses du cockpit (vérifié visuellement dans le lot précédent, pas
 re-capturé ici), `gh issue list` réel, `codex cloud`, PowerShell.
