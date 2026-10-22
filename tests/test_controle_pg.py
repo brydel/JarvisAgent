@@ -91,6 +91,18 @@ class RlsTest(SurPostgres, unittest.TestCase):
             conn.execute("SELECT set_config('jarvis.tenant_id', %s, false)", (tenant,))
         return conn
 
+    def test_la_base_de_test_ne_touche_pas_au_role_reel(self):
+        # régression : les rôles sont communs au serveur ; les tests changeaient le mot de passe de jarvis_app
+        self.assertIn(f"user={admin.ROLE_APP}_{BASE} ", _PRECEDENT["dsn"])
+        self.assertEqual(admin.role_app("jarvis"), "jarvis_app")
+
+    def test_connexion_impossible_message_clair(self):
+        b = BackendPostgres("host=127.0.0.1 port=5432 dbname=jarvis_inexistante_test user=personne password=x")
+        with self.assertRaises(mi.MissionError) as ctx:
+            b.connecter(None)
+        self.assertEqual(ctx.exception.code, "base")
+        self.assertIn("preparer --nouveau-mot-de-passe", str(ctx.exception))
+
     def test_role_applicatif_sans_privilege(self):
         with self.app() as c:
             r = c.execute("SELECT rolsuper, rolbypassrls FROM pg_roles WHERE rolname = current_user").fetchone()

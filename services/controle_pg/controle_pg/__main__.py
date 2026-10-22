@@ -31,7 +31,7 @@ def main(argv: list[str] | None = None) -> int:
     try:
         if a.action == "preparer":
             dsn = admin.preparer(a.base, nouveau_mot_de_passe=a.nouveau_mot_de_passe)
-            print(f"Base « {a.base} » prête (RLS active, rôle {admin.ROLE_APP}).\n"
+            print(f"Base « {a.base} » prête (RLS active, rôle {admin.role_app(a.base)}).\n"
                   f"Pour l'utiliser : export JARVIS_MISSIONS_PG=\"{dsn}\"")
         elif a.action == "dsn":
             print(admin.dsn_app(a.base))

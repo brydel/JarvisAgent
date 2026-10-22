@@ -1,8 +1,12 @@
 """Administration PostgreSQL de Jarvis Next : base, rôle applicatif, schéma, droits, migration depuis SQLite.
 
-Tout ici s'exécute avec TON rôle (propriétaire, connexion locale par socket). Le moteur, lui, n'utilise que
-jarvis_app (non propriétaire, soumis à la RLS), dont le mot de passe est écrit dans un fichier au format pgpass
+Tout ici s'exécute avec TON rôle (propriétaire, connexion locale par socket). Le moteur, lui, n'utilise qu'un
+rôle applicatif (non propriétaire, soumis à la RLS), dont le mot de passe est écrit dans un fichier au format pgpass
 (600) : le DSN ne contient aucun secret.
+
+Un rôle applicatif PAR BASE : `jarvis_app` pour la base `jarvis`, `jarvis_app_<base>` pour toute autre (tests,
+vérifications). Les rôles sont communs à tout le serveur : préparer une base de test ne doit jamais changer le mot
+de passe du rôle de ta vraie base.
 """
 
 from __future__ import annotations
@@ -38,18 +42,22 @@ def fichier_pgpass() -> Path:
     return dossier_config() / "pgpass"
 
 
+def role_app(base: str) -> str:
+    return ROLE_APP if base == "jarvis" else f"{ROLE_APP}_{base}"
+
+
 def dsn_app(base: str = "jarvis", hote: str = "127.0.0.1", port: int = 5432) -> str:
-    return f"host={hote} port={port} dbname={base} user={ROLE_APP} passfile={fichier_pgpass()}"
+    return f"host={hote} port={port} dbname={base} user={role_app(base)} passfile={fichier_pgpass()}"
 
 
 def dsn_admin(base: str = "jarvis") -> str:
     return f"dbname={base}"  # socket local, authentification « peer » : ton utilisateur Linux
 
 
-def _ecrire_pgpass(mot_de_passe: str, port: int) -> None:
+def _ecrire_pgpass(role: str, mot_de_passe: str, port: int) -> None:
     p = fichier_pgpass()
-    lignes = [l for l in (p.read_text().splitlines() if p.exists() else []) if f":{ROLE_APP}:" not in l]
-    lignes.append(f"127.0.0.1:{port}:*:{ROLE_APP}:{mot_de_passe}")
+    lignes = [l for l in (p.read_text().splitlines() if p.exists() else []) if f":{role}:" not in l]
+    lignes.append(f"127.0.0.1:{port}:*:{role}:{mot_de_passe}")
     fd = os.open(p, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
     with os.fdopen(fd, "w") as fh:
         fh.write("\n".join(lignes) + "\n")
@@ -57,28 +65,29 @@ def _ecrire_pgpass(mot_de_passe: str, port: int) -> None:
 
 
 def preparer(base: str = "jarvis", *, port: int = 5432, nouveau_mot_de_passe: bool = False) -> str:
-    """Crée (si besoin) la base, le rôle jarvis_app, le schéma, les politiques et les droits. Idempotent."""
+    """Crée (si besoin) la base, son rôle applicatif, le schéma, les politiques et les droits. Idempotent."""
+    nom_role = role_app(base)
     with psycopg.connect("dbname=postgres", autocommit=True) as conn:
         if not conn.execute("SELECT 1 FROM pg_database WHERE datname=%s", (base,)).fetchone():
             conn.execute(sql.SQL("CREATE DATABASE {}").format(sql.Identifier(base)))
-        role = conn.execute("SELECT rolsuper, rolbypassrls FROM pg_roles WHERE rolname=%s", (ROLE_APP,)).fetchone()
+        role = conn.execute("SELECT rolsuper, rolbypassrls FROM pg_roles WHERE rolname=%s", (nom_role,)).fetchone()
         if role is not None and (role[0] or role[1]):
-            raise RuntimeError(f"le rôle {ROLE_APP} existe avec SUPERUSER ou BYPASSRLS : la RLS ne le protégerait pas")
+            raise RuntimeError(f"le rôle {nom_role} existe avec SUPERUSER ou BYPASSRLS : la RLS ne le protégerait pas")
         if role is None or nouveau_mot_de_passe or not fichier_pgpass().exists():
             mdp = secrets.token_urlsafe(32)
             if role is None:
                 conn.execute(sql.SQL("CREATE ROLE {} LOGIN NOSUPERUSER NOBYPASSRLS NOCREATEDB NOCREATEROLE "
-                                     "PASSWORD {}").format(sql.Identifier(ROLE_APP), sql.Literal(mdp)))
+                                     "PASSWORD {}").format(sql.Identifier(nom_role), sql.Literal(mdp)))
             else:  # seul un superutilisateur peut même RETIRER SUPERUSER : on ne touche qu'au mot de passe
-                conn.execute(sql.SQL("ALTER ROLE {} LOGIN PASSWORD {}").format(sql.Identifier(ROLE_APP),
+                conn.execute(sql.SQL("ALTER ROLE {} LOGIN PASSWORD {}").format(sql.Identifier(nom_role),
                                                                              sql.Literal(mdp)))
-            _ecrire_pgpass(mdp, port)
+            _ecrire_pgpass(nom_role, mdp, port)
         moi = conn.execute("SELECT current_user AS u, rolsuper FROM pg_roles WHERE rolname=current_user").fetchone()
         if moi[1]:
             raise RuntimeError("ton rôle est superutilisateur : refusé (la RLS ne s'appliquerait pas aux tests)")
     with psycopg.connect(dsn_admin(base), autocommit=True) as conn:
         conn.execute(SCHEMA.read_text(encoding="utf-8"))
-        ident = sql.Identifier(ROLE_APP)
+        ident = sql.Identifier(nom_role)
         conn.execute(sql.SQL("REVOKE ALL ON DATABASE {} FROM PUBLIC").format(sql.Identifier(base)))
         conn.execute(sql.SQL("GRANT CONNECT ON DATABASE {} TO {}").format(sql.Identifier(base), ident))
         conn.execute(sql.SQL("GRANT USAGE ON SCHEMA public TO {}").format(ident))
@@ -99,6 +108,7 @@ def supprimer_base(base: str) -> None:
         raise RuntimeError("suppression refusée : seule une base *_test peut être supprimée")
     with psycopg.connect("dbname=postgres", autocommit=True) as conn:
         conn.execute(sql.SQL("DROP DATABASE IF EXISTS {} WITH (FORCE)").format(sql.Identifier(base)))
+        conn.execute(sql.SQL("DROP ROLE IF EXISTS {}").format(sql.Identifier(role_app(base))))
 
 
 def migrer_depuis_sqlite(chemin: Path, base: str = "jarvis") -> dict:

@@ -36,7 +36,14 @@ class BackendPostgres:
         self.dsn, self.dsn_admin = dsn, dsn_admin
 
     def connecter(self, tenant_id: str | None):
-        conn = psycopg.connect(self.dsn, autocommit=True, row_factory=dict_row, connect_timeout=10)
+        try:
+            conn = psycopg.connect(self.dsn, autocommit=True, row_factory=dict_row, connect_timeout=10)
+        except psycopg.OperationalError as exc:
+            from jarvis.missions import MissionError  # noqa: PLC0415 — le moteur est déjà chargé quand il appelle ceci
+            detail = str(exc).strip().splitlines()[-1][:200]
+            raise MissionError("base", "connexion à PostgreSQL impossible (" + detail + "). Vérifie que le serveur "
+                               "tourne (pg_isready) ; si le mot de passe a changé : cd services/controle_pg && "
+                               "python3 -m controle_pg preparer --nouveau-mot-de-passe") from None
         return _Connexion(conn)
 
     def debut(self, c) -> None:
