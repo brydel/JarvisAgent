@@ -1,0 +1,65 @@
+name: Jarvis product quality
+
+on:
+  push:
+    branches: [codex/jarvis-product-studio]
+  pull_request:
+    paths:
+      - 'studio/**'
+      - 'lib/jarvis/**'
+      - 'services/model_bridge/**'
+      - 'tests/**'
+      - '.github/workflows/jarvis-product.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: jarvis-product-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Archiver les sources suivies, sans identifiants ni environnement local
+        run: git archive --format=zip HEAD -o /tmp/jarvis-source.zip
+      - uses: actions/upload-artifact@v4
+        with:
+          name: jarvis-source-${{ github.sha }}
+          path: /tmp/jarvis-source.zip
+          retention-days: 3
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Installer les dependances verrouillees du Studio
+        working-directory: studio/board-v2
+        run: npm ci
+      - name: Verifier TypeScript et construire le Studio
+        working-directory: studio/board-v2
+        run: npm run build
+      - name: Verifier la syntaxe Python et shell
+        run: |
+          python -m compileall -q lib/jarvis services
+          bash -n install.sh bin/jarvis
+      - name: Tests du produit sans inference payante
+        run: |
+          python -m unittest discover -s tests -p 'test_studio*.py' -v
+          if [ -d services/model_bridge/tests ]; then
+            python -m unittest discover -s services/model_bridge/tests -v
+          fi
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: jarvis-studio-build-${{ github.sha }}
+          path: lib/jarvis/studio_v2
+          if-no-files-found: ignore
+          retention-days: 3
