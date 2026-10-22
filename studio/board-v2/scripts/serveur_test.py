@@ -13,6 +13,7 @@ from pathlib import Path
 base = Path(os.environ.get("JARVIS_TEST_ETAT") or tempfile.mkdtemp(prefix="jarvis-playwright-"))
 os.environ["JARVIS_STATE_DIR"] = str(base / "etat")
 os.environ["JARVIS_CONFIG_DIR"] = str(base / "config")
+os.environ["JARVIS_DATA_DIR"] = str(base / "data")
 os.environ.pop("JARVIS_MISSIONS_PG", None)
 sys.path.insert(0, str(Path(__file__).resolve().parents[3] / "lib"))
 

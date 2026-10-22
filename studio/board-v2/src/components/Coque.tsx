@@ -1,54 +1,11 @@
-import { memo, useEffect, useRef, useState } from "react";
+import { memo, useState } from "react";
 import { useReactFlow, useStore } from "@xyflow/react";
 import {
-  BarChart3, BookOpen, Bot, ChevronDown, ClipboardPaste, Ellipsis, File, Folder, Grid3x3, Image as IconeImage, LayoutGrid,
-  Link2, Maximize, Minus, Mic, Network, Plus, Search, Settings, Bell, Sparkles, Star, Type, Upload, Users, Video,
+  ChevronDown, ClipboardPaste, Ellipsis, File, Grid3x3, Image as IconeImage, 
+  Link2, Maximize, Minus, Mic, Network, Plus, Sparkles, Star, Type, Upload, Video,
 } from "lucide-react";
 
-/* ---------------------------------------------------------------- barre supérieure ------------------------- */
-export const BarreHaut = memo(function BarreHaut({ recherche, setRecherche, notifications }: {
-  recherche: string; setRecherche: (v: string) => void; notifications: number;
-}) {
-  const champ = useRef<HTMLInputElement>(null);
-  useEffect(() => {
-    const f = (e: KeyboardEvent) => {
-      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "k") {
-        e.preventDefault();
-        champ.current?.focus();
-      }
-    };
-    window.addEventListener("keydown", f);
-    return () => window.removeEventListener("keydown", f);
-  }, []);
-  const onglets: [string, typeof LayoutGrid][] = [["Board", LayoutGrid], ["Missions", Bot], ["Agents", Users], ["Connaissances", BookOpen],
-    ["Fichiers", Folder], ["Analytique", BarChart3], ["Configuration", Settings]];
-  return (
-    <header className="topbar">
-      <div className="marque"><img src="/v2/jarvis-mark.svg" alt="" /> Jarvis Studio</div>
-      <nav className="nav" aria-label="Sections">
-        {onglets.map(([nom, Icone]) => (
-          <button key={nom} type="button" aria-current={nom === "Board" ? "page" : undefined} disabled={nom !== "Board"}
-            title={nom === "Board" ? undefined : "Bientôt dans le Studio V2 (l'ancien Studio reste sur /)"}>
-            <Icone /><span>{nom}</span>
-          </button>
-        ))}
-      </nav>
-      <label className="recherche">
-        <Search size={17} />
-        <input ref={champ} type="search" placeholder="Rechercher dans Jarvis…" value={recherche} onChange={(e) => setRecherche(e.target.value)}
-          aria-label="Rechercher dans le Board" />
-        <kbd>Ctrl K</kbd>
-      </label>
-      <button type="button" className="icone-bouton" aria-label={`${notifications} approbation(s) en attente`} style={{ marginLeft: 100 }}>
-        <Bell size={21} />{notifications > 0 && <span className="pastille-notif" />}
-      </button>
-      <div className="profil">
-        <span className="profil-avatar" aria-label="Ton profil">J</span>
-        <ChevronDown size={18} className="chevron" color="var(--text-secondary)" />
-      </div>
-    </header>
-  );
-});
+export { ProductNav as BarreHaut } from "../product/ProductNav";
 
 /* ---------------------------------------------------------------- seconde rangée --------------------------- */
 export type Filtre = "tous" | "notes" | "fichiers" | "liens" | "medias" | "missions" | "agents";

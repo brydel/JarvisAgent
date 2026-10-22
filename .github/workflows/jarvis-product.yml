@@ -9,9 +9,11 @@ on:
 
 permissions:
   contents: read
+
 concurrency:
   group: jarvis-product-${{ github.ref }}
   cancel-in-progress: true
+
 jobs:
   verify:
     runs-on: ubuntu-latest
@@ -29,13 +31,6 @@ jobs:
       - name: Installer les dependances verrouillees du Studio
         working-directory: studio/board-v2
         run: npm ci
-      - name: Archive de verification hors ligne (dependances publiques uniquement)
-        run: tar -czf /tmp/jarvis-dependencies.tar.gz -C studio/board-v2 node_modules
-      - uses: actions/upload-artifact@v4
-        with:
-          name: jarvis-dependencies
-          path: /tmp/jarvis-dependencies.tar.gz
-          retention-days: 1
       - name: Verifier TypeScript et construire le Studio
         working-directory: studio/board-v2
         run: npm run build
@@ -43,16 +38,25 @@ jobs:
         run: |
           python -m compileall -q lib/jarvis services
           bash -n install.sh bin/jarvis
-      - name: Tests du produit sans inference payante
+      - name: Tests du moteur, du Studio et de la passerelle sans inference
         run: |
+          python -m unittest discover -s tests -p 'test_missions.py' -v
           python -m unittest discover -s tests -p 'test_studio*.py' -v
-          if [ -d services/model_bridge/tests ]; then
-            python -m unittest discover -s services/model_bridge/tests -v
-          fi
-      - uses: actions/upload-artifact@v4
+          python -m unittest discover -s services/model_bridge/tests -v
+      - name: Installer Chromium pour les parcours de test isoles
+        working-directory: studio/board-v2
+        run: npx playwright install --with-deps chromium
+      - name: Parcours produit et captures bureau/mobile
+        working-directory: studio/board-v2
+        run: npx playwright test product.spec.ts
+      - name: Conserver les preuves visuelles et les resultats
         if: always()
+        uses: actions/upload-artifact@v4
         with:
-          name: jarvis-studio-build-${{ github.sha }}
-          path: lib/jarvis/studio_v2
-          if-no-files-found: ignore
-          retention-days: 3
+          name: jarvis-product-evidence-${{ github.sha }}
+          path: |
+            reports/product-studio
+            reports/board-v2/playwright-resultats.json
+            reports/board-v2/playwright-sorties
+          if-no-files-found: warn
+          retention-days: 7

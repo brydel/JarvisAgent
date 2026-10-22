@@ -13,6 +13,7 @@ export interface DemandeMission {
 
 interface Props {
   ouvert: boolean;
+  initialObjectif?: string;
   demo: boolean;
   fermer: () => void;
   lancer: (d: DemandeMission) => Promise<void>;
@@ -27,7 +28,7 @@ const FOURNISSEURS: { cle: DemandeMission["fournisseur"]; nom: string; aide: str
 ];
 
 /** Dialogue modal natif (<dialog> : focus piégé, Échap, retour du focus). La mission créée est une analyse L1. */
-export function DialogueMission({ ouvert, demo, fermer, lancer }: Props) {
+export function DialogueMission({ ouvert, initialObjectif, demo, fermer, lancer }: Props) {
   const ref = useRef<HTMLDialogElement>(null);
   const champObjectif = useRef<HTMLInputElement>(null);
   const id = useId();
@@ -42,12 +43,13 @@ export function DialogueMission({ ouvert, demo, fermer, lancer }: Props) {
     const d = ref.current;
     if (!d) return;
     if (ouvert && !d.open) {
+      if (initialObjectif) setObjectif(initialObjectif.slice(0, OBJECTIF_MAX));
       setErreur("");
       d.showModal();
       // showModal donne le focus au premier élément (le bouton Fermer) : on le place sur l'objectif
       requestAnimationFrame(() => champObjectif.current?.focus());
     } else if (!ouvert && d.open) d.close();
-  }, [ouvert]);
+  }, [ouvert, initialObjectif]);
 
   const valide = objectif.trim().length > 0 && objectif.length <= OBJECTIF_MAX && contexte.length <= CONTEXTE_MAX;
 

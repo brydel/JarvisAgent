@@ -30,7 +30,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, unquote, urlsplit
 
-from . import apercus, board, config, missions
+from . import apercus, board, config, missions, studio_product
 
 PORT_DEFAUT = 7718
 STATIQUES = {
@@ -191,7 +191,11 @@ class Handler(BaseHTTPRequestHandler):
             return
         org = missions.tenant_local()
         try:
-            if route == "/api/board":
+            if route == "/api/v2/atelier":
+                self._json(200, studio_product.catalogue(org))
+            elif m := re.fullmatch(r"/api/v2/atelier/candidats/(RB-[0-9]{4,})", route):
+                self._json(200, studio_product.comparer(org, m.group(1)))
+            elif route == "/api/board":
                 self._json(200, {"objets": missions.board(org, (q.get("espace") or ["accueil"])[0][:80])})
             elif route == "/api/missions":
                 self._json(200, {"missions": missions.missions(org, 50)})
@@ -218,7 +222,7 @@ class Handler(BaseHTTPRequestHandler):
         except ValueError:
             self._erreur(400, "paramètre invalide")
         except missions.MissionError as exc:
-            self._erreur(404 if exc.code == "inconnue" else 400, str(exc))
+            self._erreur(404 if exc.code == "inconnue" else 403 if exc.code == "interdit" else 400, str(exc))
 
     def _page_v2(self, route: str) -> None:
         """Board V2 : application construite (studio/board-v2 → lib/jarvis/studio_v2). Noms de fichiers filtrés."""
@@ -419,11 +423,16 @@ class Handler(BaseHTTPRequestHandler):
             self._erreur(400, "valeur invalide")
         except missions.MissionError as exc:
             conflits = ("approbation", "transition", "conflit", "verrouille", "concurrence")
-            self._erreur(404 if exc.code == "inconnue" else 409 if exc.code in conflits else 400, str(exc))
+            self._erreur(404 if exc.code == "inconnue" else 403 if exc.code == "interdit" else 409 if exc.code in conflits else 400, str(exc))
 
     def _post_v2(self, org: str, route: str, corps: dict) -> None:
         espace = str(corps.get("espace") or "accueil")[:board.ESPACE_MAX]
-        if route == "/api/v2/objets":
+        if m := re.fullmatch(r"/api/v2/atelier/agents/([a-z0-9_-]{1,64})/(verifier|proposer)", route):
+            action = studio_product.verifier if m.group(2) == "verifier" else studio_product.proposer
+            self._json(200 if m.group(2) == "verifier" else 201, action(org, m.group(1), corps))
+        elif m := re.fullmatch(r"/api/v2/atelier/candidats/(RB-[0-9]{4,})/decider", route):
+            self._json(200, studio_product.decider(org, m.group(1), corps))
+        elif route == "/api/v2/objets":
             type_ = str(corps.get("type") or "note")
             o = missions.board_ajouter(
                 org, espace, type_, str(corps.get("contenu") or ""), auteur="studio",
