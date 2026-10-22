@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Jarvis Studio — Board</title>
+<link rel="stylesheet" href="/studio.css">
+<script src="/studio.js" defer></script>
+</head>
+<body>
+<header class="barre">
+  <div class="marque"><span class="logo" aria-hidden="true">◆</span> Jarvis Studio <span class="sep">/</span> <span>Board</span></div>
+  <div class="etat-global" id="etat-global" role="status" aria-live="polite">Connexion…</div>
+</header>
+
+<main class="espace" id="espace" hidden>
+  <section class="canevas-cadre" aria-label="Canevas du Board">
+    <div class="canevas" id="canevas"></div>
+    <p class="vide" id="vide" hidden>Le Board est vide. Ajoute une note à droite : Jarvis l'analysera.</p>
+  </section>
+
+  <aside class="panneau" aria-label="Commandes et activité">
+    <section class="bloc">
+      <h2>Ajouter au Board</h2>
+      <form id="form-ajout">
+        <label for="contenu" class="lbl">Contenu</label>
+        <textarea id="contenu" rows="5" maxlength="50000" required
+          placeholder="Une note, un compte rendu, le texte d'une offre d'emploi…"></textarea>
+        <div class="ligne">
+          <label for="type" class="lbl">Type</label>
+          <select id="type">
+            <option value="note">Note (analysée)</option>
+            <option value="texte">Texte (analysé)</option>
+            <option value="lien">Lien (analysé)</option>
+            <option value="document">Document (non analysé)</option>
+          </select>
+          <button type="submit" class="primaire">Ajouter</button>
+        </div>
+        <p class="aide">Le contenu est une donnée : Jarvis l'analyse sans outils et n'exécute rien de ce qu'il demande.</p>
+      </form>
+    </section>
+
+    <section class="bloc">
+      <h2>Approbations <span class="compteur" id="nb-approbations">0</span></h2>
+      <ul class="liste" id="approbations"></ul>
+    </section>
+
+    <section class="bloc">
+      <h2>Missions</h2>
+      <ul class="liste missions" id="missions"></ul>
+    </section>
+
+    <section class="bloc">
+      <h2>Exécution</h2>
+      <div id="execution" class="execution"></div>
+    </section>
+
+    <section class="bloc bloc-flux">
+      <h2>Activité <span class="point" id="point-flux" title="flux d'événements"></span></h2>
+      <ol class="flux" id="flux" aria-live="polite"></ol>
+    </section>
+  </aside>
+</main>
+
+<dialog class="inspecteur" id="inspecteur" aria-labelledby="insp-titre">
+  <header class="insp-tete">
+    <div>
+      <div class="insp-sur" id="insp-sur"></div>
+      <h1 id="insp-titre">Mission</h1>
+    </div>
+    <div class="insp-actions">
+      <button type="button" class="danger" id="insp-annuler" hidden>Annuler la mission</button>
+      <button type="button" id="insp-fermer" aria-label="Fermer l'inspecteur">Fermer</button>
+    </div>
+  </header>
+  <div class="insp-corps" id="insp-corps"></div>
+</dialog>
+
+<section class="porte" id="porte" hidden>
+  <h1>Session requise</h1>
+  <p>Ouvre le lien affiché par <code>jarvis mission studio</code> dans ton terminal.</p>
+  <p class="aide">Le lien contient un jeton secret ; il n'est jamais envoyé ailleurs qu'à ce PC.</p>
+</section>
+</body>
+</html>

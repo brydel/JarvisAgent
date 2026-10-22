@@ -866,6 +866,13 @@ def executant_check() -> None:
     executants.signe_de_vie("local")
 
 
+def missions_check() -> None:
+    """Jarvis Next : baux expirés, nouveaux essais, fournisseurs revenus. Rien tant que la base n'existe pas."""
+    from . import missions
+    if missions.backend().existe():
+        missions.recuperer()
+
+
 def watch_loop(stop: threading.Event) -> None:
     first = True
     while not stop.is_set():
@@ -875,7 +882,7 @@ def watch_loop(stop: threading.Event) -> None:
         for step in (battement_demon, lambda: watch_once(first=first), ag.chef_flush_queue, budget_check,
                      prevision_check, blocage_check, jetons_check, chef_check, modeles_check, veille_check,
                      veille_modeles_check, menage_check, battement_check, bilan_check, skills_check, executant_check,
-                     canari_check, optimisation_check):
+                     canari_check, optimisation_check, missions_check):
             try:
                 step()
             except Exception as exc:  # noqa: BLE001 — le démon ne doit jamais mourir sur une erreur ponctuelle

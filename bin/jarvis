@@ -59,6 +59,7 @@ ${C_CYAN}Agents${C_OFF}
   jarvis skill auditer|installer <src>  Registre des skills : épinglage, quarantaine, approbation (toi)
   jarvis role candidats|proposer        Briefs candidats : essai sur 10 % des tâches après ton accord
   jarvis stockage etat|migrer|revenir   État en JSON (défaut) ou SQLite, migration vérifiée
+  jarvis mission liste|voir|board|executer  Jarvis Next (M1) : missions durables, Board, exécutant local
   jarvis executant liste                Exécutants déclarés et bail d'orchestrateur (un seul démon)
   jarvis verdict <projet> <ISSUE> pret|corrections [note]
                                         Verdict d'une contre-relecture
@@ -614,7 +615,8 @@ main() {
     cockpit|etat|plan|fil|projet|telegram|regler|capacite|demander|note|journal|daemon|voir|jetons|veille|\
     fermer|reprendre|sante|reparer-git|role|modele|tache|verdict|bilan|usine|studio|livrer|livrables|web|\
     admission|pause|profil|lourd|audit|diagnostic|politique|budget|fournisseurs|proposition|\
-    budget-jetons|cout|memoire|secrets|eval|rejouer|traces|proxy|rollback|execution|skill|stockage|executant)
+    budget-jetons|cout|memoire|secrets|eval|rejouer|traces|proxy|rollback|execution|skill|stockage|executant|\
+    mission)
                   py "$cmd" "$@" ;;
     chef-lancer)  cmd_chef_lancer "$@" ;;
     relancer)     cmd_relancer "$@" ;;

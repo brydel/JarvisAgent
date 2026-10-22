@@ -1763,6 +1763,124 @@ def cmd_secrets(a) -> int:
     return 0
 
 
+def _identite_coureur() -> Path:
+    return config.STATE_DIR / "coureur" / "identite.json"
+
+
+def cmd_mission(a) -> int:
+    """Jarvis Next (M1) : missions durables sur ce poste, tenant local unique."""
+    from . import adaptateurs, coureur, missions
+    org = missions.tenant_local()
+    try:
+        if a.action == "liste":
+            for m in missions.missions(org):
+                print(f"{m['id']}  {m['statut']:<9} {m['source']:<6} {m['objectif'][:80]}")
+            return 0
+        if a.action == "voir":
+            print(missions.texte_mission(missions.mission(org, a.cible)))
+            return 0
+        if a.action == "evenements":
+            for e in missions.evenements(org, apres=a.apres):
+                print(f"{e['seq']:>6} {time.strftime('%H:%M:%S', time.localtime(e['ts']))} {e['type']:<16} "
+                      f"{e['tache_id'] or e['mission_id'] or ''} {json.dumps(e['donnees'], ensure_ascii=False)}")
+            return 0
+        if a.action == "approbations":
+            for p in missions.approbations_en_attente(org):
+                print(f"{p['id']}  {p['niveau']} {p['type']} ({p['tache_id']}, mission {p['mission_id']})\n"
+                      f"    travail : {p['travail'][:300]}")
+            return 0
+        if a.action == "board":
+            texte = " ".join([a.cible, *a.texte]).strip()
+            if texte:
+                o = missions.board_ajouter(org, a.espace, a.type, texte, auteur=getpass.getuser())
+                print(f"Objet {o['objet_id']} ajouté." + (f" Mission d'analyse {o['mission_id']} créée." if
+                                                          o["mission_id"] else ""))
+                return 0
+            for o in missions.board(org, a.espace):
+                print(f"{o['id']} [{o['type']}] {o['contenu'][:70]!r} → {o.get('mission_statut') or '—'}")
+                for art in o.get("artefacts", []):
+                    marque = " FACTICE" if art["factice"] else ""
+                    print(f"    ▸ {art['id']} ({art['fournisseur']}{marque}) {art['contenu'][:200]!r}")
+            return 0
+        if a.action == "creer":
+            texte = Path(a.fichier).read_text(encoding="utf-8") if a.fichier else " ".join(a.texte)
+            m = missions.creer_mission(
+                org, a.cible or "Analyser un document",
+                [{"type": "analyse_document", "niveau": a.niveau, "capacites": ["analyse"],
+                  "fournisseur": a.fournisseur, "travail": {"document": texte}}],
+                source="cli", demandeur=f"cli:{getpass.getuser()}")
+            print(missions.texte_mission(missions.mission(org, m["mission_id"])))
+            return 0
+        if a.action == "recuperer":
+            print(missions.recuperer())
+            return 0
+        refused = _human_only(f"« jarvis mission {a.action} »")
+        if refused is not None:
+            return refused
+        if a.action in ("approuver", "refuser"):
+            r = missions.decider_approbation(org, a.cible, a.action == "approuver", acteur=getpass.getuser(),
+                                             acteur_type="humain")
+            print(f"Approbation {a.cible} : {r}.")
+            return 0
+        if a.action == "annuler":
+            print(f"{missions.annuler_mission(org, a.cible, par=getpass.getuser())} tâche(s) annulée(s).")
+            return 0
+        if a.action == "connexion":
+            missions.declarer_connexion(org, a.cible, a.mode)
+            print(f"Connexion « {a.cible} » ({a.mode}) déclarée. Aucun identifiant n'est stocké par Jarvis.")
+            return 0
+        if a.action == "arret":
+            missions.arret_urgence(org, a.cible != "off", par=getpass.getuser())
+            print("Arrêt d'urgence " + ("levé." if a.cible == "off" else "posé : plus aucune tâche n'est confiée."))
+            return 0
+        if a.action == "enroler":
+            fournisseurs = [f for f in a.fournisseurs.split(",") if f]
+            rid, secret = missions.enroler_executant(org, a.cible or "local", capacites=["analyse"],
+                                                     fournisseurs=fournisseurs, profil="PERSONAL_LOCAL")
+            chemin = _identite_coureur()
+            chemin.parent.mkdir(parents=True, exist_ok=True)
+            fd = os.open(chemin, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+            with os.fdopen(fd, "w") as fh:
+                json.dump({"id": rid, "secret": secret}, fh)
+            print(f"Exécutant {rid} enrôlé ({', '.join(fournisseurs)}). Identité dans {chemin} (600).")
+            return 0
+        if a.action == "studio":
+            from . import studio_api, web
+            valeur = studio_api.jeton(nouveau=a.nouveau_jeton)
+            try:
+                httpd = studio_api.serveur(a.port)
+            except OSError as exc:
+                return _err(f"port {a.port} indisponible ({exc}) : jarvis mission studio --port 7719")
+            url = studio_api.lien(a.port, valeur)
+            print(f"Jarvis Studio : {url}\n(ce lien contient ton jeton d'accès : ne le partage pas). Ctrl+C pour arrêter.")
+            web._ouvrir(url)
+            try:
+                httpd.serve_forever()
+            except KeyboardInterrupt:
+                pass
+            finally:
+                httpd.arret.set()
+                httpd.server_close()
+            return 0
+        if a.action == "executer":
+            try:
+                ident = json.loads(_identite_coureur().read_text())
+            except (OSError, json.JSONDecodeError):
+                return _err("aucun exécutant enrôlé : jarvis mission enroler --fournisseurs claude")
+            disponibles = {**adaptateurs.par_defaut(), "factice": adaptateurs.Factice()}
+            cr = coureur.Coureur(coureur.TransportLocal(ident["id"], ident["secret"]), disponibles)
+            for i in range(a.fois):
+                missions.recuperer()
+                r = cr.tour()
+                print(json.dumps(r, ensure_ascii=False))
+                if r["etat"] in ("vide", "arret") and i + 1 < a.fois:
+                    time.sleep(a.attente)
+            return 0
+        return _err(f"action inconnue : {a.action}")
+    except missions.MissionError as exc:
+        return _err(str(exc))
+
+
 def cmd_memoire(a) -> int:
     from . import memoire
     try:
@@ -1989,6 +2107,27 @@ def build_parser() -> argparse.ArgumentParser:
     s.add_argument("--memoire-mo", type=int, default=0)
     s.add_argument("--agents-max", type=int, default=0)
     s.set_defaults(fn=cmd_executant)
+
+    s = sub.add_parser("mission", help="Jarvis Next (M1) : missions durables, Board, exécutant local")
+    s.add_argument("action", nargs="?", default="liste",
+                   choices=("liste", "voir", "evenements", "approbations", "board", "creer", "recuperer",
+                            "approuver", "refuser", "annuler", "connexion", "arret", "enroler", "executer",
+                            "studio"))
+    s.add_argument("cible", nargs="?", default="", help="identifiant, objectif, fournisseur ou on/off selon l'action")
+    s.add_argument("texte", nargs="*", help="texte à ajouter au Board ou document à analyser")
+    s.add_argument("--espace", default="accueil")
+    s.add_argument("--type", default="note")
+    s.add_argument("--niveau", default="L1", choices=("L0", "L1", "L2", "L3", "L4"))
+    s.add_argument("--fournisseur", default="auto")
+    s.add_argument("--fichier", default="")
+    s.add_argument("--mode", default="abonnement", choices=("abonnement", "api", "factice"))
+    s.add_argument("--fournisseurs", default="claude,codex")
+    s.add_argument("--apres", type=int, default=0)
+    s.add_argument("--fois", type=int, default=1)
+    s.add_argument("--attente", type=float, default=5.0)
+    s.add_argument("--port", type=int, default=7718, help="studio : port local (127.0.0.1)")
+    s.add_argument("--nouveau-jeton", action="store_true", help="studio : remplace le jeton et ferme les sessions")
+    s.set_defaults(fn=cmd_mission)
 
     s = sub.add_parser("execution", help=argparse.SUPPRESS)
     s.add_argument("action", choices=("lancer",))
