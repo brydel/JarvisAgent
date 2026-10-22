@@ -440,7 +440,8 @@ class Handler(BaseHTTPRequestHandler):
                 hauteur=float(corps.get("hauteur") or 0), priorite=str(corps.get("priorite") or ""),
                 meta=corps.get("meta") if isinstance(corps.get("meta"), dict) else {},
                 asset_id=corps.get("asset_id") or None, mission_id=corps.get("mission_id") or None,
-                analyser=bool(corps.get("analyser")) if "analyser" in corps else (type_ in ("note", "texte")))
+                # Board V2 : tout élément est contextualisé par le chef ; « analyser: false » (duplication, note vide) l'évite
+                analyser=False, contextualiser=corps.get("analyser") is not False)
             self._json(201, o)
         elif route == "/api/v2/objets/lot":
             mods = corps.get("modifications")
@@ -457,6 +458,16 @@ class Handler(BaseHTTPRequestHandler):
                 self._erreur(400, "« champs » : objet attendu")
                 return
             self._json(200, board.mettre_a_jour(org, m.group(1), champs, version=corps.get("version"), par="studio"))
+        elif m := re.match(r"^/api/v2/objets/(BO-[0-9a-f]{12})/contextualiser$", route):
+            self._json(201, {"mission_id": missions.lancer_contextualisation(org, m.group(1), auteur="studio:humain",
+                                                                             relance=True)})
+        elif m := re.match(r"^/api/v2/objets/(BO-[0-9a-f]{12})/propositions$", route):
+            index = corps.get("index")
+            if not isinstance(index, int) or isinstance(index, bool):
+                self._erreur(400, "« index » : entier attendu")
+                return
+            self._json(200, missions.decider_proposition(org, m.group(1), index, str(corps.get("decision") or ""),
+                                                         par="studio:humain"))
         elif m := re.match(r"^/api/v2/objets/(BO-[0-9a-f]{12})/commentaires$", route):
             self._json(201, {"id": board.commenter(org, m.group(1), str(corps.get("texte") or ""), auteur="studio:humain")})
         elif route == "/api/v2/liens":

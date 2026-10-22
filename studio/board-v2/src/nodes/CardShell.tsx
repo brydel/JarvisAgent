@@ -1,8 +1,8 @@
 import { memo, useEffect, useRef, useState, type ReactNode } from "react";
 import { Handle, NodeResizer, Position, useStore } from "@xyflow/react";
-import { ArrowUpToLine, Copy, FileText, Image as IconeImage, Link2, Lock, LockOpen, MoreHorizontal, Music, PanelRight, Target, Trash2, Users, Video, Folder } from "lucide-react";
+import { ArrowUpToLine, Copy, FileText, Image as IconeImage, Link2, Lock, LockOpen, MoreHorizontal, Music, PanelRight, Sparkles, Target, Trash2, Users, Video, Folder } from "lucide-react";
 import type { ObjetBoard, Priorite } from "../types";
-import { TAILLES, useActions } from "./contexte";
+import { CONTEXTUALISABLES, TAILLES, useActions } from "./contexte";
 
 interface Props {
   objet: ObjetBoard;
@@ -52,10 +52,42 @@ export const CardShell = memo(function CardShell({ objet, selected, classe, chil
           </div>
         )}
         {children}
+        <BandeauJarvis objet={objet} />
       </article>
     </>
   );
 });
+
+const TERMINAUX = new Set(["SUCCEEDED", "FAILED", "CANCELLED", "EXPIRED"]);
+
+/** État de la contextualisation par le chef, lu dans la base (jamais simulé). */
+export function etatJarvis(o: ObjetBoard): { etat: "analyse" | "attente" | "pret" | "echec"; texte: string } | null {
+  if (o.type === "mission" || o.type === "agents" || o.type === "dossier") return null;
+  const props = o.meta.propositions;
+  if (props) {
+    const ouvertes = props.filter((p) => p.statut === "proposee").length;
+    return { etat: "pret", texte: ouvertes ? `${ouvertes} action${ouvertes > 1 ? "s" : ""} proposée${ouvertes > 1 ? "s" : ""}` : "Contextualisé" };
+  }
+  const m = o.mission;
+  if (!m) return null;
+  const t = m.taches[0];
+  if (t && ["FAILED", "CANCELLED", "EXPIRED"].includes(t.statut)) return { etat: "echec", texte: "Analyse impossible" };
+  if (t && ["WAITING_PROVIDER", "WAITING_APPROVAL"].includes(t.statut)) return { etat: "attente", texte: "En attente d'un exécutant" };
+  if (t && TERMINAUX.has(t.statut)) return null;
+  return { etat: "analyse", texte: "Jarvis analyse…" };
+}
+
+function BandeauJarvis({ objet }: { objet: ObjetBoard }) {
+  const a = useActions();
+  const e = etatJarvis(objet);
+  if (!e) return null;
+  return (
+    <button type="button" className={`bandeau-jarvis nodrag ${e.etat}`} onClick={() => a.inspecter(objet.id)}
+      aria-label={`Jarvis : ${e.texte}. Ouvrir les détails`}>
+      <Sparkles size={14} aria-hidden /> <b>Jarvis</b> <span>{e.texte}</span>
+    </button>
+  );
+}
 
 export function BadgePriorite({ p }: { p: Priorite }) {
   return p ? <span className={`badge-p ${p}`}>{p}</span> : null;
@@ -97,6 +129,9 @@ export function MenuCarte({ objet }: { objet: ObjetBoard }) {
             ))}
           </div>
           <button role="menuitem" onClick={faire(() => a.inspecter(objet.id))}><PanelRight size={16} /> Détails</button>
+          {CONTEXTUALISABLES.has(objet.type) && (
+            <button role="menuitem" onClick={faire(() => a.contextualiser(objet.id))}><Sparkles size={16} /> Analyser avec Jarvis</button>
+          )}
           <button role="menuitem" onClick={faire(() => a.dupliquer([objet.id]))}><Copy size={16} /> Dupliquer</button>
           <button role="menuitem" onClick={faire(() => a.devant([objet.id]))}><ArrowUpToLine size={16} /> Amener devant</button>
           <button role="menuitem" onClick={faire(() => a.modifier(objet.id, { verrouille: !objet.verrouille }))}>

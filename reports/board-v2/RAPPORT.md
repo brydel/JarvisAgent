@@ -69,7 +69,7 @@ et Lighthouse non exécutés.
 ## Sécurité
 CSP V2 sans `eval` ; fichiers reconnus par leurs octets, servis en `nosniff` + `CSP: sandbox`, SVG refusé ; aperçus
 de liens sans SSRF (testé : boucle locale, réseaux privés, 169.254.169.254, IPv4 dans IPv6, rebinding, redirection) ;
-aucun contenu collé ne déclenche d'action L3/L4 ; un lien collé n'est pas analysé automatiquement.
+aucun contenu collé ne déclenche d'action L3/L4 ; tout élément déposé est contextualisé en L1 (voir ci-dessous).
 
 ## Revue « Web Interface Guidelines » (règles récupérées le 22/10/2026)
 Respecté : libellés ARIA, focus visible, `aria-live`, « … », chiffres tabulaires, mouvement réduit, animations
@@ -78,3 +78,18 @@ priorité, recherche, carte sélectionnée — `replaceState`, valeurs inconnues
 pour « Lancer une mission » (`<dialog>`, focus sur l'objectif puis rendu au bouton, Échap, Ctrl+Entrée, envoi
 indiqué, erreur dans le dialogue, rappel de la politique L1 ; capture `etat-dialogue-mission.png`). Non fait : lien
 d'évitement.
+
+## Chef Jarvis : contextualisation automatique
+Tout élément déposé (note, texte, lien, image, capture, PDF, document ; audio et vidéo par leurs métadonnées) crée
+une mission L1 « contextualiser » : le chef le résume, le relie aux missions en cours et aux autres cartes, et
+propose 1 à 4 actions. L'exécutant tourne dans le démon (verrou par identité : jamais en double avec
+`jarvis mission executer`).
+- Image / PDF : le fichier est COPIÉ seul dans un dossier temporaire ; Claude n'a que `Read(./**)` (une lecture
+  hors du dossier est refusée, vérifié en réel) ; Codex reçoit l'image par `--image`.
+- Lien : texte de la page récupéré avec les règles anti-SSRF de l'aperçu ; une page refusée (403…) devient une
+  note que le modèle doit signaler.
+- Propositions : bloc JSON validé et borné (5 au plus ; niveau inconnu → L3). « Lancer » crée une mission L1 de
+  PRÉPARATION reliée à l'élément ; une action L2/L3 n'est jamais exécutée, seul son livrable est préparé.
+- Résumé et propositions appartiennent au moteur : une écriture du client ne les efface pas.
+- Vérifié en réel (Claude Code, abonnement) sur une image, une note et un lien ; captures
+  `etat-chef-propositions.png`, `etat-chef-mission-preparee.png`.

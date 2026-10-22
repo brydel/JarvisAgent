@@ -191,6 +191,45 @@ def apercu(url: str, *, enregistrer_image=None, autoriser_prives: bool = False) 
     return sortie
 
 
+class _Texte(HTMLParser):
+    IGNORES = ("script", "style", "noscript", "svg", "template", "iframe", "head")
+
+    def __init__(self):
+        super().__init__(convert_charrefs=True)
+        self.morceaux: list[str] = []
+        self._ignore = 0
+
+    def handle_starttag(self, tag, attrs):
+        if tag in self.IGNORES:
+            self._ignore += 1
+
+    def handle_endtag(self, tag):
+        if tag in self.IGNORES and self._ignore:
+            self._ignore -= 1
+
+    def handle_data(self, data):
+        if not self._ignore and data.strip():
+            self.morceaux.append(data.strip())
+
+
+def texte_page(url: str, *, maximum: int = 15_000, autoriser_prives: bool = False) -> str:
+    """Titre + texte visible d'une page (mêmes règles anti-SSRF que l'aperçu). Lève ApercuRefuse."""
+    finale, mime, corps = recuperer(normaliser(url), maximum=HTML_MAX, accepter=("text/html", "application/xhtml+xml", "text/plain"),
+                                    autoriser_prives=autoriser_prives)
+    brut = corps.decode("utf-8", errors="replace")
+    if mime == "text/plain":
+        return _texte(brut, maximum)
+    meta, txt = _Meta(), _Texte()
+    for p in (meta, txt):
+        try:
+            p.feed(brut)
+        except Exception:  # noqa: BLE001 — HTML hostile ou cassé : on garde ce qui a été lu
+            pass
+    titre = _texte(meta.meta.get("og:title") or meta.titre, 200)
+    desc = _texte(meta.meta.get("og:description") or meta.meta.get("description"), 400)
+    return _texte(" ".join(x for x in (titre, desc, " ".join(txt.morceaux)) if x), maximum)
+
+
 def _taille_icone(s: str) -> int:
     m = re.match(r"(\d+)x\d+", s or "")
     return int(m.group(1)) if m else 16

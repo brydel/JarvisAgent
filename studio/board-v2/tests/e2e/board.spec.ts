@@ -285,6 +285,41 @@ test.describe("board réel", () => {
     await expect(agents).toHaveCount(0); // aucune carte d'agents inventée
   });
 
+  test("le chef contextualise un élément déposé et propose des actions, sans geste manuel", async ({ page }) => {
+    await ouvrir(page);
+    // dépôt tel que l'ingestion du Board le fait (aucune option « analyser ») : la contextualisation part seule
+    const id = await page.evaluate(async () => {
+      const r = await fetch("/api/v2/objets", { method: "POST", headers: { "Content-Type": "application/json", "X-Jarvis-Studio": "1" },
+        body: JSON.stringify({ type: "note", contenu: "Offre de stage DevOps à Lyon, candidature avant vendredi", x: 200, y: 160,
+          largeur: 408, hauteur: 320, meta: { titre: "Offre de stage DevOps" } }) });
+      return (await r.json()).objet_id as string;
+    });
+    const carte = page.locator(`.react-flow__node[data-id="${id}"]`);
+    // l'exécutant factice du serveur de test traite la mission : le bandeau passe à « 1 action proposée »
+    const bandeau = carte.getByRole("button", { name: /Jarvis : 1 action proposée/ });
+    await expect(bandeau).toBeVisible({ timeout: 20_000 });
+    await bandeau.click();
+    const section = page.getByRole("region", { name: "Actions proposées par Jarvis" });
+    await expect(section.getByText("Résumer l'élément (factice)")).toBeVisible();
+    await expect(section.locator(".resume-jarvis")).toContainText("note");
+    await page.screenshot({ path: path.join(RAPPORTS, "etat-chef-propositions.png") });
+    await section.getByRole("button", { name: "Lancer « Résumer l'élément (factice) »" }).click();
+    // la mission de préparation est posée à côté, reliée à l'élément, et sélectionnée
+    const mission = page.locator(".react-flow__node-mission").filter({ hasText: "Préparer : Résumer" });
+    await expect(mission).toBeVisible();
+    await expect(page.getByRole("complementary", { name: "Panneau contextuel" }).getByRole("heading", { name: /Préparer : Résumer/ })).toBeVisible();
+    await expect(page.getByText("proposé par Jarvis")).toBeVisible();
+    await expect(mission.getByText("Réussie")).toBeVisible({ timeout: 20_000 });
+    await page.screenshot({ path: path.join(RAPPORTS, "etat-chef-mission-preparee.png") });
+    // plus aucune proposition ouverte : le bandeau l'indique
+    await carte.getByRole("button", { name: "Jarvis : Contextualisé. Ouvrir les détails" }).click();
+    await expect(section.getByText("Lancée")).toBeVisible();
+    // relance humaine depuis le menu de la carte
+    await carte.getByRole("button", { name: "Actions de la carte" }).click();
+    await page.getByRole("menuitem", { name: "Analyser avec Jarvis" }).click();
+    await expect(page.getByText("Jarvis analyse l'élément…").first()).toBeVisible();
+  });
+
   test("filtres, priorité, recherche et carte sélectionnée reflétés dans l'URL et conservés au rechargement", async ({ page }) => {
     await ouvrir(page);
     const id = await ajouterNote(page);

@@ -1,6 +1,6 @@
 import { defineConfig } from "@playwright/test";
 
-// Serveur Studio ISOLÉ (état temporaire, port 7721, exécutant factice) : aucun test ne touche l'installation réelle.
+// Serveur Studio ISOLE : aucune donnee de test ne touche l'installation reelle.
 export default defineConfig({
   testDir: "tests/e2e",
   outputDir: "../../reports/board-v2/playwright-sorties",
@@ -12,6 +12,7 @@ export default defineConfig({
   reporter: [["list"], ["json", { outputFile: "../../reports/board-v2/playwright-resultats.json" }]],
   use: {
     baseURL: "http://localhost:7721",
+    channel: process.env.JARVIS_TEST_BROWSER_CHANNEL === "chrome" ? "chrome" : undefined,
     viewport: { width: 1672, height: 941 },
     deviceScaleFactor: 1,
     colorScheme: "dark",

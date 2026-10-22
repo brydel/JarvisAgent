@@ -69,6 +69,8 @@ export interface Source {
   commentaires(objetId: string): Promise<{ id: string; auteur: string; texte: string; cree: number }[]>;
   commenter(objetId: string, texte: string): Promise<void>;
   lancerMission(demande: DemandeMission, x: number, y: number): Promise<string>;
+  contextualiser(objetId: string): Promise<void>;
+  deciderProposition(objetId: string, index: number, decision: "lancer" | "ecarter"): Promise<{ carte_id?: string }>;
 }
 
 export interface Inspection {
@@ -146,6 +148,12 @@ export class SourceReelle implements Source {
   async lancerMission(demande: DemandeMission, x: number, y: number) {
     const r = await poster<{ objet_id: string }>("/api/v2/missions", { ...demande, x, y, espace: this.espace });
     return r.objet_id;
+  }
+  async contextualiser(objetId: string) {
+    await poster(`/api/v2/objets/${objetId}/contextualiser`, {});
+  }
+  deciderProposition(objetId: string, index: number, decision: "lancer" | "ecarter") {
+    return poster<{ carte_id?: string }>(`/api/v2/objets/${objetId}/propositions`, { index, decision });
   }
 }
 
@@ -257,6 +265,16 @@ export class SourceDemo implements Source {
     const l = this.commentairesDemo.get(objetId) ?? [];
     l.push({ id: this.id("CM"), auteur: "vous (démo)", texte, cree: Date.now() / 1000 });
     this.commentairesDemo.set(objetId, l);
+  }
+  async contextualiser(objetId: string) {
+    // démo : aucun modèle n'est appelé ; la carte le dit
+    const o = this.etat.objets.find((x) => x.id === objetId);
+    if (o) o.meta = { ...o.meta, jarvis_resume: "Mode démo : aucune IA n'a lu cet élément.", propositions: [] };
+  }
+  async deciderProposition(objetId: string, index: number, decision: "lancer" | "ecarter") {
+    const p = this.etat.objets.find((x) => x.id === objetId)?.meta.propositions?.[index];
+    if (p) p.statut = decision === "lancer" ? "lancee" : "ecartee";
+    return {};
   }
   async lancerMission(demande: DemandeMission, x: number, y: number) {
     return this.creer({ type: "note", contenu: `**Mission (démo, non lancée)** : ${demande.objectif}\n\n${demande.contexte}`.trim(),

@@ -16,7 +16,7 @@ concurrency:
 
 jobs:
   verify:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
@@ -38,16 +38,18 @@ jobs:
         run: |
           python -m compileall -q lib/jarvis services
           bash -n install.sh bin/jarvis
-      - name: Tests du moteur, du Studio et de la passerelle sans inference
+      - name: Tests du moteur, du Board, de l'atelier et de la passerelle
         run: |
           python -m unittest discover -s tests -p 'test_missions.py' -v
+          python -m unittest discover -s tests -p 'test_board_v2.py' -v
           python -m unittest discover -s tests -p 'test_studio*.py' -v
           python -m unittest discover -s services/model_bridge/tests -v
-      - name: Installer Chromium pour les parcours de test isoles
-        working-directory: studio/board-v2
-        run: npx playwright install --with-deps chromium
+      - name: Verifier le navigateur fourni par l'image GitHub
+        run: google-chrome --version
       - name: Parcours produit et captures bureau/mobile
         working-directory: studio/board-v2
+        env:
+          JARVIS_TEST_BROWSER_CHANNEL: chrome
         run: npx playwright test product.spec.ts
       - name: Conserver les preuves visuelles et les resultats
         if: always()

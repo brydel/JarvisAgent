@@ -62,6 +62,8 @@ export function Board({ source, charge }: Props) {
   const [dialogueMission, setDialogueMission] = useState(false);
   const [magnetisme, setMagnetisme] = useState(false);
   const [selection, setSelection] = useState<string[]>([]);
+  /** carte à sélectionner dès qu'elle existe (créée côté serveur, pas encore dans les nœuds) */
+  const aSelectionner = useRef<string | null>(null);
   const [saisieUrl, setSaisieUrl] = useState(false);
   const [toasts, setToasts] = useState<Toast[]>([]);
   const [depot, setDepot] = useState(false);
@@ -110,6 +112,7 @@ export function Board({ source, charge }: Props) {
   useEffect(() => {
     if (source.demo) return;
     const es = new EventSource("/api/flux?apres=0");
+    const ouvertA = Date.now() / 1000 - 2;  // le flux rejoue l'historique : seuls les événements récents font un toast
     let premier = true;
     es.onopen = () => {
       if (!premier) rechargerBientot();
@@ -119,12 +122,16 @@ export function Board({ source, charge }: Props) {
       const e = JSON.parse(m.data) as Evenement;
       setEvenements((l) => (l.length > 300 ? [...l.slice(-200), e] : [...l, e]));
       if (e.type !== "board_maj" || !e.donnees.par || e.donnees.par !== "studio") rechargerBientot();
+      if (e.type === "board_propositions" && e.ts >= ouvertA) {
+        const n = Number(e.donnees.n ?? 0);
+        toast(`Jarvis a contextualisé un élément : ${n} action${n > 1 ? "s" : ""} proposée${n > 1 ? "s" : ""}`);
+      }
     };
     return () => {
       es.close();
       window.clearTimeout(rechargement.current);
     };
-  }, [source, rechargerBientot]);
+  }, [source, rechargerBientot, toast]);
 
   /* ------------------------------------------------------------ nœuds et liens dérivés ----------------- */
   const visibleSelon = useCallback((o: ObjetBoard) => {
@@ -145,7 +152,11 @@ export function Board({ source, charge }: Props) {
     setNoeuds((prec) => {
       const parId = new Map(prec.map((n) => [n.id, n]));
       return etat.objets.map((o) => {
-        const n = versNoeud(o, source.demo, parId.get(o.id));
+        let n = versNoeud(o, source.demo, parId.get(o.id));
+        if (aSelectionner.current === o.id) {
+          aSelectionner.current = null;
+          if (!n.selected) n = { ...n, selected: true };
+        }
         const cache = !visibleSelon(o);
         return n.hidden === cache ? n : { ...n, hidden: cache };
       });
@@ -240,6 +251,7 @@ export function Board({ source, charge }: Props) {
     priorite: (id, p: Priorite) => modifier([{ id, champs: { priorite: p } }], "Priorité", [{ id, champs: { priorite: objet(id)?.priorite ?? "" } }]),
     supprimer, dupliquer, devant,
     inspecter: (id) => {
+      aSelectionner.current = id;
       rf.setNodes((ns) => ns.map((n) => ({ ...n, selected: n.id === id })));
       setSelection([id]);
     },
@@ -251,7 +263,13 @@ export function Board({ source, charge }: Props) {
         "Sortie du dossier", [{ id, champs: { parent_id: o?.parent_id ?? null } }]);
     },
     enfants: (dossierId) => (etatRef.current?.objets ?? []).filter((o) => o.parent_id === dossierId),
-  }), [objet, modifier, supprimer, dupliquer, devant, rf]);
+    contextualiser: (id) => {
+      source.contextualiser(id).then(() => {
+        toast(source.demo ? "Mode démo : aucune IA n'est appelée" : "Jarvis analyse l'élément…");
+        charger();
+      }).catch((x: Error) => toast(x.message, { erreur: true }));
+    },
+  }), [objet, modifier, supprimer, dupliquer, devant, rf, source, toast, charger]);
 
   /* ------------------------------------------------------------ interactions du canevas ---------------- */
   // mémoïsé (exigé par React Flow) et sans nouvelle valeur si la sélection n'a pas changé : sinon boucle de rendu
@@ -366,11 +384,11 @@ export function Board({ source, charge }: Props) {
       const p = cascade(base.x, base.y, i++);
       try {
         if (e.sorte === "texte") {
-          await creer({ type: "note", contenu: e.texte, ...p, largeur: 408, hauteur: 320, meta: { titre: e.texte.split("\n")[0]?.slice(0, 60) || "Note" }, analyser: false });
+          await creer({ type: "note", contenu: e.texte, ...p, largeur: 408, hauteur: 320, meta: { titre: e.texte.split("\n")[0]?.slice(0, 60) || "Note" } });
         } else if (e.sorte === "url") {
           let hote = e.url;
           try { hote = new URL(e.url).hostname; } catch { /* adresse brute */ }
-          const id = await creer({ type: "lien", contenu: e.url, ...p, largeur: 434, hauteur: 356, meta: { url: e.url, hote, titre: hote }, analyser: false });
+          const id = await creer({ type: "lien", contenu: e.url, ...p, largeur: 434, hauteur: 356, meta: { url: e.url, hote, titre: hote } });
           await charger();
           source.apercu(e.url).then(async (a) => {
             await source.modifier([{ id, champs: { meta: { url: a.url, hote: a.hote, titre: a.titre || a.hote, description: a.description, site: a.site,
@@ -390,7 +408,7 @@ export function Board({ source, charge }: Props) {
           const [l, h] = TAILLES[famille]?.defaut ?? [400, 300];
           const ratio = a.meta.largeur && a.meta.hauteur ? a.meta.hauteur / a.meta.largeur : 0;
           await creer({ type: famille, ...p, largeur: l, hauteur: famille === "image" && ratio ? Math.round(l * ratio) + 72 : h,
-            asset_id: a.id, meta: { titre: e.fichier.name.replace(/\.[^.]+$/, "") }, analyser: false });
+            asset_id: a.id, meta: { titre: e.fichier.name.replace(/\.[^.]+$/, "") } });
         }
       } catch (x) {
         toast(x instanceof Error ? x.message : "ajout impossible", { erreur: true });
@@ -634,7 +652,19 @@ export function Board({ source, charge }: Props) {
           </section>
           <Panneau source={source} objet={selectionne} objets={etat?.objets ?? []} evenements={evenements} approbations={approbations} tick={tick}
             priorite={actions.priorite} modifierMeta={(o, meta) => modifier([{ id: o.id, champs: { meta } }], "Étiquettes", [{ id: o.id, champs: { meta: o.meta } }])}
-            decider={async (id, accord) => { await source.decider(id, accord); charger(); }} />
+            decider={async (id, accord) => { await source.decider(id, accord); charger(); }}
+            contextualiser={actions.contextualiser}
+            deciderProposition={async (o, i, d) => {
+              try {
+                const r = await source.deciderProposition(o.id, i, d);
+                toast(d === "ecarter" ? "Proposition écartée" : source.demo ? "Mode démo : aucune mission réelle n'est lancée"
+                  : "Mission de préparation créée, reliée à l'élément");
+                await charger();
+                if (r.carte_id) actions.inspecter(r.carte_id);
+              } catch (x) {
+                toast(x instanceof Error ? x.message : "décision refusée", { erreur: true });
+              }
+            }} />
         </div>
       </div>
       <DialogueMission ouvert={dialogueMission} demo={source.demo} fermer={() => setDialogueMission(false)} lancer={lancerMission} />

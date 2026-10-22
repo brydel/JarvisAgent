@@ -17,10 +17,47 @@ from __future__ import annotations
 
 import json
 import os
+import shutil
+import tempfile
 import threading
+from pathlib import Path
 from typing import Callable
 
 from . import adaptateurs as ad, config, missions, pauses, protocole_executant as proto
+
+EXTENSIONS = {"image/png": ".png", "image/jpeg": ".jpg", "image/gif": ".gif", "image/webp": ".webp",
+              "application/pdf": ".pdf"}
+
+
+def preparer_pieces(env: dict, dossier: Path) -> dict:
+    """Pièces d'une contextualisation, préparées par l'exécutant LOCAL (même machine que le Board) : copie du
+    fichier seul dans `dossier`, texte de la page d'un lien (règles anti-SSRF). Ne lève jamais : une pièce
+    manquante devient une note que le modèle doit signaler."""
+    travail, pieces = env["travail"], {"dossier": str(dossier), "fichier": None, "image": False, "page": "", "note": ""}
+    if travail.get("type") != "contextualiser":
+        return {}
+    try:
+        if travail.get("asset_id"):
+            from . import board
+            chemin, a = board.fichier(env["tenant_id"], travail["asset_id"])
+            ext = EXTENSIONS.get(a["mime"])
+            if ext:
+                shutil.copyfile(chemin, dossier / f"piece{ext}")
+                pieces.update(fichier=f"piece{ext}", image=a["mime"].startswith("image/"))
+            else:
+                m = a.get("meta") or {}
+                pieces["note"] = (f"Fichier {a['mime']} « {a['nom']} », {a['taille']} octets"
+                                  + (f", durée {m['duree']:.0f} s" if isinstance(m.get('duree'), (int, float)) else "")
+                                  + " : contenu non transmis (seuls les métadonnées sont connues).")
+        elif travail.get("url"):
+            from . import apercus
+            try:
+                pieces["page"] = apercus.texte_page(travail["url"])
+            except apercus.ApercuRefuse as exc:
+                pieces["note"] = f"Page non lisible : {exc}. Analyse seulement l'adresse et ce que l'utilisateur a écrit."
+    except (missions.MissionError, OSError) as exc:
+        pieces["note"] = f"Pièce indisponible : {exc}"
+    return pieces
 
 
 class TransportLocal:
@@ -55,6 +92,27 @@ def _ecrire_atomique(chemin, data) -> None:
         fh.flush()
         os.fsync(fh.fileno())
     os.replace(tmp, chemin)
+
+
+def identite() -> dict | None:
+    """Identité de l'exécutant enrôlé sur ce poste (jarvis mission enroler), ou None."""
+    try:
+        return json.loads((_dossier() / "identite.json").read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return None
+
+
+def prendre_verrou(executant_id: str):
+    """Un seul processus par identité d'exécutant (démon OU `jarvis mission executer`) : verrou exclusif non
+    bloquant, tenu tant que l'objet renvoyé reste ouvert. None si un autre processus le tient déjà."""
+    import fcntl
+    fh = open(_dossier() / f"{executant_id}.lock", "w")  # noqa: SIM115 — ouvert pour la durée du processus
+    try:
+        fcntl.flock(fh, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except OSError:
+        fh.close()
+        return None
+    return fh
 
 
 def arret_local() -> str:
@@ -139,7 +197,9 @@ class Coureur:
                           "erreur": f"adaptateur « {env['fournisseur']} » absent de cet exécutant", "factice": False}
             else:
                 try:
-                    sortie = adaptateur.executer(env)
+                    with tempfile.TemporaryDirectory(prefix="jarvis-pieces-") as d:
+                        pieces = preparer_pieces(env, Path(d))
+                        sortie = adaptateur.executer({**env, "pieces": pieces} if pieces else env)
                 except ValueError as exc:
                     sortie = {"issue": "echec", "contenu": "", "erreur": str(exc), "factice": False}
         finally:

@@ -2,7 +2,7 @@
  "environnement": {
   "navigateur": "Chromium 156.0.8078.4 (Playwright, sans GPU, WSL2)",
   "machine": "ASUS — Intel Core i9-13900H, 20 fils (WSL2)",
-  "date": "2026-10-22T18:23:47.152Z",
+  "date": "2026-10-22T19:18:03.573Z",
   "viewport": "1672×941",
   "note": "Chiffres pessimistes : rendu logiciel. Chrome/Edge Windows avec GPU sur l'ASUS non mesuré par ce test."
  },
@@ -10,87 +10,87 @@
   "cartes_total": 9,
   "noeuds_rendus_vue_ensemble": 9,
   "panoramique": {
-   "images": 129,
-   "mediane_ms": 16.7,
-   "p95_ms": 33.3,
-   "max_ms": 50,
-   "ips_moyen": 53,
-   "images_longues_50ms": 0
-  },
-  "zoom_molette": {
-   "images": 84,
+   "images": 142,
    "mediane_ms": 16.7,
    "p95_ms": 33.4,
+   "max_ms": 50.1,
+   "ips_moyen": 48,
+   "images_longues_50ms": 1
+  },
+  "zoom_molette": {
+   "images": 180,
+   "mediane_ms": 16.7,
+   "p95_ms": 33.3,
    "max_ms": 33.4,
    "ips_moyen": 53,
    "images_longues_50ms": 0
   },
   "glisser_carte": {
-   "images": 84,
+   "images": 77,
    "mediane_ms": 16.7,
    "p95_ms": 33.4,
    "max_ms": 33.4,
-   "ips_moyen": 47,
+   "ips_moyen": 52,
    "images_longues_50ms": 0
   },
-  "clic_ajouter_vers_carte_ms": 114
+  "clic_ajouter_vers_carte_ms": 83
  },
  "charge_100": {
   "cartes_total": 109,
   "noeuds_rendus_vue_ensemble": 109,
   "panoramique": {
-   "images": 186,
-   "mediane_ms": 16.7,
-   "p95_ms": 16.7,
-   "max_ms": 33.4,
-   "ips_moyen": 59,
-   "images_longues_50ms": 0
-  },
-  "zoom_molette": {
-   "images": 99,
-   "mediane_ms": 16.7,
-   "p95_ms": 16.8,
-   "max_ms": 33.4,
-   "ips_moyen": 59,
-   "images_longues_50ms": 0
-  },
-  "glisser_carte": {
-   "images": 131,
-   "mediane_ms": 16.7,
-   "p95_ms": 33.3,
-   "max_ms": 33.4,
-   "ips_moyen": 57,
-   "images_longues_50ms": 0
-  },
-  "clic_ajouter_vers_carte_ms": 116
- },
- "charge_250": {
-  "cartes_total": 259,
-  "noeuds_rendus_vue_ensemble": 209,
-  "panoramique": {
-   "images": 256,
-   "mediane_ms": 16.7,
-   "p95_ms": 16.8,
-   "max_ms": 33.4,
-   "ips_moyen": 59,
-   "images_longues_50ms": 0
-  },
-  "zoom_molette": {
-   "images": 119,
-   "mediane_ms": 16.7,
-   "p95_ms": 16.8,
-   "max_ms": 49.9,
-   "ips_moyen": 57,
-   "images_longues_50ms": 0
-  },
-  "glisser_carte": {
-   "images": 133,
+   "images": 172,
    "mediane_ms": 16.7,
    "p95_ms": 16.8,
    "max_ms": 33.4,
    "ips_moyen": 58,
    "images_longues_50ms": 0
   },
-  "clic_ajouter_vers_carte_ms": 170
+  "zoom_molette": {
+   "images": 220,
+   "mediane_ms": 16.7,
+   "p95_ms": 16.7,
+   "max_ms": 33.3,
+   "ips_moyen": 59,
+   "images_longues_50ms": 0
+  },
+  "glisser_carte": {
+   "images": 130,
+   "mediane_ms": 16.7,
+   "p95_ms": 33.3,
+   "max_ms": 33.4,
+   "ips_moyen": 56,
+   "images_longues_50ms": 0
+  },
+  "clic_ajouter_vers_carte_ms": 159
+ },
+ "charge_250": {
+  "cartes_total": 259,
+  "noeuds_rendus_vue_ensemble": 209,
+  "panoramique": {
+   "images": 243,
+   "mediane_ms": 16.7,
+   "p95_ms": 16.8,
+   "max_ms": 50,
+   "ips_moyen": 59,
+   "images_longues_50ms": 0
+  },
+  "zoom_molette": {
+   "images": 120,
+   "mediane_ms": 16.7,
+   "p95_ms": 16.8,
+   "max_ms": 50,
+   "ips_moyen": 58,
+   "images_longues_50ms": 0
+  },
+  "glisser_carte": {
+   "images": 122,
+   "mediane_ms": 16.7,
+   "p95_ms": 16.8,
+   "max_ms": 33.4,
+   "ips_moyen": 60,
+   "images_longues_50ms": 0
+  },
+  "clic_ajouter_vers_carte_ms": 152
  }
 }
