@@ -756,7 +756,40 @@ def board(tenant_id: str, espace: str) -> list[dict]:
         c.close()
 
 
+def board_deplacer(tenant_id: str, objet_id: str, x: float, y: float, *, par: str, now: float | None = None) -> None:
+    """Position d'un objet sur le canevas (bornée) ; l'événement permet aux autres onglets de suivre."""
+    now = now or time.time()
+    x, y = max(-100_000.0, min(100_000.0, float(x))), max(-100_000.0, min(100_000.0, float(y)))
+    with transaction() as c:
+        n = c.execute("UPDATE board_objets SET x=?, y=? WHERE id=? AND tenant_id=?", (x, y, objet_id, tenant_id)).rowcount
+        if not n:
+            raise MissionError("inconnue", f"objet inconnu : {objet_id}")
+        _evenement(c, tenant_id, "board_deplace", now=now, objet_id=objet_id, x=x, y=y, par=par)
+
+
 # --- Lecture (toujours filtrée par tenant) -----------------------------------------------
+
+def etat_execution(tenant_id: str, now: float | None = None) -> dict:
+    """Exécutants (sans secret) et connexions fournisseurs du tenant, pour le moniteur du Studio."""
+    now = now or time.time()
+    c = _connecter()
+    try:
+        r = _reglages(c, tenant_id)
+        executants = [{"id": e["id"], "nom": e["nom"], "profil": e["profil"], "revoque": bool(e["revoque"]),
+                       "fournisseurs": json.loads(e["fournisseurs"]), "capacites": json.loads(e["capacites"]),
+                       "dernier_signe": e["dernier_signe"],
+                       "actif": bool(e["dernier_signe"] and now - e["dernier_signe"] < 3 * BAIL_S)}
+                      for e in c.execute("SELECT * FROM executants WHERE tenant_id=? ORDER BY cree", (tenant_id,))]
+        connexions = [{"fournisseur": x["fournisseur"], "mode_auth": x["mode_auth"], "payant": bool(x["payant"]),
+                       "disponible": x["indisponible_jusqua"] <= now, "raison": x["raison"]}
+                      for x in c.execute("SELECT * FROM connexions WHERE tenant_id=? AND active=1", (tenant_id,))]
+        file = {s: n for s, n in c.execute("SELECT statut, COUNT(*) FROM taches WHERE tenant_id=? GROUP BY statut",
+                                           (tenant_id,))}
+        return {"executants": executants, "connexions": connexions, "taches": file,
+                "arret_urgence": bool(r["arret_urgence"]),
+                "budget_inference_centimes": r["budget_inference_centimes"]}
+    finally:
+        c.close()
 
 def mission(tenant_id: str, mission_id: str) -> dict:
     c = _connecter()

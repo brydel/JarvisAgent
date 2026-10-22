@@ -1844,6 +1844,24 @@ def cmd_mission(a) -> int:
                 json.dump({"id": rid, "secret": secret}, fh)
             print(f"Exécutant {rid} enrôlé ({', '.join(fournisseurs)}). Identité dans {chemin} (600).")
             return 0
+        if a.action == "studio":
+            from . import studio_api, web
+            valeur = studio_api.jeton(nouveau=a.nouveau_jeton)
+            try:
+                httpd = studio_api.serveur(a.port)
+            except OSError as exc:
+                return _err(f"port {a.port} indisponible ({exc}) : jarvis mission studio --port 7719")
+            url = studio_api.lien(a.port, valeur)
+            print(f"Jarvis Studio : {url}\n(ce lien contient ton jeton d'accès : ne le partage pas). Ctrl+C pour arrêter.")
+            web._ouvrir(url)
+            try:
+                httpd.serve_forever()
+            except KeyboardInterrupt:
+                pass
+            finally:
+                httpd.arret.set()
+                httpd.server_close()
+            return 0
         if a.action == "executer":
             try:
                 ident = json.loads(_identite_coureur().read_text())
@@ -2093,7 +2111,8 @@ def build_parser() -> argparse.ArgumentParser:
     s = sub.add_parser("mission", help="Jarvis Next (M1) : missions durables, Board, exécutant local")
     s.add_argument("action", nargs="?", default="liste",
                    choices=("liste", "voir", "evenements", "approbations", "board", "creer", "recuperer",
-                            "approuver", "refuser", "annuler", "connexion", "arret", "enroler", "executer"))
+                            "approuver", "refuser", "annuler", "connexion", "arret", "enroler", "executer",
+                            "studio"))
     s.add_argument("cible", nargs="?", default="", help="identifiant, objectif, fournisseur ou on/off selon l'action")
     s.add_argument("texte", nargs="*", help="texte à ajouter au Board ou document à analyser")
     s.add_argument("--espace", default="accueil")
@@ -2106,6 +2125,8 @@ def build_parser() -> argparse.ArgumentParser:
     s.add_argument("--apres", type=int, default=0)
     s.add_argument("--fois", type=int, default=1)
     s.add_argument("--attente", type=float, default=5.0)
+    s.add_argument("--port", type=int, default=7718, help="studio : port local (127.0.0.1)")
+    s.add_argument("--nouveau-jeton", action="store_true", help="studio : remplace le jeton et ferme les sessions")
     s.set_defaults(fn=cmd_mission)
 
     s = sub.add_parser("execution", help=argparse.SUPPRESS)

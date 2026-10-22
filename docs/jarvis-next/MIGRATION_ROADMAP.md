@@ -4,7 +4,7 @@
 | --- | --- | --- | --- |
 | M0 Audit et baseline | audit, carte, menaces, ADR, baseline | comportement compris, base de non-régression | **fait** (152 tests verts avant changement) |
 | M1 Plan de contrôle local durable | machine d'états, journal d'événements, file durable, baux, idempotence, politique minimale, adaptateurs, exécutant local, CLI | une mission survit à la panne de l'exécutant et au redémarrage sans corrompre son état | **atteint sur SQLite** (tests + vérification réelle Claude) ; PostgreSQL : reporté à M2 (D-2) |
-| M2 Studio + Board | service web, authentification, espace par tenant, Board persistant, flux d'événements, artefacts ; PostgreSQL + RLS | un utilisateur authentifié crée une mission et suit une vraie tâche locale depuis le navigateur | à faire |
+| M2 Studio + Board | service web, authentification, espace par tenant, Board persistant, flux d'événements, artefacts ; PostgreSQL + RLS | un utilisateur authentifié crée une mission et suit une vraie tâche locale depuis le navigateur | **critère atteint en local** (SQLite, un utilisateur, jeton) ; restent comptes/membres, PostgreSQL + RLS, inspecteur de mission |
 | M3 Exécutants hybrides | enrôlement par code d'appairage, transport sortant authentifié, baux réseau, transfert d'artefacts | une mission s'exécute sur un exécutant autorisé sans accès illimité à l'hôte | à faire |
 | M4 Fournisseurs et agents | compilateur de missions, registre d'agents, délégation, dépendances, recherche sourcée, Codex réparé, tâches L2 via admission/workmux | une tâche compatible traverse un changement de fournisseur sans perte ni doublon | à faire (bascule de fournisseur déjà VERIFIED au niveau moteur) |
 | M5 Connaissance | ingestion, provenance, mémoire de projet, recherche par tenant, évaluation | citer une décision antérieure sans fuite inter-tenant | à faire |
@@ -20,9 +20,15 @@
 - Retour arrière : revenir au commit précédent et supprimer `~/.local/state/jarvis/missions.db*` et
   `~/.local/state/jarvis/coureur/`.
 
-## Prochaine tâche concrète (M2, première partie)
+## M2, première partie — faite (VERIFIED)
 
-Service `studio/` séparé : API HTTP locale (authentifiée, 127.0.0.1) au-dessus de `missions.py` — `POST /board`,
-`GET /board`, `GET /missions/:id`, `GET /evenements?apres=` (SSE), `POST /approbations/:id` — puis la page Board.
-Dépendances : D-2 (PostgreSQL ou SQLite d'abord), D-4 (canevas). Acceptation : depuis le navigateur, une note
-ajoutée produit un artefact réel visible sans recharger, et un rechargement montre le même état.
+`lib/jarvis/studio_api.py` + page Board (`studio_board.html/.css/.js`), lancés par `jarvis mission studio` : API
+locale authentifiée au-dessus de `missions.py`, flux SSE, approbations, déplacement des cartes, moniteur
+d'exécution. Acceptation constatée dans un navigateur : une note ajoutée produit un artefact réel de Claude visible
+sans recharger, et un rechargement montre le même état. Choix techniques : ADR-0005.
+
+## Prochaine tâche concrète (M2, seconde partie)
+
+Inspecteur de mission (tâches, tentatives, décisions de politique, artefacts) et graphe de mission dans le Studio ;
+puis, selon D-2, PostgreSQL + RLS avec comptes et membres. Acceptation : depuis le Studio, ouvrir une mission et voir
+chaque tentative avec son bail, son fournisseur, sa revue et la raison de chaque transition.

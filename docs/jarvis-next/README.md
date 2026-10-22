@@ -35,7 +35,7 @@ Branche : `claude/jarvis-next-m1`, empilée sur `claude/vague-3-leadership` (pil
 | [THREAT_MODEL.md](THREAT_MODEL.md) | menaces, mesures, résidu | PROPOSED |
 | [AGENT_HIERARCHY.md](AGENT_HIERARCHY.md) | organisation dynamique, définitions versionnées | PROPOSED (bornes de délégation : VERIFIED) |
 | [MEMORY_ARCHITECTURE.md](MEMORY_ARCHITECTURE.md) | mémoires, récupération sans 3ᵉ fournisseur | PROPOSED |
-| [STUDIO_PRODUCT_SPEC.md](STUDIO_PRODUCT_SPEC.md) | vues du Studio, choix techniques à évaluer | PROPOSED |
+| [STUDIO_PRODUCT_SPEC.md](STUDIO_PRODUCT_SPEC.md) | vues du Studio, choix techniques à évaluer | Board local : VERIFIED ; reste PROPOSED |
 | [BOARD_VERTICAL_SLICE.md](BOARD_VERTICAL_SLICE.md) | la tranche verticale, critère par critère | voir le tableau du document |
 | [OBSERVABILITY.md](OBSERVABILITY.md) | corrélation, événements, audit séparé | PROPOSED (journal d'événements : VERIFIED) |
 | [MIGRATION_ROADMAP.md](MIGRATION_ROADMAP.md) | M0 → M7, critères de sortie, compatibilité | PROPOSED |
