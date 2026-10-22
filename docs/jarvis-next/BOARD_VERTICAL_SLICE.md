@@ -28,7 +28,7 @@ jarvis mission evenements --apres 0                    # le journal que le Studi
 | 6. Tâche ordonnancée durablement | VERIFIED | `MISSION_ENGINE.md` |
 | 7. Exécutant authentifié | VERIFIED (secret haché, révocation) | `test_secret_invalide_et_revocation` |
 | 8. Vrai adaptateur Claude Code | **VERIFIED en réel** le 21/10/2026 : 13,1 s, revue acceptée | `outils/verifier_mission_reelle.py` |
-| Codex | BLOCKED (CLI cassé dans WSL) | `OPEN_DECISIONS.md` D-1 |
+| Codex | **VERIFIED en réel** le 21/10/2026 : 18,7 s, revue acceptée, injection non suivie, aucune session Codex enregistrée ni agent workmux créé | `outils/verifier_mission_reelle.py --fournisseur codex` |
 | 9. Événements jusqu'au Studio | VERIFIED : flux SSE `/api/flux`, reprise par `Last-Event-ID` ; transitions affichées en direct dans le navigateur | `test_flux_sse_reprend_au_dernier_numero` |
 | 10–11. Artefact enregistré et affiché au Board | VERIFIED (CLI) | `board()` renvoie artefacts, revue, marque factice |
 | 12. Rafraîchir préserve l'état | VERIFIED (aucun état hors base) | idem |

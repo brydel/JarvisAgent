@@ -5,10 +5,12 @@ missions ne connaît aucun format propre à un fournisseur. Vérifié sur l'ASUS
 
 | Capacité | Claude Code (`claude -p`) | Codex (`codex exec`) | Factice |
 | --- | --- | --- | --- |
-| Version observée | 2.1.307 | **inutilisable dans WSL** (binaire Windows, dépendance Linux absente) | — |
-| Analyse de document sans outils | **VERIFIED en réel** (`--tools ""`, dossier vide, sans MCP ni hooks) | IMPLEMENTED (`--sandbox read-only`, `--output-last-message`), non vérifié | VERIFIED |
-| Clés payantes retirées en mode abonnement | VERIFIED (faux CLI) | IMPLEMENTED | sans objet |
-| Quota / indisponibilité normalisés | VERIFIED (faux CLI : « usage limit » → `fournisseur_indisponible`) | IMPLEMENTED | VERIFIED |
+| Version observée | 2.1.307 (`~/.local/bin/claude`) | 0.162.1 (`~/.npm-global/bin/codex`, connexion ChatGPT) | — |
+| Binaire Windows (`/mnt/…`) ignoré | VERIFIED (`binaire_linux`) | VERIFIED (`binaire_linux`) | sans objet |
+| Analyse de document sans outils | **VERIFIED en réel** (`--tools ""`, dossier vide, sans MCP ni hooks) | **VERIFIED en réel** le 21/10/2026, 18,7 s (`--sandbox read-only`, `--ignore-user-config`, `--disable hooks`, `--ephemeral`, dossier vide) | VERIFIED |
+| Aucun effet de bord | sessions non enregistrées | VERIFIED : 0 session Codex ajoutée, 0 agent workmux créé (le hook `SessionStart` de l'utilisateur ferait `workmux register-agent`) | sans objet |
+| Clés payantes retirées en mode abonnement | VERIFIED (faux CLI) | VERIFIED (faux CLI) | sans objet |
+| Quota / indisponibilité normalisés | VERIFIED (faux CLI : « usage limit » → `fournisseur_indisponible`) | IMPLEMENTED (même règle), non provoqué en réel | VERIFIED |
 | Annulation | par fin du bail (le sous-processus va au bout de son délai) | idem | idem |
 | Reprise de session | non utilisée (CURRENT : `workmux open --continue` pour les agents de code) | non utilisée | non |
 | Flux d'événements en direct | non utilisé en M1 (`stream-json` possible) | app-server (M4) | non |

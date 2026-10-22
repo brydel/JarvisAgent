@@ -14,7 +14,7 @@ et le chef de l'installation réelle y tournent (session tmux `jarvis`, processu
 | Base de Jarvis Next | sommet de la pile, `origin/claude/vague-3-leadership` (c34ba95) : c'est le code le plus récent, et Jarvis Next réutilise son bail, ses exécutants et son stockage |
 | Règles | `AGENTS.md` = `CLAUDE.md` (identiques, vérifié par `diff`) : français, bash idempotent, **Python bibliothèque standard uniquement (≥ 3.11)**, dépôt public sans secret, ne jamais fusionner dans `main` |
 | Outils sur le poste | Python 3.14.4, tmux, workmux, gh, Claude Code 2.1.307, Node 22 ; **pas** de shellcheck, **pas** de PostgreSQL, Docker Desktop arrêté |
-| Codex dans WSL | **cassé** : `codex` résout vers l'installation Windows (`/mnt/c/nvm4w/nodejs/codex`) qui échoue avec « Missing optional dependency @openai/codex-linux-x64 » — BLOCKED, voir `OPEN_DECISIONS.md` |
+| Codex dans WSL | constaté d'abord comme cassé (« Missing optional dependency @openai/codex-linux-x64 ») ; diagnostic : le Codex Linux (`~/.npm-global/bin/codex`, 0.162.1) est installé et connecté, mais `~/.bashrc` n'ajoute ce dossier au PATH que pour les shells interactifs : sans terminal, c'est le Codex Windows (`/mnt/c/nvm4w/nodejs/codex`) qui était trouvé. Corrigé dans l'adaptateur, vérifié en réel (voir `PROVIDER_COMPATIBILITY.md`) |
 
 ## 2. Baseline (VERIFIED)
 
@@ -34,7 +34,7 @@ Après le lot M1 : **186 tests OK** (152 + 34 nouveaux ; la vérification réell
 | Sous-système | Fichiers | Rôle et comportement actuel | Persistance | Tests | Frontière de sécurité | Modes de défaillance / limites | Classement |
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | CLI | `bin/jarvis` (bash), `lib/jarvis/cli.py` | point d'entrée unique, ~70 sous-commandes ; garde `_human_only` (terminal interactif exigé) | — | `test_jarvis.py` | garde applicative, même utilisateur Linux | un agent avec un pseudo-terminal pourrait contourner | **KEEP** (+ `jarvis mission`) |
-| Lanceurs d'agents | `bin/jarvis-claude`, `bin/jarvis-codex` | lancent les CLI officiels, injectent les secrets du rôle | — | oui | bac à sable Codex, règles deny Claude | Codex absent de WSL aujourd'hui | **KEEP** |
+| Lanceurs d'agents | `bin/jarvis-claude`, `bin/jarvis-codex` | lancent les CLI officiels, injectent les secrets du rôle | — | oui | bac à sable Codex, règles deny Claude | `bin/jarvis-codex` fait `exec codex` : correct dans les fenêtres tmux (shells interactifs) | **KEEP** |
 | Exécution workmux | `execution.py` (`WorkmuxBackend`), `config/workmux` | worktree git + fenêtre tmux par agent | état workmux/tmux | oui | isolation par worktree, pas par utilisateur | une fenêtre tmux n'est pas une source de vérité durable | **EXTEND** : devient un adaptateur d'exécutant (M3/M4) |
 | Admission | `admission.py` | point unique de départ d'agent : pauses, capacité, réservations expirables, doublons, jetons, plan | JSON/SQLite (`store`) | oui | décision mécanique, verrou unique | local uniquement | **KEEP**, à appeler depuis le moteur de missions pour les tâches L2 (M4) |
 | Démon | `daemon.py` | boucle de surveillance (agents, quotas, chef, santé, bail, canari…) | état local | oui | bail d'orchestrateur (jeton de clôture) | un seul poste | **EXTEND** (étape `missions_check` ajoutée) |
@@ -68,4 +68,4 @@ bibliothèque standard. PostgreSQL, un framework web ou le Studio TypeScript iro
 3. Pas d'exécutant authentifié distinct du démon → **comblé localement** (M1) ; transport réseau : M3.
 4. Pas de Studio ni d'authentification utilisateur → M2.
 5. Isolation réelle : tout tourne sous le même utilisateur Linux (déjà documenté dans `docs/autonomy/securite.md`).
-6. Codex non utilisable dans WSL aujourd'hui → BLOCKED (réinstallation à décider par le fondateur).
+6. Codex : résolu (PATH des shells non interactifs ; l'adaptateur ignore désormais les binaires Windows).

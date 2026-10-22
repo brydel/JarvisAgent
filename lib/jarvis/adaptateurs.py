@@ -78,6 +78,21 @@ def _indisponible(texte: str) -> bool:
     return any(m in t for m in MARQUES_QUOTA)
 
 
+EXCLUS_WSL = ("/mnt/",)  # programmes Windows vus depuis WSL : jamais la version Linux (comme has() de bin/jarvis)
+
+
+def binaire_linux(nom: str, *, exclus: tuple[str, ...] = EXCLUS_WSL) -> str | None:
+    """Premier `nom` exécutable du PATH hors des dossiers Windows, sinon dans les dossiers npm/pip de
+    l'utilisateur (un shell non interactif ne lit pas ~/.bashrc, qui les ajoute souvent au PATH)."""
+    dossiers = [d for d in os.environ.get("PATH", "").split(os.pathsep) if d and not d.startswith(exclus)]
+    dossiers += [str(Path.home() / ".npm-global" / "bin"), str(Path.home() / ".local" / "bin")]
+    for d in dossiers:
+        p = Path(d) / nom
+        if p.is_file() and os.access(p, os.X_OK):
+            return str(p)
+    return None
+
+
 class Factice(Adaptateur):
     """Fournisseur déterministe SANS IA : vérifie la plomberie, jamais la qualité d'une analyse."""
 
@@ -108,13 +123,13 @@ class ClaudeCode(Adaptateur):
     nom = "claude"
     capacites = {"analyse": True, "outils": False, "reprise": False, "streaming": False, "annulation": True}
 
-    def __init__(self, *, mode_auth: str = "abonnement", binaire: str = "claude"):
-        self.mode_auth, self.binaire = mode_auth, binaire
+    def __init__(self, *, mode_auth: str = "abonnement", binaire: str | None = None):
+        self.mode_auth, self.binaire = mode_auth, binaire or binaire_linux("claude") or "claude"
 
     def disponible(self) -> tuple[bool, str]:
-        if not shutil.which(self.binaire):
-            return False, "CLI claude introuvable"
-        return True, "CLI claude présent (authentification vérifiée à l'exécution)"
+        if not shutil.which(self.binaire) or self.binaire.startswith(EXCLUS_WSL):
+            return False, "CLI claude (Linux) introuvable"
+        return True, f"CLI claude présent : {self.binaire} (authentification vérifiée à l'exécution)"
 
     def executer(self, env: dict) -> dict:
         consigne = _consigne(env)
@@ -143,17 +158,19 @@ class ClaudeCode(Adaptateur):
 
 
 class Codex(Adaptateur):
-    """`codex exec` (CLI officiel), bac à sable lecture seule, dernier message lu dans un fichier."""
+    """`codex exec` (CLI officiel) : bac à sable lecture seule, sans la configuration de l'utilisateur (ni serveurs
+    MCP ni hooks : le hook SessionStart de workmux inscrirait un faux agent), sans session enregistrée, depuis un
+    dossier vide. L'authentification reste celle de ~/.codex : rien n'est copié."""
 
     nom = "codex"
     capacites = {"analyse": True, "outils": False, "reprise": False, "streaming": False, "annulation": True}
 
-    def __init__(self, *, mode_auth: str = "abonnement", binaire: str = "codex"):
-        self.mode_auth, self.binaire = mode_auth, binaire
+    def __init__(self, *, mode_auth: str = "abonnement", binaire: str | None = None):
+        self.mode_auth, self.binaire = mode_auth, binaire or binaire_linux("codex") or "codex"
 
     def disponible(self) -> tuple[bool, str]:
-        if not shutil.which(self.binaire):
-            return False, "CLI codex introuvable"
+        if not shutil.which(self.binaire) or self.binaire.startswith(EXCLUS_WSL):
+            return False, "CLI codex (Linux) introuvable : seule une installation Windows est visible"
         try:
             r = subprocess.run([self.binaire, "--version"], capture_output=True, text=True, timeout=20)
         except (OSError, subprocess.TimeoutExpired) as exc:
@@ -166,7 +183,8 @@ class Codex(Adaptateur):
         consigne = _consigne(env)
         with tempfile.TemporaryDirectory(prefix="jarvis-mission-") as vide:
             sortie = Path(vide) / "reponse.md"
-            cmd = [self.binaire, "exec", "--sandbox", "read-only", "--skip-git-repo-check",
+            cmd = [self.binaire, "exec", "--sandbox", "read-only", "--skip-git-repo-check", "--ephemeral",
+                   "--ignore-user-config", "--disable", "hooks", "--color", "never",
                    "--output-last-message", str(sortie), consigne]
             try:
                 r = subprocess.run(cmd, cwd=vide, capture_output=True, text=True, timeout=env["delai_s"],

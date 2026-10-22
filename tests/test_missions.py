@@ -490,6 +490,14 @@ print(json.dumps({"is_error": False, "result": "## Résumé\\nUn document analys
 """
 
 
+FAUX_CODEX = """#!/usr/bin/env python3
+import json, os, sys
+a = sys.argv[1:]
+open(os.environ["JOURNAL_FAUX"], "w").write(json.dumps({"args": a, "cle": os.environ.get("OPENAI_API_KEY")}))
+open(a[a.index("--output-last-message") + 1], "w").write("## Résumé\\nAnalyse du faux Codex.\\n## Points clés\\n- un")
+"""
+
+
 class AdaptateursTest(unittest.TestCase):
     def setUp(self):
         self.dossier = Path(tempfile.mkdtemp(prefix="jarvis-test-adaptateurs-"))
@@ -522,6 +530,33 @@ class AdaptateursTest(unittest.TestCase):
     def test_type_de_travail_inconnu(self):
         with self.assertRaises(ValueError):
             ad.ClaudeCode(binaire=str(self.bin)).executer({"travail": {"type": "envoyer_mail"}, "delai_s": 5})
+
+    def test_codex_isole_de_la_config_et_des_hooks(self):
+        faux = self.dossier / "faux-codex"
+        faux.write_text(FAUX_CODEX)
+        faux.chmod(faux.stat().st_mode | stat.S_IEXEC)
+        with mock.patch.dict(os.environ, {"JOURNAL_FAUX": str(self.journal), "OPENAI_API_KEY": "sk-test"}):
+            r = ad.Codex(binaire=str(faux)).executer(self.env)
+        self.assertEqual(r["issue"], "reussi", r)
+        vu = json.loads(self.journal.read_text())
+        for option in ("--ignore-user-config", "--ephemeral", "--skip-git-repo-check"):
+            self.assertIn(option, vu["args"])
+        self.assertEqual(vu["args"][vu["args"].index("--sandbox") + 1], "read-only")
+        self.assertEqual(vu["args"][vu["args"].index("--disable") + 1], "hooks")
+        self.assertIsNone(vu["cle"], "en mode abonnement, la clé d'API n'atteint pas le CLI")
+
+    def test_binaire_windows_ignore(self):
+        windows = self.dossier / "windows"
+        linux = self.dossier / "linux"
+        for d in (windows, linux):
+            d.mkdir()
+            b = d / "outil-test"
+            b.write_text("#!/bin/sh\n")
+            b.chmod(0o755)
+        with mock.patch.dict(os.environ, {"PATH": f"{windows}{os.pathsep}{linux}"}):
+            self.assertEqual(ad.binaire_linux("outil-test", exclus=(str(windows),)), str(linux / "outil-test"))
+            self.assertEqual(ad.binaire_linux("outil-test", exclus=()), str(windows / "outil-test"))
+            self.assertIsNone(ad.binaire_linux("outil-absent-xyz"))
 
     def test_codex_absent_signale(self):
         ok, raison = ad.Codex(binaire=str(self.dossier / "inexistant")).disponible()
