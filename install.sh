@@ -226,8 +226,10 @@ esac
 # --- 9 ter. Studio : vidéo de produit, visuels, montage ------------------------
 step "Compétences des agents (skills)"
 # Claude Code lit ~/.claude/skills, Codex lit ~/.agents/skills : même dossier, deux liens.
-link "$JARVIS_HOME/skills/jarvis-studio" "$HOME/.claude/skills/jarvis-studio"
-link "$JARVIS_HOME/skills/jarvis-studio" "$HOME/.agents/skills/jarvis-studio"
+for skill in jarvis-studio jarvis-veille jarvis-design; do
+  link "$JARVIS_HOME/skills/$skill" "$HOME/.claude/skills/$skill"
+  link "$JARVIS_HOME/skills/$skill" "$HOME/.agents/skills/$skill"
+done
 
 if ((WITH_STUDIO)); then
   step "Studio (ffmpeg, Playwright, Chromium)"

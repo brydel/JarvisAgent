@@ -47,7 +47,7 @@ wrapper = TMP / "bin" / "tmux"
 wrapper.write_text(f"#!/bin/sh\nexec {real_tmux} -L {TMUX_SOCKET} \"$@\"\n")
 wrapper.chmod(0o755)
 
-from jarvis import agents, config, daemon, plans, store  # noqa: E402
+from jarvis import admission, agents, config, daemon, plans, store, taches  # noqa: E402
 from jarvis.telegram import Bot  # noqa: E402
 
 FIXTURE = json.loads((ROOT / "tests" / "fixtures" / "status.json").read_text())
@@ -116,7 +116,7 @@ class JarvisTest(unittest.TestCase):
 
         for name in ("repriceo", "jobpilot-ia"):
             d = TMP / "p" / name
-            d.mkdir(parents=True)
+            d.mkdir(parents=True, exist_ok=True)
             subprocess.run(["git", "init", "-q", str(d)], check=True)
         config.save_projects({
             "repriceo": {"chemin": str(TMP / "p/repriceo"), "linear": "Repriceo", "priorite": 1, "actif": True},
@@ -146,7 +146,9 @@ class JarvisTest(unittest.TestCase):
         for name in ("claude_usage.json", "budget.json", "veille.json", "battement.json", "sante.json",
                      "reprise.json", "agents_actifs.json", "chef_queue.json", "taches.json", "modeles_verif.json",
                      "modeles_propositions.json", "livrables.json", "usage_hist.json", "prevision.json",
-                     "blocage.json", "chef_garde.json", "demon.json", "sante_windows.json", "watch.json"):
+                     "blocage.json", "chef_garde.json", "demon.json", "sante_windows.json", "watch.json",
+                     "pauses.json", "reservations.json", "lourdes/operations.json", "relances.json", "journal.jsonl",
+                     "ressources.json", "delegations.json", "exceptions.json", "budgets.json", "travaux.json"):
             store.state_path(name).unlink(missing_ok=True)
         (TMP / "cfg" / "modeles.toml").unlink(missing_ok=True)
         Path(os.environ["FAKE_CLI_LOG"]).write_text("")
@@ -487,19 +489,33 @@ class JarvisTest(unittest.TestCase):
         tmux("kill-window", "-t", "jtest:wm-bis-77-revue")
 
     def test_long_idle_untracked_window_frees_its_slot(self):
+        """Silence prolongé : « silencieux » (occupé) tant qu'un programme tourne, « inactif » (libéré) sinon."""
         set_status()
-        tmux("new-window", "-d", "-t", "jtest", "-n", "wm-vieux-codex", "cat")
-        time.sleep(0.3)
+        tmux("new-window", "-d", "-t", "jtest", "-n", "wm-vieux-codex", "cat")      # programme vivant, muet
+        tmux("new-window", "-d", "-t", "jtest", "-n", "wm-fini-codex", "bash")      # plus qu'un shell
+        time.sleep(0.5)
         old = agents.IDLE_AFTER
-        agents.IDLE_AFTER = 0  # simule une fenêtre muette depuis longtemps
+        agents.IDLE_AFTER = 0  # simule des fenêtres muettes depuis longtemps
         try:
             found, _ = agents.status_all()
             ghost = next(a for a in found if a["worktree"] == "vieux-codex")
-            self.assertEqual(ghost["status"], "idle")
-            self.assertNotIn(ghost["status"], agents.BUSY)
+            self.assertEqual(ghost["status"], "silent")       # jamais « terminé » faute de sortie
+            self.assertIn(ghost["status"], agents.BUSY)
+            fini = next(a for a in found if a["worktree"] == "fini-codex")
+            self.assertEqual(fini["status"], "idle")
+            self.assertNotIn(fini["status"], agents.BUSY)
+            self.assertIn(fini["status"], agents.CLOSABLE)
+            # La fiche d'un agent silencieux reste ouverte ; celle d'un agent sans programme se termine.
+            taches.enregistrer(projet="?", issue="BIS-1", agent="codex", worktree="vieux-codex")
+            taches.enregistrer(projet="?", issue="BIS-2", agent="codex", worktree="fini-codex")
+            taches.synchroniser(found)
+            etats = {t["worktree"]: t["statut"] for t in taches.toutes()}
+            self.assertEqual(etats["vieux-codex"], "silencieuse")
+            self.assertEqual(etats["fini-codex"], "terminee")
         finally:
             agents.IDLE_AFTER = old
             tmux("kill-window", "-t", "jtest:wm-vieux-codex")
+            tmux("kill-window", "-t", "jtest:wm-fini-codex")
 
     def test_task_pre_trusts_the_new_worktree(self):
         set_status(**{a["worktree"]: "done" for a in FIXTURE["agents"]})
@@ -1251,8 +1267,8 @@ class JarvisTest(unittest.TestCase):
             with occupe:
                 self.assertEqual(daemon.chef_check(), "relance")
             self.assertTrue(any("chef-lancer" in " ".join(map(str, c.args[0])) for c in run.call_args_list))
-            # Trop de relances en une heure : on prévient l'humain au lieu d'insister.
-            store.write_json(daemon.CHEF_STATE, {"relances": [time.time()] * 3, "alerte": 0})
+            # Trop de relances en une heure (compteur borné de l'admission) : on prévient l'humain au lieu d'insister.
+            store.write_json(admission.RELANCES, {"chef": [time.time()] * 3})
             with occupe:
                 self.assertEqual(daemon.chef_check(), "alerte")
             # Rien en cours : un chef arrêté est un arrêt normal, on ne relance pas et on l'oublie.

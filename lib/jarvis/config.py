@@ -103,6 +103,28 @@ DEFAULTS: dict = {
         # dans les limites de capacité, de jetons et de pause.
         "validation": "humain",
     },
+    "admission": {
+        # Profil appliqué (jarvis profil appliquer laptop-conservative) : information, les valeurs font foi.
+        "profil": "",
+        # Opérations lourdes simultanées (compilation, tests, navigateur, vidéo) déclarées via « jarvis lourd ».
+        "operations_lourdes_max": 1,
+        # Une réservation d'admission non confirmée par l'apparition de l'agent expire après N minutes.
+        "reservation_min": 15,
+        # Au-delà de cette charge moyenne par cœur (1 min), aucun nouveau départ.
+        "charge_max_par_coeur": 2.5,
+        # Mémoire gardée pour Windows, le navigateur, Docker et le chef (Mo).
+        "memoire_reserve_mo": 1500,
+        # Pression mémoire soutenue (PSI « some », 60 s, en %) au-delà de laquelle le démon pose la pause
+        # « ressources » ; elle se lève seule quand la pression retombe sous la moitié pendant hysterese_min.
+        "pression_memoire_pct": 25,
+        "hysterese_min": 5,
+    },
+    "propositions": {
+        # File de travaux partagée : au plus N propositions acceptées par source et par jour.
+        "max_par_jour": 3,
+        # Dépôt GitHub (owner/nom) dont les issues « jarvis-proposition » sont importées (vide = désactivé).
+        "github_depot": "",
+    },
     "telegram": {
         "token": "",
         "chat_id": "",
@@ -132,11 +154,87 @@ def settings() -> dict:
     return _merge(DEFAULTS, _read_toml(SETTINGS_FILE))
 
 
+# Bornes des réglages qui gouvernent l'admission : hors bornes, l'admission refuse (fail closed).
+_BORNES: dict[tuple[str, str], tuple[type, float, float]] = {
+    ("general", "max_agents"): (int, 0, 64),
+    ("general", "poll_seconds"): (int, 5, 600),
+    ("admission", "operations_lourdes_max"): (int, 0, 16),
+    ("admission", "reservation_min"): (int, 1, 120),
+    ("admission", "charge_max_par_coeur"): (float, 0.5, 16),
+    ("admission", "memoire_reserve_mo"): (int, 0, 65536),
+    ("admission", "pression_memoire_pct"): (int, 1, 100),
+    ("admission", "hysterese_min"): (int, 1, 120),
+    ("sante", "memoire_par_agent_mo"): (int, 200, 65536),
+    ("sante", "batterie_min_pct"): (int, 0, 100),
+    ("sante", "batterie_arret_pct"): (int, 0, 100),
+    ("jetons", "alerte"): (int, 1, 100),
+    ("jetons", "arret"): (int, 1, 100),
+}
+
+
+def valider(s: dict | None = None) -> list[str]:
+    """Erreurs de configuration (liste vide = valide). Une valeur absurde ne doit jamais ouvrir les vannes."""
+    s = settings() if s is None else s
+    erreurs = []
+    for (table, cle), (typ, mini, maxi) in _BORNES.items():
+        v = (s.get(table) or {}).get(cle)
+        if isinstance(v, bool) or not isinstance(v, (int, float)):
+            erreurs.append(f"{table}.{cle} doit être un nombre (lu : {v!r})")
+            continue
+        if typ is int and int(v) != v:
+            erreurs.append(f"{table}.{cle} doit être un entier (lu : {v!r})")
+        elif not mini <= v <= maxi:
+            erreurs.append(f"{table}.{cle} = {v} hors bornes [{mini:g}, {maxi:g}]")
+    if (s.get("plans") or {}).get("validation") not in ("humain", "auto"):
+        erreurs.append("plans.validation doit valoir « humain » ou « auto »")
+    j = s.get("jetons") or {}
+    if isinstance(j.get("alerte"), int) and isinstance(j.get("arret"), int) and j["alerte"] > j["arret"]:
+        erreurs.append("jetons.alerte doit être inférieur ou égal à jetons.arret")
+    return erreurs
+
+
+# --- Profils de poste --------------------------------------------------------------------------
+
+PROFILS_DIR = JARVIS_HOME / "config" / "profils"
+
+
+def profils() -> dict[str, dict]:
+    """{nom: {"description", "reglages": {table: {cle: valeur}}}} lus dans config/profils/*.toml."""
+    out: dict[str, dict] = {}
+    for f in sorted(PROFILS_DIR.glob("*.toml")) if PROFILS_DIR.is_dir() else []:
+        data = _read_toml(f)
+        meta = data.pop("profil", {}) if isinstance(data.get("profil"), dict) else {}
+        out[f.stem] = {"description": str(meta.get("description", "")), "mesure": bool(meta.get("mesure", False)),
+                       "reglages": {t: dict(v) for t, v in data.items() if isinstance(v, dict)}}
+    return out
+
+
+def appliquer_profil(nom: str) -> tuple[dict, Path | None]:
+    """Fusionne un profil dans settings.toml (sauvegarde d'abord). Renvoie (réglages appliqués, sauvegarde)."""
+    p = profils().get(nom)
+    if not p:
+        raise ValueError(f"profil inconnu « {nom} » (disponibles : {', '.join(profils()) or 'aucun'})")
+    courant = _read_toml(SETTINGS_FILE)
+    nouveau = _merge(courant, p["reglages"])
+    nouveau.setdefault("admission", {})["profil"] = nom
+    erreurs = valider(_merge(DEFAULTS, nouveau))
+    if erreurs:
+        raise ValueError("profil refusé : " + " ; ".join(erreurs))
+    sauvegarde = None
+    if SETTINGS_FILE.exists():
+        import shutil
+        import time
+        sauvegarde = SETTINGS_FILE.with_name(f"settings.toml.avant-{nom}-{time.strftime('%Y%m%d-%H%M%S')}")
+        shutil.copy2(SETTINGS_FILE, sauvegarde)
+    save_settings(nouveau)
+    return p["reglages"], sauvegarde
+
+
 def _toml_value(v) -> str:
     if isinstance(v, bool):
         return "true" if v else "false"
-    if isinstance(v, int):
-        return str(v)
+    if isinstance(v, (int, float)):
+        return repr(v) if isinstance(v, float) else str(v)
     s = str(v).replace("\\", "\\\\").replace('"', '\\"')
     return f'"{s}"'
 

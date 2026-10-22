@@ -114,40 +114,64 @@ def _capacite(agents: list[dict]) -> tuple[int, dict]:
 
 def _fiche_shell(fiche: dict) -> str:
     """Affectation d'un lancement, une « clé=valeur » par ligne, lue par bin/jarvis."""
-    keys = ("agent", "modele", "modele_id", "effort", "repli", "role", "taille", "raison")
+    keys = ("agent", "modele", "modele_id", "effort", "repli", "role", "taille", "raison", "reservation", "classe")
     lines = [f"{k}={' '.join(str(fiche.get(k) or '').split())}" for k in keys]
     lines.append(f"par_secours={'1' if fiche.get('par_secours') else '0'}")
     return "\n".join(lines)
 
 
-def cmd_plan_verifier(a) -> int:
-    """Utilisé par `jarvis task` : vérifie pause, capacité, jetons et plan, puis marque le lancement.
+# Code de sortie par motif de refus, lu par bin/jarvis et le chef.
+_CODES_REFUS = {"pause": 3, "budget": 5, "capacite": 2, "lourde": 2, "doublon": 2, "plan": 2, "observation": 2,
+                "config": 6, "origine": 2}
 
-    Affiche l'affectation à lancer (fournisseur, modèle, effort, rôle), une « clé=valeur » par ligne.
+
+def _acteur() -> str:
+    if os.environ.get("JARVIS_ROLE") == "chef":
+        return "chef"
+    if os.environ.get("JARVIS_METIER"):
+        return f"agent:{os.environ['JARVIS_METIER']}"
+    return "humain" if sys.stdin.isatty() and sys.stdout.isatty() else "cli"
+
+
+def cmd_plan_verifier(a) -> int:
+    """Utilisé par `jarvis task` : passe par l'admission commune (pauses, observation, capacité,
+    réservations, opérations lourdes, doublons, jetons, plan) puis marque le lancement.
+
+    Affiche l'affectation à lancer (fournisseur, modèle, effort, rôle, réservation), une « clé=valeur » par ligne.
     """
-    if store.paused():
-        return _err("Jarvis est en PAUSE : aucun nouveau lancement autorisé.", 3)
-    from . import usage
-    resume = usage.summary()
-    epuises = {p for p in usage.PROVIDERS if resume[p]["niveau"] == "epuise"}
-    agents, err = ag.status_all()
-    if agents is None:
-        return _err(f"impossible de compter les agents ({err})", 2)
-    busy, cap = _capacite(agents)
-    if cap["max"] < cap["base"] and busy >= cap["max"]:
-        return _err(f"le PC ne peut pas porter un agent de plus maintenant ({' ; '.join(cap['raisons'])}) : "
-                    "attends qu'un agent termine.", 2)
+    from . import admission
     try:
-        fiche = plans.authorize_launch(a.id, a.projet, a.issue, a.agent, busy=busy,
-                                       visible={x["worktree"] for x in agents}, max_agents=cap["max"],
-                                       epuises=epuises, relecture=a.revue)
-    except plans.BudgetError as exc:
-        reprises = [usage.fmt_reset(resume[p].get("reprise")) for p in sorted(epuises) if resume[p].get("reprise")]
-        suite = f" (remise à zéro : {', '.join(reprises)})" if reprises else ""
-        return _err(f"{exc}{suite}", 5)
-    except plans.PlanError as exc:
-        return _err(str(exc), 2)
+        adm = admission.demander(origine="plan", projet=a.projet, issue=a.issue, agent=a.agent, worktree=a.worktree or "",
+                                 plan=a.id, relecture=a.revue, acteur=_acteur())
+    except admission.Refus as exc:
+        return _err(exc.raison, _CODES_REFUS.get(exc.code, 2))
+    fiche = dict(adm["fiche"])
+    fiche["reservation"], fiche["classe"] = adm["reservation"], adm["classe"]
+    for av in adm["avertissements"]:
+        print(f"Attention : {av}", file=sys.stderr)
     print(_fiche_shell(fiche))
+    return 0
+
+
+def cmd_admission(a) -> int:
+    """`jarvis admission demander|liberer|etat` : le point d'admission, pour un lancement manuel ou l'affichage."""
+    from . import admission
+    if a.action == "etat":
+        print(admission.texte_etat())
+        return 0
+    if a.action == "liberer":
+        return 0 if admission.liberer(a.id, " ".join(a.raison), acteur=_acteur()) else _err(f"réservation {a.id} inconnue ou déjà close")
+    forcer = bool(a.forcer)
+    if forcer and _acteur() != "humain":
+        return _err("--forcer est réservé à l'humain devant un terminal.", 4)
+    try:
+        adm = admission.demander(origine=a.origine, projet=a.projet, issue=a.issue, agent=a.agent, worktree=a.worktree or "",
+                                 role=a.role or "", classe=a.classe or "", acteur=_acteur(), forcer=forcer)
+    except admission.Refus as exc:
+        return _err(exc.raison, _CODES_REFUS.get(exc.code, 2))
+    for av in adm["avertissements"]:
+        print(f"Attention : {av}", file=sys.stderr)
+    print(f"reservation={adm['reservation']}\nclasse={adm['classe']}")
     return 0
 
 
@@ -655,7 +679,11 @@ def cmd_tache_enregistrer(a) -> int:
     from . import taches
     fiche = taches.enregistrer(projet=a.projet, issue=a.issue, agent=a.agent, worktree=a.worktree, chemin=a.chemin,
                                role=a.role, modele=a.modele, modele_id=a.modele_id, effort=a.effort, repli=a.repli,
-                               taille=a.taille, plan=a.plan, revue=a.revue, raison=a.raison, secours=a.secours)
+                               taille=a.taille, plan=a.plan, revue=a.revue, raison=a.raison, secours=a.secours,
+                               classe=a.classe, reservation=a.reservation)
+    if a.reservation:
+        from . import admission
+        admission.confirmer(a.reservation, fiche["id"], a.worktree)
     print(fiche["id"])
     return 0
 
@@ -863,7 +891,12 @@ def cmd_chef_preparer(a) -> int:
                 "Bash(jarvis voir *)", "Bash(jarvis jetons)", "Bash(jarvis jetons *)",
                 "Bash(jarvis veille)", "Bash(jarvis veille *)",
                 "Bash(jarvis fermer *)", "Bash(jarvis sante)", "Bash(jarvis reparer-git *)",
-                "Bash(jarvis reprendre --essai)",
+                "Bash(jarvis reprendre --essai)", "Bash(jarvis admission etat)", "Bash(jarvis pause)",
+                "Bash(jarvis pause etat)", "Bash(jarvis pause poser incident *)", "Bash(jarvis lourd liste)",
+                "Bash(jarvis audit)", "Bash(jarvis audit *)", "Bash(jarvis profil liste)", "Bash(jarvis profil voir *)",
+                "Bash(jarvis diagnostic)", "Bash(jarvis diagnostic *)", "Bash(jarvis politique)", "Bash(jarvis politique *)",
+                "Bash(jarvis budget)", "Bash(jarvis budget *)", "Bash(jarvis fournisseurs)", "Bash(jarvis fournisseurs *)",
+                "Bash(jarvis proposition *)",
                 # Usine : rôles, routeur, registre, bilan, studio et livrables.
                 "Bash(jarvis role)", "Bash(jarvis role *)", "Bash(jarvis modele)", "Bash(jarvis modele liste)",
                 "Bash(jarvis modele choisir *)", "Bash(jarvis modele proposer *)",
@@ -890,6 +923,11 @@ def cmd_chef_preparer(a) -> int:
                 "Bash(jarvis tache-enregistrer *)", "Bash(jarvis tache-annuler *)", "Bash(jarvis lancement-args *)",
                 "Bash(jarvis prompt-construire *)", "Bash(jarvis chef-lancer)", "Bash(jarvis chef-lancer *)", "Bash(jarvis chef-etat)",
                 "Bash(jarvis web)", "Bash(jarvis web *)", "Bash(jarvis relancer)", "Bash(jarvis relancer *)",
+                "Bash(jarvis pause lever *)", "Bash(jarvis pause poser humain*)", "Bash(jarvis pause poser maintenance*)",
+                "Bash(jarvis pause poser batterie*)", "Bash(jarvis pause poser quota*)", "Bash(jarvis pause poser ressources*)",
+                "Bash(jarvis profil appliquer *)", "Bash(jarvis admission demander *)", "Bash(jarvis admission liberer *)",
+                "Bash(jarvis lourd debut *)", "Bash(jarvis lourd exec *)", "Bash(jarvis lourd fin *)",
+                "Bash(jarvis politique appliquer *)", "Bash(jarvis politique deleguer *)", "Bash(jarvis budget definir *)",
                 # Contournements de « jarvis task » et accès directs au noyau.
                 "Bash(workmux add *)", "Bash(workmux run *)", "Bash(python *)", "Bash(python3 *)",
                 "Bash(env *)", "Bash(script *)",
@@ -921,6 +959,315 @@ def cmd_chef_message(a) -> int:
 
 
 # --- Analyseur ------------------------------------------------------------------
+
+def cmd_pause(a) -> int:
+    from . import admission, pauses
+    if a.action == "etat":
+        print(pauses.texte())
+        print(admission.texte_etat())
+        return 0
+    cause = a.cause
+    if cause not in pauses.CAUSES:
+        return _err(f"cause inconnue « {cause} » (valeurs : {', '.join(pauses.CAUSES)})")
+    acteur = _acteur()
+    # Un agent (le chef compris) peut POSER une pause incident : jamais en lever une, ni poser une autre.
+    # Même garde que les approbations (terminal interactif) : garde-fou applicatif, pas une barrière
+    # (docs/autonomy/securite.md).
+    if not (a.action == "poser" and cause == "incident"):
+        refused = _human_only("poser ou lever une pause (un agent peut seulement poser « incident »)")
+        if refused is not None:
+            return refused
+    note = " ".join(a.note)
+    if a.action == "poser":
+        if pauses.poser(cause, note, par=acteur):
+            print(f"⏸ Pause « {cause} » posée." + (f" {note}" if note else ""))
+            ag.chef_inject(f"[JARVIS] Pause « {cause} » posée par {acteur} : ne lance plus aucune tâche jusqu'à nouvel ordre.")
+        else:
+            print(f"La pause « {cause} » était déjà posée.")
+    else:
+        if not pauses.lever(cause, par=acteur):
+            print(f"La pause « {cause} » n'était pas posée.")
+        restantes = pauses.actives()
+        if restantes:
+            print(f"▶ « {cause} » levée. Jarvis reste en pause : {pauses.texte(restantes)}")
+        else:
+            print("▶ Plus aucune pause : Jarvis peut relancer.")
+            ag.chef_inject(f"[JARVIS] Pause levée par {acteur} : tu peux reprendre ta boucle.")
+    return 0
+
+
+def cmd_profil(a) -> int:
+    profs = config.profils()
+    if a.action == "liste":
+        actuel = config.settings()["admission"].get("profil") or ""
+        for nom, p in profs.items():
+            marque = " (appliqué)" if nom == actuel else ""
+            print(f"{nom}{marque} — {p['description']}")
+        if not actuel:
+            print("Aucun profil appliqué : réglages par défaut ou personnalisés (jarvis profil appliquer <nom>).")
+        return 0
+    if not a.nom:
+        return _err("précise le nom du profil (jarvis profil liste)")
+    if a.action == "voir":
+        p = profs.get(a.nom)
+        if not p:
+            return _err(f"profil inconnu « {a.nom} »")
+        print(f"{a.nom} — {p['description']}")
+        for table, vals in p["reglages"].items():
+            for k, v in vals.items():
+                print(f"  {table}.{k} = {v}")
+        return 0
+    refused = _human_only("appliquer un profil")
+    if refused is not None:
+        return refused
+    try:
+        regl, sauvegarde = config.appliquer_profil(a.nom)
+    except ValueError as exc:
+        return _err(str(exc))
+    from . import journal
+    journal.ecrire("profil", acteur="humain", objet=a.nom, decision="applique",
+                   raison=f"sauvegarde : {sauvegarde.name if sauvegarde else 'aucune (pas de settings.toml)'}")
+    n = sum(len(v) for v in regl.values())
+    print(f"Profil « {a.nom} » appliqué ({n} réglages)." + (f" Ancien settings.toml : {sauvegarde}" if sauvegarde else ""))
+    print("Les valeurs valent pour les PROCHAINS lancements ; aucun agent en cours n'est arrêté. Vérifie : jarvis capacite")
+    return 0
+
+
+def cmd_lourd(a) -> int:
+    from . import admission
+    acteur = _acteur()
+    if a.action == "liste":
+        ops = admission.lourdes_en_cours()
+        print("Aucune opération lourde déclarée." if not ops else "\n".join(
+            f"{o['id']} {o['classe']} {o.get('worktree') or ''} {o.get('desc') or ''}" for o in ops))
+        return 0
+    if a.action == "fin":
+        if not a.quoi:
+            return _err("usage : jarvis lourd fin <L-xxxxx>")
+        return 0 if admission.lourde_fin(a.quoi[0], acteur=acteur) else _err(f"opération {a.quoi[0]} inconnue ou déjà close")
+    if not a.quoi:
+        return _err("usage : jarvis lourd debut <classe> [desc] | jarvis lourd exec <classe> -- commande…")
+    classe = a.quoi[0]
+    worktree = a.worktree or os.environ.get("JARVIS_ISSUE", "")
+    if a.action == "debut":
+        try:
+            # Sans PID : le wrapper bash qui nous appelle disparaît aussitôt ; seule la durée fait foi (jarvis lourd fin).
+            o = admission.lourde_debut(classe, worktree=worktree, desc=" ".join(a.quoi[1:]), pid=None,
+                                       duree_min=a.duree, acteur=acteur)
+        except admission.Refus as exc:
+            return _err(exc.raison, _CODES_REFUS.get(exc.code, 2))
+        print(o["id"])
+        return 0
+    # exec : attend une place (bornée), lance la commande avec une priorité réduite, libère à la fin.
+    import shutil
+    import subprocess
+    cmd = a.quoi[1:]
+    if cmd and cmd[0] == "--":
+        cmd = cmd[1:]
+    if not cmd:
+        return _err("usage : jarvis lourd exec <classe> -- commande…")
+    limite = time.time() + 60 * max(0, a.attente)
+    while True:
+        try:
+            o = admission.lourde_debut(classe, worktree=worktree, desc=" ".join(cmd)[:120], pid=os.getpid(),
+                                       duree_min=a.duree, acteur=acteur)
+            break
+        except admission.Refus as exc:
+            if exc.code != "lourde" or time.time() >= limite:
+                return _err(exc.raison, _CODES_REFUS.get(exc.code, 2))
+            print(f"… {exc.raison} (nouvel essai dans 15 s)", file=sys.stderr)
+            time.sleep(15)
+    prefixe = ["nice", "-n", "10"] if shutil.which("nice") else []
+    try:
+        rc = subprocess.call(prefixe + cmd)
+    finally:
+        admission.lourde_fin(o["id"], acteur=acteur)
+    return rc
+
+
+def cmd_audit(a) -> int:
+    from . import journal
+    if a.verifier:
+        ok, msg = journal.verifier()
+        print(("✔ " if ok else "⚠ ") + msg)
+        return 0 if ok else 1
+    print(journal.texte(journal.lire(a.n, a.type_)))
+    return 0
+
+
+def cmd_diagnostic(a) -> int:
+    from . import diagnostic
+    rapport = diagnostic.collecter(windows_=not a.sans_windows)
+    chemin = diagnostic.enregistrer(rapport)
+    if a.json:
+        print(json.dumps(rapport, ensure_ascii=False, indent=2, default=str))
+    else:
+        print(diagnostic.texte(rapport))
+    print(f"\nRapport expurgé enregistré : {chemin}", file=sys.stderr)
+    return 0
+
+
+def cmd_politique(a) -> int:
+    from . import politique
+    try:
+        if a.action == "voir":
+            print(politique.texte())
+        elif a.action == "exceptions":
+            print(politique.texte_exceptions())
+        elif a.action == "verifier":
+            if not a.quoi:
+                return _err("usage : jarvis politique verifier <action> [--projet P] [--montant N] [--detail …]")
+            d = politique.autoriser(a.quoi[0], acteur=_acteur(), projet=a.projet or "", montant=float(a.montant or 0),
+                                    detail=" ".join(a.quoi[1:]), categorie=a.categorie or "depense")
+            print(f"{d['decision']} (niveau {d['niveau']}) — {d['raison']}")
+            return 0 if d["decision"] == "admis" else 1
+        elif a.action == "deleguer":
+            refused = _human_only("déléguer une action")
+            if refused is not None:
+                return refused
+            if not a.quoi or not a.perimetre:
+                return _err("usage : jarvis politique deleguer <action> --perimetre \"…\" [--plafond N] [--jours N] [--projet P]")
+            d = politique.deleguer(a.quoi[0], perimetre=a.perimetre, plafond=float(a.plafond or 0), jours=a.jours or 7,
+                                   projet=a.projet or "")
+            print(f"{d['id']} : {d['action']} délégué ({d['perimetre']}, plafond {d['plafond']:g}, "
+                  f"jusqu'au {time.strftime('%d/%m %H:%M', time.localtime(d['expire']))}).")
+        elif a.action == "revoquer":
+            refused = _human_only("révoquer une délégation")
+            if refused is not None:
+                return refused
+            if not a.quoi:
+                return _err("usage : jarvis politique revoquer <D-xxxx>")
+            print("révoquée" if politique.revoquer(a.quoi[0]) else "délégation inconnue ou déjà close")
+        elif a.action == "exception":
+            refused = _human_only("décider d'une exception")
+            if refused is not None:
+                return refused
+            if len(a.quoi) < 2:
+                return _err("usage : jarvis politique exception <E-xxxx> accordee|refusee")
+            ok = politique.clore_exception(a.quoi[0], a.quoi[1])
+            print("décision enregistrée" if ok else "exception inconnue ou déjà close")
+            if ok and a.quoi[1] == "accordee":
+                print("Note : accorder une exception ne lance rien et ne crée pas de délégation durable ; "
+                      "pour une autorisation répétée : jarvis politique deleguer.")
+        elif a.action == "appliquer":
+            refused = _human_only("appliquer la politique")
+            if refused is not None:
+                return refused
+            pol = politique.charger()
+            from . import journal
+            journal.ecrire("politique", acteur="humain", objet=f"v{pol['version']}", decision="appliquee",
+                           raison=f"{len(pol['actions'])} actions" + (f" ; ignorées : {len(pol['ignorees'])}" if pol["ignorees"] else ""))
+            print(politique.texte(pol))
+    except politique.PolitiqueError as exc:
+        return _err(str(exc))
+    return 0
+
+
+def cmd_budget(a) -> int:
+    from . import budgets
+    try:
+        if a.action == "voir":
+            print(budgets.texte())
+        elif a.action == "verifier":
+            if len(a.quoi) < 2:
+                return _err("usage : jarvis budget verifier <catégorie> <montant> [--projet P]")
+            ok, raison = budgets.verifier(a.quoi[0], float(a.quoi[1]), projet=a.projet or "")
+            print(("admis — " if ok else "refusé — ") + raison)
+            return 0 if ok else 1
+        elif a.action == "definir":
+            refused = _human_only("définir un budget")
+            if refused is not None:
+                return refused
+            if len(a.quoi) < 2:
+                return _err("usage : jarvis budget definir <catégorie> <plafond> [--projet P] [--periode mois|semaine|jour|unique] [--note …]")
+            e = budgets.definir(a.quoi[0], float(a.quoi[1]), periode=a.periode or "mois", projet=a.projet or "",
+                                note=" ".join(a.quoi[2:]))
+            print(f"{e['id']} : {e['categorie']} {e['plafond']:g} par {e['periode']}" + (f" pour {e['projet']}" if e["projet"] else ""))
+        elif a.action == "engager":
+            if len(a.quoi) < 2:
+                return _err("usage : jarvis budget engager <catégorie> <montant> [libellé] [--projet P] [--estime]")
+            d = politique_depense(a)
+            if d is not None:
+                return d
+            budgets.engager(a.quoi[0], float(a.quoi[1]), projet=a.projet or "", libelle=" ".join(a.quoi[2:]),
+                            par=_acteur(), estime=bool(a.estime))
+            print("dépense enregistrée")
+        elif a.action == "encaisser":
+            refused = _human_only("enregistrer un encaissement")
+            if refused is not None:
+                return refused
+            if len(a.quoi) < 1 or not a.projet:
+                return _err("usage : jarvis budget encaisser <montant> [libellé] --projet P")
+            budgets.encaisser(float(a.quoi[0]), projet=a.projet, libelle=" ".join(a.quoi[1:]))
+            print("encaissement enregistré")
+    except ValueError as exc:
+        return _err(str(exc))
+    return 0
+
+
+def politique_depense(a) -> int | None:
+    """Une dépense réelle (non estimée) engagée par un agent passe par la politique : refus sans enveloppe/délégation."""
+    if a.estime or _acteur() == "humain":
+        return None
+    from . import politique
+    d = politique.autoriser("depense", acteur=_acteur(), projet=a.projet or "", montant=float(a.quoi[1]),
+                            detail=" ".join(a.quoi[2:]), categorie=a.quoi[0])
+    if d["decision"] != "admis":
+        return _err(f"dépense refusée ({d['decision']}) : {d['raison']}", 7)
+    return None
+
+
+def cmd_fournisseurs(a) -> int:
+    from . import fournisseurs
+    caps = fournisseurs.capacites()
+    print(json.dumps(caps, ensure_ascii=False, indent=2, default=str) if a.json else fournisseurs.texte(caps))
+    return 0
+
+
+def cmd_proposition(a) -> int:
+    from . import travaux
+    try:
+        if a.action == "liste":
+            print(travaux.texte(travaux.tous(a.statut)))
+        elif a.action == "voir":
+            t = travaux.get(a.quoi[0]) if a.quoi else None
+            if not t:
+                return _err("usage : jarvis proposition voir <W-xxxxx>")
+            print(json.dumps(t, ensure_ascii=False, indent=2))
+        elif a.action == "soumettre":
+            if not a.titre:
+                return _err("usage : jarvis proposition soumettre --source dot --titre … [--fichier contenu.md] [--type T] [--projet P]")
+            contenu = Path(a.fichier).read_text(encoding="utf-8", errors="replace") if a.fichier else " ".join(a.quoi)
+            t = travaux.soumettre(source=a.source or _acteur(), titre=a.titre, contenu=contenu, type_=a.type_ or "autre",
+                                  projet=a.projet or "", par=_acteur())
+            print(f"{t['id']}" + (" (doublon : proposition déjà connue)" if t["doublon"] else " soumise"))
+        elif a.action in ("accepter", "rejeter"):
+            if not a.quoi:
+                return _err(f"usage : jarvis proposition {a.action} <W-xxxxx> [raison]")
+            t = travaux.decider(a.quoi[0], a.action == "accepter", par=_acteur(), raison=" ".join(a.quoi[1:]))
+            print(f"{t['id']} {t['statut']}." + (" Rien n'est lancé : propose un plan pour ce travail." if t["statut"] == "acceptee" else ""))
+        elif a.action == "confier":
+            if len(a.quoi) < 2:
+                return _err("usage : jarvis proposition confier <W-xxxxx> local:claude|local:codex|codex-cloud [T-xxxxx|id cloud]")
+            t = travaux.confier(a.quoi[0], a.quoi[1], a.quoi[2] if len(a.quoi) > 2 else "", par=_acteur())
+            print(f"{t['id']} confié à {t['executant']}")
+        elif a.action == "terminer":
+            if len(a.quoi) < 2:
+                return _err("usage : jarvis proposition terminer <W-xxxxx> <preuve> [--echec] [note]")
+            t = travaux.terminer(a.quoi[0], preuve=a.quoi[1], verifie_par=_acteur(), ok=not a.echec, note=" ".join(a.quoi[2:]))
+            print(f"{t['id']} {t['statut']}")
+        elif a.action == "importer":
+            depot = a.quoi[0] if a.quoi else config.settings().get("propositions", {}).get("github_depot", "")
+            if not depot:
+                return _err("usage : jarvis proposition importer <owner/depot> (ou réglage propositions.github_depot)")
+            n = travaux.importer_github(depot)
+            print(f"{len(n)} nouvelle(s) proposition(s) importée(s) depuis {depot}" + ("".join(f"\n  {t['id']} {t['titre']}" for t in n)))
+    except travaux.TravauxError as exc:
+        return _err(str(exc))
+    except OSError as exc:
+        return _err(str(exc))
+    return 0
+
 
 def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(prog="jarvis", description="Poste de pilotage des agents IA")
@@ -961,6 +1308,7 @@ def build_parser() -> argparse.ArgumentParser:
     s.add_argument("issue")
     s.add_argument("agent")
     s.add_argument("--revue", action="store_true")
+    s.add_argument("--worktree", default="")
     s.set_defaults(fn=cmd_plan_verifier)
     s = plan.add_parser("relacher", help=argparse.SUPPRESS)
     s.add_argument("id")
@@ -971,6 +1319,92 @@ def build_parser() -> argparse.ArgumentParser:
 
     s = sub.add_parser("capacite", help="reste-t-il une place pour un agent ?")
     s.set_defaults(fn=cmd_capacite)
+
+    adm = sub.add_parser("admission", help="point d'admission commun des lancements").add_subparsers(dest="action", required=True)
+    s = adm.add_parser("etat", help="réservations et opérations lourdes en cours")
+    s.set_defaults(fn=cmd_admission)
+    s = adm.add_parser("demander", help=argparse.SUPPRESS)
+    s.add_argument("projet")
+    s.add_argument("issue")
+    s.add_argument("agent")
+    s.add_argument("--origine", default="cli", choices=("cli", "reprise", "relance", "sous-agent"))
+    s.add_argument("--worktree", default="")
+    s.add_argument("--role", default="")
+    s.add_argument("--classe", default="")
+    s.add_argument("--forcer", action="store_true", help="passer outre la capacité (humain seulement, jamais les pauses)")
+    s.set_defaults(fn=cmd_admission)
+    s = adm.add_parser("liberer", help=argparse.SUPPRESS)
+    s.add_argument("id")
+    s.add_argument("raison", nargs="*")
+    s.set_defaults(fn=cmd_admission)
+
+    s = sub.add_parser("pause", help="pauses par cause : humain, batterie, quota, ressources, incident, maintenance")
+    s.add_argument("action", nargs="?", default="etat", choices=("etat", "poser", "lever"))
+    s.add_argument("cause", nargs="?", default="humain")
+    s.add_argument("note", nargs="*")
+    s.set_defaults(fn=cmd_pause)
+
+    s = sub.add_parser("profil", help="profils de poste (laptop-conservative, workstation)")
+    s.add_argument("action", nargs="?", default="liste", choices=("liste", "voir", "appliquer"))
+    s.add_argument("nom", nargs="?")
+    s.set_defaults(fn=cmd_profil)
+
+    s = sub.add_parser("lourd", help="déclarer une opération lourde (compilation, tests, navigateur, vidéo)")
+    s.add_argument("action", choices=("debut", "fin", "exec", "liste"))
+    s.add_argument("quoi", nargs="*", help="debut <classe> [desc] · fin <L-xxxxx> · exec <classe> -- commande… "
+                                           "(les options --duree/--attente/--worktree se placent AVANT la classe)")
+    s.add_argument("--worktree", default="")
+    s.add_argument("--duree", type=int, default=120, help="durée maximale prévue en minutes (défaut 120)")
+    s.add_argument("--attente", type=int, default=30, help="exec : minutes d'attente maximales d'une place (défaut 30)")
+    s.set_defaults(fn=cmd_lourd)
+
+    s = sub.add_parser("audit", help="journal d'audit (admissions, pauses, politique, budgets)")
+    s.add_argument("n", nargs="?", type=int, default=40)
+    s.add_argument("--type", dest="type_", default=None)
+    s.add_argument("--verifier", action="store_true", help="contrôler la chaîne d'empreintes")
+    s.set_defaults(fn=cmd_audit)
+
+    s = sub.add_parser("politique", help="politique de délégation (niveaux 1/2/3), délégations et exceptions")
+    s.add_argument("action", nargs="?", default="voir",
+                   choices=("voir", "verifier", "deleguer", "revoquer", "exceptions", "exception", "appliquer"))
+    s.add_argument("quoi", nargs="*")
+    s.add_argument("--projet", default="")
+    s.add_argument("--montant", type=float, default=0.0)
+    s.add_argument("--categorie", default="depense", help="catégorie de budget du montant (depense, services, acquisition…)")
+    s.add_argument("--perimetre", default="")
+    s.add_argument("--plafond", type=float, default=0.0)
+    s.add_argument("--jours", type=int, default=7)
+    s.set_defaults(fn=cmd_politique)
+
+    s = sub.add_parser("budget", help="enveloppes de dépense (non renseignée = zéro) et mouvements")
+    s.add_argument("action", nargs="?", default="voir", choices=("voir", "verifier", "definir", "engager", "encaisser"))
+    s.add_argument("quoi", nargs="*")
+    s.add_argument("--projet", default="")
+    s.add_argument("--periode", default="mois")
+    s.add_argument("--estime", action="store_true", help="dépense estimée (comparée au réel plus tard)")
+    s.set_defaults(fn=cmd_budget)
+
+    s = sub.add_parser("fournisseurs", help="capacités déclarées de Claude et Codex (modèles, quotas, fraîcheur)")
+    s.add_argument("--json", action="store_true")
+    s.set_defaults(fn=cmd_fournisseurs)
+
+    s = sub.add_parser("proposition", help="file de travaux partagée (dot, GitHub, humain) : propositions → travaux vérifiés")
+    s.add_argument("action", nargs="?", default="liste",
+                   choices=("liste", "voir", "soumettre", "accepter", "rejeter", "confier", "terminer", "importer"))
+    s.add_argument("quoi", nargs="*")
+    s.add_argument("--source", default="")
+    s.add_argument("--titre", default="")
+    s.add_argument("--fichier", default="")
+    s.add_argument("--type", dest="type_", default="")
+    s.add_argument("--projet", default="")
+    s.add_argument("--statut", default=None)
+    s.add_argument("--echec", action="store_true")
+    s.set_defaults(fn=cmd_proposition)
+
+    s = sub.add_parser("diagnostic", help="inventaire léger du poste (rapport expurgé)")
+    s.add_argument("--json", action="store_true")
+    s.add_argument("--sans-windows", action="store_true", help="ne pas interroger PowerShell")
+    s.set_defaults(fn=cmd_diagnostic)
 
     s = sub.add_parser("demander", help="poser une question à l'humain (Telegram + notification)")
     s.add_argument("texte", nargs="+")
@@ -1102,7 +1536,7 @@ def build_parser() -> argparse.ArgumentParser:
     s = sub.add_parser("tache-enregistrer", help=argparse.SUPPRESS)
     for opt in ("projet", "issue", "agent", "worktree"):
         s.add_argument(f"--{opt}", required=True)
-    for opt in ("chemin", "role", "modele", "modele-id", "effort", "repli", "plan", "revue", "raison"):
+    for opt in ("chemin", "role", "modele", "modele-id", "effort", "repli", "plan", "revue", "raison", "classe", "reservation"):
         s.add_argument(f"--{opt}", default="")
     s.add_argument("--taille", default="M")
     s.add_argument("--secours", action="store_true")

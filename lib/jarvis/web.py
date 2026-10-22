@@ -59,6 +59,8 @@ def etat() -> dict:
         "agents": agents, "agents_erreur": snap["agents_error"] if snap["agents"] is None else "",
         "occupes": snap["busy"], "capacite": snap["max_agents"], "capacite_base": snap["max_base"],
         "capacite_raisons": snap["capacite_raisons"], "pause": snap["paused"], "chef": snap["chef"],
+        "pauses": snap.get("pauses") or {}, "reservations": snap.get("reservations", 0), "lourdes": snap.get("lourdes", 0),
+        "exceptions": snap.get("exceptions", 0), "profil": snap.get("profil") or "", "config_erreurs": snap.get("config_erreurs") or [],
         "demon": snap["demon"], "telegram": bool(config.settings()["telegram"].get("chat_id")),
         "jetons": jetons, "seuils": {"alerte": alerte, "arret": arret},
         "plans": [_plan(p) for p in snap["pending"]], "en_cours": [_plan(p) for p in snap["active"]],

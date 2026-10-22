@@ -38,8 +38,10 @@ ICONS = {
 
 
 def state_path(name: str) -> Path:
-    config.STATE_DIR.mkdir(parents=True, exist_ok=True)
-    return config.STATE_DIR / name
+    """Chemin d'un fichier d'état. Un sous-dossier (« lourdes/operations.json ») est créé au besoin."""
+    path = config.STATE_DIR / name
+    path.parent.mkdir(parents=True, exist_ok=True)
+    return path
 
 
 @contextlib.contextmanager
@@ -115,12 +117,15 @@ def feed_tail(n: int = 100) -> list[dict]:
 # --- Pause globale -------------------------------------------------------------
 
 def paused() -> bool:
-    return state_path("pause").exists()
+    """Vrai s'il reste au moins une cause de pause (voir pauses.py)."""
+    from . import pauses
+    return pauses.active()
 
 
-def set_paused(value: bool) -> None:
-    p = state_path("pause")
+def set_paused(value: bool, par: str = "humain") -> None:
+    """Pose ou lève la cause « humain » seulement : les causes automatiques restent (pauses.py)."""
+    from . import pauses
     if value:
-        p.write_text(time.strftime("%Y-%m-%d %H:%M"), encoding="utf-8")
+        pauses.poser("humain", par=par)
     else:
-        p.unlink(missing_ok=True)
+        pauses.lever("humain", par=par)

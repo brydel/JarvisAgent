@@ -186,7 +186,17 @@ Tu reçois aussi les questions du chef (❓), ses bilans (📝) et les **livrabl
 | `jarvis board` · `jarvis status` | Tableau de bord workmux · tâches du projet courant |
 | `jarvis init-project [dossier]` | Protocole Linear dans un projet |
 | `jarvis doctor` | Diagnostic complet |
-| `jarvis relancer [--chef]` | Après une mise à jour : relance le démon et le cockpit (et le chef), sans toucher aux agents |
+| `jarvis relancer [--chef]` | Après une mise à jour : relance le démon et le cockpit (et le chef), sans toucher aux agents (pause « maintenance » le temps de l'opération) |
+| `jarvis pause [poser\|lever <cause> [note]]` | Pauses à causes indépendantes : humain, batterie, quota, ressources, incident, maintenance |
+| `jarvis admission etat` | Réservations de lancement en attente et opérations lourdes déclarées |
+| `jarvis lourd debut\|fin\|exec\|liste` | Déclarer une opération lourde (compilation, tests, navigateur, vidéo) ; `exec` attend sa place puis lance la commande à priorité réduite |
+| `jarvis politique [verifier <action>\|deleguer\|revoquer\|exceptions\|exception E-1 accordee\|refusee]` | Politique de délégation (niveaux 1/2/3), délégations plafonnées, file d'exceptions |
+| `jarvis budget [definir\|verifier\|engager\|encaisser]` | Enveloppes de dépense (non renseignée = zéro) et mouvements réels |
+| `jarvis fournisseurs` | Capacités déclarées de Claude et Codex : CLI, modèles vérifiés, quotas et fraîcheur |
+| `jarvis proposition [soumettre\|accepter\|rejeter\|confier\|terminer\|importer]` | File de travaux partagée (ton dot, GitHub, toi) : identifiants stables, un exécutant, une preuve |
+| `jarvis audit [n] [--verifier]` | Journal d'audit des décisions, chaîne d'empreintes |
+| `jarvis diagnostic` | Inventaire léger du poste (rapport expurgé sous `~/.local/share/jarvis/diagnostics/`) |
+| `jarvis profil [liste\|voir\|appliquer <nom>]` | Profils `laptop-conservative` et `workstation` (settings.toml sauvegardé avant) |
 
 ### Réglages
 
@@ -216,7 +226,13 @@ Tu reçois aussi les questions du chef (❓), ses bilans (📝) et les **livrabl
 | `studio.taille_max_mo` | `49` | Taille maximale d'un livrable envoyé sur Telegram |
 | `web.actif` · `web.port` | `true` · `7717` | Tableau de bord web (lecture seule, ce PC uniquement) |
 | `veille.jours` | `7` | Fréquence de la veille concurrentielle (0 = désactivée) |
-| `plans.validation` | `humain` | `auto` : les plans sont approuvés sans attendre ta validation |
+| `plans.validation` | `humain` | `auto` : les plans sont approuvés sans attendre ta validation (pauses, capacité, jetons, politique et admission restent) |
+| `admission.operations_lourdes_max` | `1` | Opérations lourdes simultanées (compilation, tests, navigateur, vidéo) |
+| `admission.reservation_min` | `15` | Une réservation de lancement jamais confirmée expire après N min |
+| `admission.charge_max_par_coeur` · `admission.memoire_reserve_mo` | `2.5` · `1500` | Charge par cœur au-delà de laquelle rien ne part ; mémoire gardée pour Windows et le chef |
+| `admission.pression_memoire_pct` · `admission.hysterese_min` | `25` · `5` | Pause « ressources » sur pression mémoire soutenue ; délai de retour au calme |
+| `jetons.peremption_h` | `6` | Une mesure de quota plus vieille que N h vaut « prudence », jamais « feu vert » |
+| `propositions.max_par_jour` · `propositions.github_depot` | `3` · vide | Plafond d'acceptations par source et par jour ; dépôt GitHub dont les issues `jarvis-proposition` sont importées |
 
 Exemple : `jarvis regler general.max_agents 4`. Les réglages vivent dans `~/.config/jarvis/settings.toml` (permissions 600, jamais dans le dépôt).
 
@@ -233,12 +249,22 @@ Exemple : `jarvis regler general.max_agents 4`. Les réglages vivent dans `~/.co
 
 | Équipe | Rôles (`jarvis role`) |
 | --- | --- |
-| Conception | `architecte` · `design` |
-| Fabrication | `backend` · `frontend` · `data` · `generaliste` |
+| Conception | `architecte` · `design` (direction artistique, porte qualité visuelle) |
+| Fabrication | `backend` · `frontend` · `data` · `ia-produit` (fonctions intelligentes dans le produit) · `generaliste` |
 | Exploitation | `devops` · `securite` |
 | Qualité | `qa` · `revue` (contre-relecture, aucun commit) |
 | Studio | `marketing` · `video` · `redaction` |
 | Veille | `recherche` |
+
+### Veille approfondie, design et IA produit
+
+Trois compétences (skills) liées pour Claude Code et Codex par `./install.sh` :
+
+- **`jarvis-veille`** : la veille concurrentielle démonte au lieu de résumer. Matrice de parité sourcée (40 fonctionnalités au moins), captures côte à côte des pages publiques des concurrents et de notre produit (`capturer.cjs` : bureau et mobile, `robots.txt` respecté, une page toutes les 3 s, planche de comparaison), démontage écran par écran, décisions imiter / dépasser / ignorer, une fonctionnalité signature, et un backlog avec captures et critères visuels. On imite des fonctionnalités et des motifs d'interface, jamais le code, les textes ou l'identité visuelle d'un concurrent.
+- **`jarvis-design`** : une direction artistique écrite dans le dépôt (`design/direction.md` + jetons), proposée en 2 à 3 variantes que tu choisis, puis une grille de notation sur captures que l'auteur ET le relecteur remplissent. Un écran clé sous le seuil repart en corrections.
+- **`ia-produit`** (rôle) : ajoute de l'intelligence au produit (analyse expliquée, recherche en langage naturel, alertes, résumés) derrière un drapeau désactivé par défaut, avec couche fournisseur, jeu d'essai, coût par 1 000 utilisateurs, et un fournisseur simulé tant qu'aucun budget d'API n'existe.
+
+Le chef lance désormais la veille comme une vraie tâche (`@recherche+L`), te livre les planches, met une tâche `@design+L` en tête si l'écart visuel est net, et réserve au moins un élément sur trois de chaque vague à ce qui se voit (parité, signature, design, IA).
 
 Un rôle est un fichier `roles/<nom>.md` : un en-tête (titre, équipe, couleur, niveau attendu, fournisseur préféré) et le **brief** que l'agent reçoit en plus des consignes du chef. Pour adapter un rôle ou en créer un, dépose un fichier du même format dans `~/.config/jarvis/roles/` : il remplace ou complète ceux du dépôt, sans toucher au code.
 
@@ -393,6 +419,10 @@ Un agent que workmux ne suit pas encore (souvent Codex avant la fin de son premi
 - **Batterie critique** : sous 12 % sans secteur, les agents reçoivent l'ordre de committer leur travail, Jarvis se met en pause et te prévient. La pause se lève quand tu rebranches. Le niveau est relu toutes les deux minutes sur batterie, toutes les dix sur secteur.
 - **Chiens de garde** : le démon est relancé s'il plante ; le chef est relancé s'il s'arrête alors qu'il reste du travail (jamais s'il n'avait pas été lancé) ; un agent qui n'affiche plus rien depuis 45 minutes ou travaille depuis 4 heures est signalé au chef ; un lancement interrompu avant le démarrage de l'agent rend son élément au plan. Le cockpit affiche un voyant par service.
 
+## Autonomie : admission, pauses, politique
+
+Le lot 1 de l'autonomie (voir `docs/autonomy/`) ajoute un **point d'admission commun** : tout départ d'agent — plan approuvé, `jarvis task` à la main, reprise après redémarrage, relance du chef — passe sous le même verrou, qui vérifie configuration, pauses, observation, capacité (agents occupés + réservations en attente), opérations lourdes, doublons, jetons, puis le plan. Les **pauses** ont des causes indépendantes (humain, batterie, quota, ressources, incident, maintenance) : la fin d'une cause ne lève jamais les autres. Un agent muet mais vivant est **silencieux**, pas terminé. La **politique de délégation** (`config/politique.toml`) classe chaque action en automatique, déléguée ou à approuver ; dépense et publication sont refusées sans enveloppe ni délégation, et les refus s'empilent dans une file d'exceptions que tu lis groupée. Tout est journalisé (`jarvis audit`). Point de départ pour un portable : `jarvis profil appliquer laptop-conservative`, puis `jarvis diagnostic` pour mesurer avant d'augmenter.
+
 ## Sécurité et coûts
 
 - Dépôt **public** : aucun secret ici. Le jeton Telegram reste dans `~/.config/jarvis/settings.toml`.
@@ -417,4 +447,6 @@ python3 -m unittest discover -s tests -v
 - [x] Phase 2 : chef d'orchestre, plans approuvés, cockpit, démon, Telegram, plan de nuit
 - [x] Phase 2.5 : reprise après redémarrage, démarrage automatique, santé du PC, battement du chef, images Telegram
 - [x] Phase 3 : l'usine — rôles spécialisés, routeur de modèles, secours, registre des tâches et bilan, studio vidéo et livrables, cockpit par ateliers, tableau de bord web, prévision des jetons, capacité adaptée au PC, chiens de garde
+- [x] Autonomie, lot 0–1 et fondations du lot 2 : admission commune, pauses indépendantes, agents silencieux, profils, diagnostic, politique de délégation, budgets, journal d'audit, adaptateurs fournisseurs, file de travaux partagée (`docs/autonomy/`)
+- [ ] Autonomie, lots 3–4 : parcours commercial d'un produit en simulation, exploitation, amélioration mesurée des agents, migration vers la station (`docs/autonomy/feuille-de-route.md`)
 - [ ] Phase 4 : PR fusionnées par jour et par projet dans le bilan, voix off et sous-titres dans le studio, approbation des plans depuis le tableau de bord web

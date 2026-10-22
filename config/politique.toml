@@ -1,0 +1,163 @@
+# Politique de délégation de JarvisAgent — version 1
+#
+# Pour chaque action : son niveau, son périmètre, le risque, les preuves exigées et le retour arrière.
+#   niveau 1 — automatique dans le périmètre établi (recherche, documentation, code en branche, tests isolés…)
+#   niveau 2 — automatique SEULEMENT après une délégation préalable de l'humain (jarvis politique deleguer),
+#              plafonnée et datée, avec contrôles ; sinon l'action est refusée et mise en file d'exceptions.
+#   niveau 3 — approbation explicite de l'humain à chaque fois.
+# Une action absente de ce fichier est de niveau 3. Un texte produit par un agent ne peut pas changer
+# ce fichier : seule la copie de l'humain (~/.config/jarvis/politique.toml, appliquée par « jarvis politique
+# appliquer » depuis un terminal) le complète, et ne peut que RESTREINDRE (jamais abaisser un niveau).
+# Limite honnête : tout tourne sous le même utilisateur Linux ; voir docs/autonomy/securite.md.
+
+[politique]
+version = 1
+# Dépenses : une enveloppe non renseignée vaut zéro. Les montants sont en euros.
+devise = "EUR"
+
+[actions.recherche]
+niveau = 1
+perimetre = "lecture du web, des issues et des dépôts ; aucune écriture externe"
+risque = "faible"
+preuves = ["sources datées"]
+retour_arriere = "sans objet"
+
+[actions.documentation]
+niveau = 1
+perimetre = "fichiers du dépôt, en branche"
+risque = "faible"
+preuves = ["diff relu"]
+retour_arriere = "git revert"
+
+[actions.code_branche]
+niveau = 1
+perimetre = "worktree dédié, branche non protégée, jamais main"
+risque = "faible"
+preuves = ["tests", "contre-relecture par l'autre fournisseur"]
+retour_arriere = "branche abandonnée"
+
+[actions.tests_isoles]
+niveau = 1
+perimetre = "tests locaux courts et bornés, sans service externe payant"
+risque = "faible"
+preuves = ["sortie des tests"]
+retour_arriere = "sans objet"
+
+[actions.analyse]
+niveau = 1
+perimetre = "bilans, mesures, classements avec hypothèses et incertitude affichées"
+risque = "faible"
+preuves = ["données sources"]
+retour_arriere = "sans objet"
+
+[actions.brouillon]
+niveau = 1
+perimetre = "contenus marketing, pages, scripts vidéo : produits mais NON publiés"
+risque = "faible"
+preuves = ["livrable dans le dossier des livrables"]
+retour_arriere = "sans objet"
+
+[actions.livraison_interne]
+niveau = 1
+perimetre = "envoi d'un livrable à l'humain (Telegram appairé) après contrôle qualité"
+risque = "faible"
+preuves = ["jarvis studio verifier"]
+retour_arriere = "sans objet"
+
+[actions.deploiement_reversible]
+niveau = 2
+perimetre = "staging ou préproduction, rollback testé, jamais la production clients sans délégation dédiée"
+risque = "moyen"
+preuves = ["tests verts", "vérification après déploiement", "procédure de retour testée"]
+retour_arriere = "rollback applicatif ; les migrations de données exigent leur propre plan"
+
+[actions.maintenance]
+niveau = 2
+perimetre = "mises à jour de dépendances mineures, correctifs, nettoyage de branches fusionnées"
+risque = "moyen"
+preuves = ["tests verts"]
+retour_arriere = "git revert"
+
+[actions.publication]
+niveau = 2
+perimetre = "publication externe précisément autorisée (page, article, post) sur un canal nommé dans la délégation"
+risque = "moyen"
+preuves = ["relecture", "droits sur les contenus vérifiés", "règles de la plateforme vérifiées"]
+retour_arriere = "dépublication ; une publication vue ne se reprend pas"
+
+[actions.experience_marketing]
+niveau = 2
+perimetre = "campagne ou test plafonné en budget et en durée, canal nommé"
+risque = "moyen"
+preuves = ["budget réservé", "mesure définie avant le départ"]
+retour_arriere = "arrêt de la campagne"
+
+[actions.depense]
+niveau = 3
+perimetre = "toute dépense nouvelle ou hors enveloppe"
+risque = "élevé"
+preuves = ["devis ou prix daté", "enveloppe budgétaire"]
+retour_arriere = "souvent impossible"
+
+[actions.prospection]
+niveau = 3
+perimetre = "contact direct de prospects ou clients"
+risque = "élevé"
+preuves = ["liste et message validés"]
+retour_arriere = "impossible"
+
+[actions.creation_compte]
+niveau = 3
+perimetre = "ouverture de compte chez un tiers, acceptation de conditions"
+risque = "élevé"
+preuves = ["conditions lues"]
+retour_arriere = "fermeture du compte"
+
+[actions.production]
+niveau = 3
+perimetre = "intervention sur un service utilisé par des clients"
+risque = "élevé"
+preuves = ["plan", "sauvegarde", "fenêtre annoncée"]
+retour_arriere = "restauration testée"
+
+[actions.acces_privilegie]
+niveau = 3
+perimetre = "nouveaux droits, secrets de production, hôte, sudo"
+risque = "élevé"
+preuves = ["besoin démontré"]
+retour_arriere = "révocation"
+
+[actions.plafond]
+niveau = 3
+perimetre = "augmentation d'un plafond (agents, budget, délégation)"
+risque = "élevé"
+preuves = ["mesures sur le poste"]
+retour_arriere = "retour à l'ancien plafond"
+
+[actions.contrat]
+niveau = 3
+perimetre = "engagement contractuel, abonnement, conditions tarifaires"
+risque = "élevé"
+preuves = ["texte du contrat"]
+retour_arriere = "résiliation, souvent avec préavis"
+
+[actions.destructif]
+niveau = 3
+perimetre = "suppression de données, de branches non fusionnées, de comptes, de services clients"
+risque = "élevé"
+preuves = ["sauvegarde vérifiée"]
+retour_arriere = "restauration depuis sauvegarde"
+
+[actions.migration_sensible]
+niveau = 3
+perimetre = "migration de données ou de schéma en production"
+risque = "élevé"
+preuves = ["répétition en staging", "sauvegarde", "plan de retour des données"]
+retour_arriere = "restauration ; un rollback applicatif ne suffit pas"
+
+[actions.protection]
+niveau = 3
+perimetre = "modification de la politique, des budgets, de l'arrêt, des critères d'évaluation ou des tests protégés"
+risque = "élevé"
+preuves = ["revue humaine"]
+retour_arriere = "version précédente du fichier"
