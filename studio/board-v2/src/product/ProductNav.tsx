@@ -1,6 +1,7 @@
 import { memo, useEffect, useRef } from "react";
 import { ArrowUpRight, BarChart3, BookOpen, Bot, Folder, Home, LayoutGrid, Search, Settings, Target } from "lucide-react";
 import { useStudioNavigation, type Vue } from "./routing";
+import "./navigation.css";
 const items = [["accueil", "Accueil", Home], ["board", "Board", LayoutGrid], ["missions", "Missions", Target],
   ["agents", "Agents", Bot], ["connaissances", "Connaissances", BookOpen], ["fichiers", "Fichiers", Folder],
   ["analytique", "Activité", BarChart3], ["configuration", "Configuration", Settings]] as const;
@@ -20,7 +21,6 @@ export const ProductNav = memo(function ProductNav({ recherche = "", setRecherch
       onClick={() => aller(key as Vue)} aria-current={vue === key ? "page" : undefined} title={label}><Icon /><span>{label}</span></button>)}</nav>
     {setRecherche && <label className="recherche"><Search size={16} /><input ref={input} value={recherche} type="search"
       aria-label={vue === "board" ? "Rechercher dans le Board" : "Rechercher dans cet espace"} placeholder="Rechercher..." onChange={e => setRecherche(e.target.value)} /><kbd>Ctrl K</kbd></label>}
-    {notifications > 0 && <button className="p-button p-quiet p-notifications" onClick={() => aller("missions")} aria-label={`${notifications} approbations en attente`}>{notifications} a valider<ArrowUpRight size={14}/></button>}
-    <span className={`p-mode ${demo ? "is-demo" : ""}`} title={demo ? "Données fictives. Aucune exécution réelle." : "Interface locale ; ce badge ne prouve pas la disponibilite des fournisseurs."}>{demo ? "DEMO" : "LOCAL"}</span>
+    {notifications > 0 && <button className="p-button p-quiet p-notifications" onClick={() => aller("missions")} aria-label={`${notifications} approbations en attente`}>{notifications} à valider<ArrowUpRight size={14}/></button>}
+    <span className={`p-mode ${demo ? "is-demo" : ""}`} title={demo ? "Données fictives. Aucune exécution réelle." : "Interface locale ; ce badge ne prouve pas la disponibilité des fournisseurs."}>{demo ? "DÉMO" : "LOCAL"}</span>
   </header>;
-});

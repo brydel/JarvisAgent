@@ -1,0 +1,18 @@
+/* Navigation et panneaux produit, indépendants des règles historiques du Board. */
+.product-nav.topbar { min-height:60px; }
+.product-nav.topbar .product-brand { margin-right:0; }
+.product-nav.topbar .nav { display:flex; }
+.product-nav.topbar .nav button span { display:inline; }
+.app:has(> .product-nav) { grid-template-rows:60px var(--subbar-h) minmax(0,1fr); }
+@media (min-width:761px) {
+  .product-app .p-editor { position:sticky; top:18px; max-height:calc(100dvh - 100px); display:flex; flex-direction:column; }
+  .product-app .p-editor > header { flex:none; }
+  .product-app .p-editor-content { overflow:auto; min-height:0; }
+}
+@media (max-width:900px) {
+  .app:has(> .product-nav) { grid-template-rows:auto auto minmax(0,1fr); }
+}
+@media (max-width:760px) {
+  .product-nav.topbar { min-height:58px; }
+  .product-nav.topbar .nav { flex:1 1 100%; overflow-x:auto; }
+}
