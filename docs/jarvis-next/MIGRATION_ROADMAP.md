@@ -27,8 +27,16 @@ locale authentifiée au-dessus de `missions.py`, flux SSE, approbations, déplac
 d'exécution. Acceptation constatée dans un navigateur : une note ajoutée produit un artefact réel de Claude visible
 sans recharger, et un rechargement montre le même état. Choix techniques : ADR-0005.
 
-## Prochaine tâche concrète (M2, seconde partie)
+## Inspecteur de mission — fait (VERIFIED)
 
-Inspecteur de mission (tâches, tentatives, décisions de politique, artefacts) et graphe de mission dans le Studio ;
-puis, selon D-2, PostgreSQL + RLS avec comptes et membres. Acceptation : depuis le Studio, ouvrir une mission et voir
-chaque tentative avec son bail, son fournisseur, sa revue et la raison de chaque transition.
+`missions.inspecter()` + `GET /api/missions/:id/inspection` + fenêtre d'inspection du Studio (bouton « Inspecter »
+des cartes, liste « Missions ») : pour chaque tâche, le bail (numéro, titulaire, échéance), les tentatives
+(exécutant, fournisseur, début, durée, issue, erreur), les transitions avec leur raison, les approbations et les
+artefacts avec leur revue et leur empreinte ; mise à jour en direct par le flux ; annulation de la mission.
+Vérifié dans un navigateur avec un bail expiré suivi d'une reprise réelle par Claude. Défaut trouvé et corrigé : une
+approbation restait « en attente » après l'annulation de sa tâche ; elle devient désormais **caduque**.
+
+## Prochaine tâche concrète (M2, suite)
+
+Selon D-2 : PostgreSQL + RLS avec comptes et membres (service séparé, ADR-0002), ou graphe de mission (dépendances
+explicites entre tâches, qui arrivent avec le compilateur de missions en M4).

@@ -36,7 +36,8 @@ jarvis mission evenements --apres 0                    # le journal que le Studi
 | Approbation humaine imposée | VERIFIED (L3/L4, empreinte du travail, ni demandeur ni exécutant) | `PolitiqueTest` |
 | Aucun effet externe en double | VERIFIED pour les artefacts ; aucun effet externe n'existe encore | — |
 | Reconnexion après interruption | VERIFIED (baux, jeton de clôture) | `ReprisesTest` |
-| Tests automatisés | **43 nouveaux tests** (34 moteur + 9 Studio), suite complète 195 OK (152 avant) | `CURRENT_STATE_AUDIT.md` |
+| Inspecteur de mission | VERIFIED : baux, tentatives, transitions et raisons, approbations, artefacts | `test_inspection_explique_chaque_tentative` ; navigateur |
+| Tests automatisés | **45 nouveaux tests** (36 moteur + 9 Studio), suite complète 197 OK (152 avant) | `CURRENT_STATE_AUDIT.md` |
 
 ## Vérification dans le navigateur (M2 local, 21 octobre 2026)
 

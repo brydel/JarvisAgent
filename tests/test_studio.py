@@ -125,6 +125,12 @@ class StudioTest(unittest.TestCase):
         self.assertEqual(objets[0]["artefacts"][0]["factice"], 1)
         m = self.req("GET", f"/api/missions/{o['mission_id']}")[1]
         self.assertEqual(m["statut"], mi.SUCCEEDED)
+        insp = self.req("GET", f"/api/missions/{o['mission_id']}/inspection")[1]
+        t = insp["taches"][0]
+        self.assertEqual((t["tentatives"][0]["issue"], t["tentatives"][0]["executant_nom"]), ("reussi", "poste"))
+        self.assertEqual(t["transitions"][-1]["vers"], mi.SUCCEEDED)
+        self.assertNotIn("secret", json.dumps(insp), "aucun secret d'exécutant dans l'inspection")
+        self.assertEqual(self.req("GET", "/api/missions/MI-000000000000/inspection")[0], 404)
         ex = self.req("GET", "/api/execution")[1]
         self.assertTrue(ex["executants"][0]["actif"])
         self.assertNotIn("secret", json.dumps(ex), "aucun secret d'exécutant exposé")
@@ -145,6 +151,12 @@ class StudioTest(unittest.TestCase):
         code, data, _ = self.req("POST", f"/api/approbations/{ap['id']}", {"accord": True})
         self.assertEqual((code, data["statut"]), (200, "accordee"))
         self.assertEqual(self.req("POST", f"/api/approbations/{ap['id']}", {"accord": True})[0], 409)
+        insp = self.req("GET", f"/api/missions/{m['mission_id']}/inspection")[1]
+        self.assertEqual(insp["taches"][0]["approbations"][0]["decide_par"], "studio:humain")
+        # annulation depuis l'inspecteur
+        code, data, _ = self.req("POST", f"/api/missions/{m['mission_id']}/annuler", {})
+        self.assertEqual((code, data["annulees"]), (200, 1))
+        self.assertEqual(self.req("GET", f"/api/missions/{m['mission_id']}")[1]["statut"], mi.CANCELLED)
 
     def test_flux_sse_reprend_au_dernier_numero(self):
         self.connecter()

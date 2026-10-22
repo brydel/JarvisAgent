@@ -23,6 +23,8 @@ réversible mais qui expose des données ou touche une autre personne est L3.
   refusé et une nouvelle demande est nécessaire.
 - Décidées seulement par un acteur de type `humain`, différent du demandeur ; jamais par un exécutant ou un agent.
 - Refus → CANCELLED ; accord → QUEUED. Journalisées (`approbation`).
+- Une demande encore en attente devient **caduque** dès que sa tâche atteint un état terminal (annulée, expirée) :
+  elle ne peut plus être accordée (`test_annulation_rend_l_approbation_caduque`).
 
 ## Délégation bornée
 

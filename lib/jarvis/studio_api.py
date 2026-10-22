@@ -45,7 +45,6 @@ CORPS_MAX = 60_000
 HOTES_LOCAUX = ("localhost", "127.0.0.1", "::1")
 CSP = ("default-src 'none'; script-src 'self'; style-src 'self'; connect-src 'self'; img-src 'self' data:; "
        "base-uri 'none'; form-action 'self'; frame-ancestors 'none'")
-ID = re.compile(r"^[A-Z]{2,3}-[0-9a-f]{12}$")
 
 _sessions: dict[str, float] = {}
 _verrou = threading.Lock()
@@ -182,12 +181,8 @@ class Handler(BaseHTTPRequestHandler):
                 self._json(200, {"objets": missions.board(org, (q.get("espace") or ["accueil"])[0][:80])})
             elif route == "/api/missions":
                 self._json(200, {"missions": missions.missions(org, 50)})
-            elif route.startswith("/api/missions/"):
-                mid = route.rsplit("/", 1)[1]
-                if not ID.match(mid):
-                    self._erreur(404, "mission inconnue")
-                    return
-                self._json(200, missions.mission(org, mid))
+            elif m := re.match(r"^/api/missions/(MI-[0-9a-f]{12})(/inspection)?$", route):
+                self._json(200, (missions.inspecter if m.group(2) else missions.mission)(org, m.group(1)))
             elif route == "/api/approbations":
                 self._json(200, {"approbations": missions.approbations_en_attente(org)})
             elif route == "/api/execution":

@@ -229,6 +229,9 @@ def _transition(c: sqlite3.Connection, tache: sqlite3.Row | dict, vers: str, *, 
     _evenement(c, tache["tenant_id"], "tache_etat", mission_id=tache["mission_id"], tache_id=tache["id"], now=now,
                de=de, vers=vers, raison=raison)
     if vers in TERMINAUX:
+        # une demande d'approbation pour une tâche terminée (annulée, expirée) ne doit plus pouvoir être accordée
+        c.execute("UPDATE approbations SET statut='caduque', decide=? WHERE tache_id=? AND statut='en_attente'",
+                  (now, tache["id"]))
         _clore_mission_si_finie(c, tache["tenant_id"], tache["mission_id"], now)
 
 
@@ -808,6 +811,35 @@ def mission(tenant_id: str, mission_id: str) -> dict:
         return d
     finally:
         c.close()
+
+
+def inspecter(tenant_id: str, mission_id: str) -> dict:
+    """Tout ce qui explique une mission : tâches avec leurs tentatives (baux, fournisseur, issue), artefacts et
+    revues, approbations, et la chronologie des transitions avec leur raison. Lecture seule, filtrée par tenant."""
+    m = mission(tenant_id, mission_id)
+    c = _connecter()
+    try:
+        ids = [t["id"] for t in m["taches"]]
+        marques = ",".join("?" * len(ids))
+        tentatives = [dict(a) for a in c.execute(
+            f"SELECT a.*, e.nom AS executant_nom FROM tentatives a LEFT JOIN executants e ON e.id = a.executant_id "
+            f"WHERE a.tenant_id=? AND a.tache_id IN ({marques}) ORDER BY a.debut, a.bail_jeton", (tenant_id, *ids))]
+        chronologie = [{**dict(r), "donnees": json.loads(r["donnees"])} for r in c.execute(
+            f"SELECT * FROM evenements WHERE tenant_id=? AND (mission_id=? OR tache_id IN ({marques})) ORDER BY seq",
+            (tenant_id, mission_id, *ids))]
+    finally:
+        c.close()
+    for t in m["taches"]:
+        t["capacites"] = json.loads(t["capacites"])
+        t["travail"] = json.loads(t["travail"])
+        t["tentatives"] = [a for a in tentatives if a["tache_id"] == t["id"]]
+        t["artefacts"] = [a for a in m["artefacts"] if a["tache_id"] == t["id"]]
+        t["approbations"] = [a for a in m["approbations"] if a["tache_id"] == t["id"]]
+        t["transitions"] = [{"seq": e["seq"], "ts": e["ts"], "de": e["donnees"].get("de"), "vers": e["donnees"].get("vers"),
+                             "raison": e["donnees"].get("raison", "")}
+                            for e in chronologie if e["tache_id"] == t["id"] and e["type"] == "tache_etat"]
+    m["chronologie"] = chronologie
+    return m
 
 
 def missions(tenant_id: str, limite: int = 20) -> list[dict]:

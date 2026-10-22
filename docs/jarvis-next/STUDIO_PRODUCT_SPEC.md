@@ -36,6 +36,8 @@ Le Studio vivra dans un service séparé (`studio/`), pour ne pas imposer Node a
 `jarvis mission studio` sert sur 127.0.0.1:7718 (`lib/jarvis/studio_api.py`, bibliothèque standard) une page Board
 sans framework ni dépendance (`studio_board.html/.css/.js`) : canevas à cartes déplaçables (souris, ou clavier :
 flèches, Maj pour un grand pas), ajout de note, statut de mission, artefacts avec revue et marque FACTICE,
-approbations, moniteur d'exécution, flux d'activité en direct. Thème clair/sombre selon le système, mouvement
+approbations, moniteur d'exécution, flux d'activité en direct, liste des missions et **inspecteur de mission**
+(fenêtre modale, Échap pour fermer) qui explique chaque tâche par ses baux, tentatives, transitions et raisons,
+approbations et artefacts, mis à jour en direct. Thème clair/sombre selon le système, mouvement
 réduit respecté, affichage téléphone en une colonne. Sécurité : voir l'en-tête de `studio_api.py` et
 `tests/test_studio.py`. Next.js, React Flow et le canevas infini restent à évaluer (ADR-0005).

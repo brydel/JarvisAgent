@@ -181,6 +181,34 @@ class ReprisesTest(Base):
         self.assertEqual(mi.mission(self.org, m["mission_id"])["taches"][0]["statut"], mi.QUEUED)
         self.assertEqual(self.coureur(rid, secret).tour()["etat"], "fait")
 
+    def test_inspection_explique_chaque_tentative(self):
+        a, sa = self.executant()
+        b, sb = self.executant()
+        m = self.mission_simple()
+        tid = m["taches"][0]
+        env_a = mi.reclamer(a, sa)
+        mi.demarrer(a, sa, tid, env_a["tentative_id"], env_a["bail_jeton"])
+        t0 = time.time()
+        mi.recuperer(now=t0 + mi.BAIL_S + 1)
+        mi.recuperer(now=t0 + mi.BAIL_S + 60)
+        self.coureur(b, sb).tour()
+        autre = mi.creer_organisation("Autre")
+        with self.assertRaises(mi.MissionError):
+            mi.inspecter(autre, m["mission_id"])
+        insp = mi.inspecter(self.org, m["mission_id"])
+        t = insp["taches"][0]
+        self.assertEqual([x["issue"] for x in t["tentatives"]], ["bail_expire", "reussi"])
+        self.assertEqual([x["bail_jeton"] for x in t["tentatives"]], [1, 2])
+        self.assertEqual(t["tentatives"][1]["executant_nom"], "poste")
+        vers = [x["vers"] for x in t["transitions"]]
+        self.assertEqual(vers, [mi.VALIDATED, mi.QUEUED, mi.LEASED, mi.RUNNING, mi.RETRY_SCHEDULED, mi.QUEUED,
+                                mi.LEASED, mi.RUNNING, mi.REVIEW, mi.SUCCEEDED])
+        self.assertIn("expiré", t["transitions"][4]["raison"])
+        self.assertEqual(t["artefacts"][0]["revue"], "acceptee")
+        self.assertEqual(t["capacites"], ["analyse"])
+        self.assertTrue(any(e["type"] == "mission_etat" for e in insp["chronologie"]))
+        self.assertTrue(all(e["tenant_id"] == self.org for e in insp["chronologie"]))
+
     def test_echecs_bornes(self):
         rid, secret = self.executant()
         m = self.mission_simple(essais_max=2)
@@ -310,6 +338,16 @@ class PolitiqueTest(Base):
         m = self.mission_simple(niveau="L4")
         ap = mi.approbations_en_attente(self.org)[0]["id"]
         mi.decider_approbation(self.org, ap, False, acteur="brydel", acteur_type="humain")
+        self.assertEqual(self.statut(m["taches"][0]), mi.CANCELLED)
+
+    def test_annulation_rend_l_approbation_caduque(self):
+        m = self.mission_simple(niveau="L3")
+        ap = mi.approbations_en_attente(self.org)[0]["id"]
+        mi.annuler_mission(self.org, m["mission_id"], par="humain")
+        self.assertEqual(mi.approbations_en_attente(self.org), [])
+        with self.assertRaises(mi.MissionError) as ctx:
+            mi.decider_approbation(self.org, ap, True, acteur="brydel", acteur_type="humain")
+        self.assertIn("caduque", str(ctx.exception))
         self.assertEqual(self.statut(m["taches"][0]), mi.CANCELLED)
 
     def test_L3_L4_jamais_automatiques_meme_configures(self):

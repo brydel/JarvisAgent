@@ -46,6 +46,11 @@
     </section>
 
     <section class="bloc">
+      <h2>Missions</h2>
+      <ul class="liste missions" id="missions"></ul>
+    </section>
+
+    <section class="bloc">
       <h2>Exécution</h2>
       <div id="execution" class="execution"></div>
     </section>
@@ -56,6 +61,20 @@
     </section>
   </aside>
 </main>
+
+<dialog class="inspecteur" id="inspecteur" aria-labelledby="insp-titre">
+  <header class="insp-tete">
+    <div>
+      <div class="insp-sur" id="insp-sur"></div>
+      <h1 id="insp-titre">Mission</h1>
+    </div>
+    <div class="insp-actions">
+      <button type="button" class="danger" id="insp-annuler" hidden>Annuler la mission</button>
+      <button type="button" id="insp-fermer" aria-label="Fermer l'inspecteur">Fermer</button>
+    </div>
+  </header>
+  <div class="insp-corps" id="insp-corps"></div>
+</dialog>
 
 <section class="porte" id="porte" hidden>
   <h1>Session requise</h1>
