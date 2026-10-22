@@ -1913,6 +1913,52 @@ def cmd_memoire(a) -> int:
     return 0
 
 
+def cmd_board(a) -> int:
+    """Le Board partagé (même source que le Studio et Telegram) : le chef le lit et l'alimente."""
+    from . import board, missions, synchro
+    org = missions.tenant_local()
+    espace = board.nom_espace(a.espace)
+    acteur = _acteur()
+    try:
+        if a.action == "voir":
+            print(synchro.texte_board(org, espace, detail=True))
+        elif a.action == "espaces":
+            for e in board.espaces(org):
+                print(f"{e['nom']:<24} {e['objets']:>4} carte(s){'  (projet)' if e['projet'] else ''}")
+        elif a.action == "deposer":
+            texte = " ".join(a.quoi).strip()
+            if not texte:
+                return _err('usage : jarvis board deposer --espace P [--titre "…"] [--analyser] <texte ou lien>')
+            x, y = synchro.position_libre(org, espace)
+            lien = synchro.URL.fullmatch(texte)
+            o = missions.board_ajouter(org, espace, "lien" if lien else "note", texte, auteur=acteur, x=x, y=y,
+                                       largeur=434 if lien else 408, hauteur=356 if lien else 320,
+                                       meta={"titre": (a.titre or texte.split(chr(10))[0])[:80], "source": acteur},
+                                       analyser=False, contextualiser=a.analyser)
+            print(f"{o['objet_id']} déposé sur le Board {espace}" + (" (analyse lancée)" if o.get("mission_id") else ""))
+        elif a.action == "commenter":
+            if len(a.quoi) < 2:
+                return _err("usage : jarvis board commenter BO-… <texte>")
+            print(board.commenter(org, a.quoi[0], " ".join(a.quoi[1:]), auteur=acteur))
+        elif a.action == "lier":
+            if len(a.quoi) != 2 or a.nature not in synchro.NATURES:
+                return _err("usage : jarvis board lier BO-source BO-cible --nature inspire|alimente|utilise|depend")
+            o = synchro._objet(org, a.quoi[0])
+            if o is None:
+                return _err(f"objet inconnu : {a.quoi[0]}")
+            # une relation posée par le chef ou un agent porte l'auteur « jarvis » : visible et retirable sur le Board
+            print(board.lier(org, o["espace"], a.quoi[0], a.quoi[1], libelle=synchro.NATURES[a.nature], style=a.nature,
+                             par="jarvis:" + acteur if acteur != "humain" else "humain"))
+        elif a.action == "decider":
+            if len(a.quoi) != 3 or a.quoi[2] not in ("lancer", "ecarter") or not a.quoi[1].isdigit():
+                return _err("usage : jarvis board decider BO-… <numéro d'action> lancer|ecarter")
+            r = missions.decider_proposition(org, a.quoi[0], int(a.quoi[1]) - 1, a.quoi[2], par=acteur)
+            print(f"mission {r['mission_id']} créée (préparation L1)" if r.get("mission_id") else "action écartée")
+    except missions.MissionError as exc:
+        return _err(str(exc))
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(prog="jarvis", description="Poste de pilotage des agents IA")
     sub = p.add_subparsers(dest="cmd", required=True)
@@ -2149,6 +2195,15 @@ def build_parser() -> argparse.ArgumentParser:
     s.add_argument("action", choices=("verifier",))
     s.add_argument("--projet", default="")
     s.set_defaults(fn=cmd_secrets)
+
+    s = sub.add_parser("board", help="le Board partagé : voir, déposer, commenter, relier, décider (chef compris)")
+    s.add_argument("action", nargs="?", default="voir", choices=("voir", "espaces", "deposer", "commenter", "lier", "decider"))
+    s.add_argument("quoi", nargs="*")
+    s.add_argument("--espace", default="accueil", help="Board du projet (accueil par défaut)")
+    s.add_argument("--titre", default="")
+    s.add_argument("--nature", default="alimente")
+    s.add_argument("--analyser", action="store_true", help="faire contextualiser la carte déposée")
+    s.set_defaults(fn=cmd_board)
 
     s = sub.add_parser("memoire", help="mémoire du chef : décisions, échecs, leçons (recherche pondérée)")
     s.add_argument("action", nargs="?", default="liste", choices=("noter", "chercher", "liste"))

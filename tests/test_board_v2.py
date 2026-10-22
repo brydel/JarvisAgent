@@ -22,7 +22,7 @@ import test_jarvis  # noqa: F401 — environnement isolé
 import test_missions
 import test_studio
 
-from jarvis import adaptateurs as ad, apercus, board, config, coureur, missions as mi, studio_api  # noqa: E402
+from jarvis import adaptateurs as ad, apercus, board, cli, config, coureur, daemon, memoire, missions as mi, studio_api, synchro  # noqa: E402
 
 
 def png(l: int, h: int) -> bytes:
@@ -47,6 +47,11 @@ class Base(unittest.TestCase):
         self.org = mi.tenant_local()
         self.tmp = Path(tempfile.mkdtemp(prefix="jarvis-board-v2-"))
         self.addCleanup(shutil.rmtree, self.tmp, True)
+        # Telegram et le chef : envois capturés, jamais de réseau ni de tmux dans ces tests
+        self.envois: list = []
+        envoi = mock.patch.object(synchro, "_en_fond", lambda nom, f, *a: self.envois.append((nom, a)))
+        envoi.start()
+        self.addCleanup(envoi.stop)
 
     def fichier(self, octets: bytes, nom: str = "x.bin", org=None) -> dict:
         p = self.tmp / f"t-{len(list(self.tmp.iterdir()))}"
@@ -539,6 +544,152 @@ class ChefTest(Base):
         self.addCleanup(v.close)
         self.assertIsNotNone(v)
         self.assertIsNone(coureur.prendre_verrou("EX-test"), "démon et terminal ne tournent jamais ensemble")
+
+
+class FauxBot:
+    def __init__(self):
+        self.envoyes, self.reponses, self.edites = [], [], []
+
+    def send(self, chat, texte, boutons=None):
+        self.envoyes.append((texte, boutons))
+
+    def answer(self, cb_id, texte):
+        self.reponses.append(texte)
+
+    def edit(self, chat, mid, texte):
+        self.edites.append(texte)
+
+
+class SynchroTest(Base):
+    """Board ↔ Telegram ↔ chef ↔ mémoire collective : une seule vérité, dans les deux sens."""
+
+    def setUp(self):
+        super().setUp()
+        mi.declarer_connexion(self.org, "factice", "factice")
+        rid, secret = mi.enroler_executant(self.org, "poste", capacites=["analyse"], fournisseurs=["factice"])
+        self.capteur = Capteur()
+        self.cr = coureur.Coureur(coureur.TransportLocal(rid, secret), {"factice": self.capteur})
+        self.debut_memoire = len(memoire.toutes())
+
+    def memoire_neuve(self):
+        return memoire.toutes()[self.debut_memoire:]
+
+    def envoyes(self, nom):
+        return [a for n, a in self.envois if n == nom]
+
+    def test_analyse_partagee_avec_telegram_le_chef_et_la_memoire(self):
+        r = mi.board_ajouter(self.org, "accueil", "note", "Offre Sopra Steria DevOps", auteur="studio", contextualiser=True,
+                             meta={"titre": "Offre Sopra"})
+        self.cr.tour()
+        (texte, boutons), = self.envoyes("telegram")
+        self.assertIn("« Offre Sopra »", texte)
+        self.assertIn("lancée par Jarvis", texte, "l'action lancée seule est annoncée comme telle")
+        (chef,), = self.envoyes("chef")
+        self.assertTrue(chef.startswith("[BOARD Accueil]") and "jarvis board voir" in chef)
+        self.assertEqual([e["source"] for e in self.memoire_neuve()][:1], ["board"])
+        self.assertIn("Offre Sopra", self.memoire_neuve()[0]["titre"])
+        # le livrable de l'action lancée seule suit le même chemin
+        self.envois.clear()
+        self.cr.tour()
+        self.assertIn("✅ Livrable prêt", self.envoyes("telegram")[0][0])
+        self.assertTrue(any(e["titre"].startswith("Livrable :") for e in self.memoire_neuve()))
+        self.assertTrue(r["objet_id"])
+
+    def test_boutons_telegram_lancent_avec_les_regles_du_panneau(self):
+        mi.regler_board(self.org, actions_auto=False, par="test")
+        r = mi.board_ajouter(self.org, "accueil", "note", "Préparer l'entretien", auteur="studio", contextualiser=True)
+        self.cr.tour()
+        (_, boutons), = self.envoyes("telegram")
+        self.assertEqual(boutons[0][0][1], f"bpl:{r['objet_id']}:0")
+        self.assertLessEqual(max(len(d.encode()) for ligne in boutons for _, d in ligne), 64, "limite Telegram")
+        bot = FauxBot()
+        cb = {"id": "1", "data": boutons[0][0][1], "from": {"id": 42}, "message": {"chat": {"id": 42}, "message_id": 7, "text": "x"}}
+        daemon.handle_update(bot, "42", {"callback_query": cb})
+        self.assertIn("Lancée", bot.reponses[0])
+        p = next(o for o in board.objets(self.org, "accueil")["objets"] if o["id"] == r["objet_id"])["meta"]["propositions"][0]
+        self.assertEqual((p["statut"], p["par"]), ("lancee", "telegram:humain"))
+        self.assertTrue(any("lancé" in e["titre"] for e in self.memoire_neuve()), "la décision entre dans la mémoire")
+        # un inconnu ne décide rien
+        intrus = FauxBot()
+        daemon.handle_update(intrus, "42", {"callback_query": {**cb, "from": {"id": 666}}})
+        self.assertEqual(intrus.reponses, ["Accès refusé"])
+
+    def test_telegram_depose_sur_le_board_du_projet(self):
+        mi.board_ajouter(self.org, "repriceo", "note", "existant", auteur="test")
+        self.assertIsNone(synchro.depuis_telegram("salut, tu en es où ?"), "une conversation reste avec le chef")
+        lien = synchro.depuis_telegram("https://exemple.test/offre")
+        note = synchro.depuis_telegram("#repriceo idée : un comparateur de prix par lot")
+        inconnu = synchro.depuis_telegram("#projetfantome rien")
+        self.assertIsNone(inconnu, "projet inconnu : pas de Board inventé, message au chef seulement")
+        etat = {o["id"]: o for o in board.objets(self.org, "accueil")["objets"]}
+        self.assertEqual((etat[lien["objet_id"]]["type"], etat[lien["objet_id"]]["meta"]["source"]), ("lien", "telegram"))
+        self.assertEqual(note["espace"], "repriceo")
+        o = next(x for x in board.objets(self.org, "repriceo")["objets"] if x["id"] == note["objet_id"])
+        self.assertEqual(o["contenu"], "idée : un comparateur de prix par lot")
+        self.assertTrue(o["mission_id"], "contextualisé comme tout dépôt")
+        p = self.tmp / "photo.png"
+        p.write_bytes(png(30, 20))
+        img = synchro.depuis_telegram("maquette", p, "photo.png")
+        self.assertEqual(next(x for x in board.objets(self.org, "accueil")["objets"] if x["id"] == img["objet_id"])["type"], "image")
+        txt = self.tmp / "notes.docx"
+        txt.write_bytes(b"PK\x03\x04 pas un format du Board")
+        self.assertIsNone(synchro.depuis_telegram("", txt, "notes.docx"), "format non pris en charge : reste au chef")
+        # les dépôts ne se recouvrent pas
+        a, b = (next(x for x in board.objets(self.org, "accueil")["objets"] if x["id"] == i) for i in (lien["objet_id"], img["objet_id"]))
+        self.assertGreaterEqual(b["x"], a["x"] + a["largeur"], "le second dépôt est posé à droite du premier")
+
+    def test_message_telegram_au_chef_et_au_board(self):
+        bot = FauxBot()
+        with mock.patch.object(daemon.ag, "chef_inject", return_value=True) as inj:
+            daemon.handle_update(bot, "42", {"message": {"text": "https://exemple.test/x", "chat": {"id": 42}, "from": {"id": 42}}})
+        self.assertIn("📌 Déposé sur le Board", bot.envoyes[0][0])
+        self.assertIn("son analyse te parviendra", inj.call_args[0][0], "le chef ne refait pas le travail")
+        bot = FauxBot()
+        daemon.handle_update(bot, "42", {"message": {"text": "/board", "chat": {"id": 42}, "from": {"id": 42}}})
+        self.assertTrue(bot.envoyes[0][0].startswith("Board Accueil"))
+
+    def test_la_memoire_collective_nourrit_l_analyse(self):
+        memoire.noter(titre="Sopra Steria préfère les candidatures avec projet Kubernetes", lecons="joindre le lien GitHub",
+                      source="chef")
+        mi.board_ajouter(self.org, "accueil", "note", "Candidature Sopra Steria", auteur="studio", contextualiser=True)
+        self.cr.tour()
+        souvenirs = self.capteur.vu["travail"]["memoire"]
+        self.assertTrue(any("Kubernetes" in s for s in souvenirs))
+        consigne = ad._consigne(self.capteur.vu)
+        self.assertIn("mémoire collective", consigne)
+        self.assertIn("joindre le lien GitHub", consigne)
+
+    def test_le_chef_lit_et_alimente_le_board(self):
+        import contextlib
+        import io
+
+        def jarvis(*args):
+            sortie = io.StringIO()
+            with mock.patch.dict(os.environ, {"JARVIS_ROLE": "chef"}), contextlib.redirect_stdout(sortie):
+                code = cli.main(["board", *args])
+            return code, sortie.getvalue()
+
+        code, texte = jarvis("deposer", "--espace", "accueil", "--titre", "Plan", "Plan de la semaine")
+        self.assertEqual(code, 0)
+        oid = texte.split()[0]
+        o = synchro._objet(self.org, oid)
+        self.assertEqual((o["auteur"], o["meta"]["source"], o["mission_id"]), ("chef", "chef", None))
+        autre = mi.board_ajouter(self.org, "accueil", "note", "Offre", auteur="studio")["objet_id"]
+        self.assertEqual(jarvis("lier", oid, autre, "--nature", "depend")[0], 0)
+        code, vu = jarvis("voir")
+        lien = board.objets(self.org, "accueil")["liens"][0]
+        self.assertEqual((lien["auteur"], lien["libelle"]), ("jarvis", "dépend de"))
+        self.assertIn("contenu : Plan de la semaine", vu)
+        self.assertIn("Plan —dépend de→ Offre (Jarvis)", vu)
+        self.assertEqual(jarvis("lier", oid, autre, "--nature", "pirate")[0], 1)
+
+    def test_rien_ne_casse_si_telegram_ou_le_chef_tombent(self):
+        def panne(*a, **k):
+            raise OSError("réseau coupé")
+        with mock.patch.object(synchro, "_noter", side_effect=panne):
+            r = mi.board_ajouter(self.org, "accueil", "note", "x y z", auteur="studio", contextualiser=True)
+            self.assertEqual(self.cr.tour()["etat"], "fait")
+        self.assertIn("propositions", synchro._objet(self.org, r["objet_id"])["meta"], "l'analyse est enregistrée malgré la panne")
 
 
 class ApiV2Test(test_studio.StudioTest):

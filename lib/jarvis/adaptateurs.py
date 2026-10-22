@@ -71,6 +71,8 @@ Missions en cours :
 {missions}
 Autres éléments du Board (référence — type — titre — résumé du chef) :
 {voisins}
+Ce que Jarvis sait déjà (mémoire collective : décisions et livrables passés, à utiliser comme contexte) :
+{memoire}
 CONTEXTE>>>
 
 <<<ELEMENT
@@ -128,6 +130,7 @@ def _consigne(env: dict) -> str:
             voisins="\n".join(f"- {_donnee(v.get('ref'), 5)} — {_donnee(v.get('type'), 20)} — {_donnee(v.get('titre'), 200)}"
                               + (f" — {_donnee(v.get('resume'), 240)}" if v.get("resume") else "")
                               for v in travail.get("elements_voisins") or [] if isinstance(v, dict)) or "(aucun)",
+            memoire="\n".join(f"- {_donnee(x, 400)}" for x in (travail.get("memoire") or [])[:5]) or "(rien)",
             sorte=_donnee(travail.get("sorte"), 40),
             titre=_donnee(travail.get("titre"), 300), url=_donnee(travail.get("url"), 1000) or "(aucune)",
             document=_donnee(travail.get("document")),

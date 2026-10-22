@@ -25,9 +25,12 @@ AIDE = (
     "/pause — bloque tout nouveau lancement\n"
     "/reprendre — lève ta pause (les causes automatiques restent)\n"
     "/pauses — causes de pause et réservations en cours\n"
+    "/board [projet] — le Board : cartes, analyses de Jarvis, actions à lancer (boutons)\n"
     "/aide — cette aide\n\n"
     "Tout autre message est transmis directement au chef d'orchestre. "
-    "Tu peux aussi lui envoyer une image (maquette, direction artistique) ou un fichier, avec une légende."
+    "Tu peux aussi lui envoyer une image (maquette, direction artistique) ou un fichier, avec une légende.\n"
+    "Un lien, un fichier ou un message commençant par #projet est aussi déposé sur le Board de ce projet, "
+    "où Jarvis l'analyse ; sa réponse arrive ici."
 )
 
 
@@ -994,6 +997,14 @@ def handle_update(bot: Bot, chat_id: str, upd: dict) -> None:
             if msg.get("message_id"):
                 bot.edit(owner, msg["message_id"], f"{msg.get('text', '')}\n\n{verdict}")
             return
+        if action in ("bpl", "bpe"):  # action proposée sur le Board : même règle que le panneau
+            from . import synchro
+            verdict = synchro.decider_depuis_telegram(plan_id, action == "bpl")
+            bot.answer(cb["id"], verdict[:190])
+            msg = cb.get("message", {})
+            if msg.get("message_id"):
+                bot.edit(owner, msg["message_id"], f"{msg.get('text', '')}\n\n{verdict}")
+            return
         if action not in ("ok", "non"):
             bot.answer(cb["id"], "Bouton inconnu")
             return
@@ -1070,15 +1081,41 @@ def handle_update(bot: Bot, chat_id: str, upd: dict) -> None:
         else:
             ag.chef_inject("[JARVIS] Pause levée par ton humain : tu peux reprendre ta boucle.")
             bot.send(owner, "▶ C'est reparti.")
+    elif cmd == "/board":
+        from . import board, missions, synchro
+        org = missions.tenant_local()
+        espace = board.nom_espace(text.split(maxsplit=1)[1] if len(text.split()) > 1 else "accueil")
+        bot.send(owner, synchro.texte_board(org, espace)[:3900])
+        for o in board.objets(org, espace)["objets"]:
+            props = o["meta"].get("propositions") or []
+            if any(p.get("statut") == "proposee" for p in props):
+                bot.send(owner, synchro.texte_analyse(o), synchro.boutons(o["id"], props))
     elif cmd == "/pauses":
         from . import admission, pauses
         bot.send(owner, pauses.texte() + "\n\n" + admission.texte_etat())
     else:
         store.feed_add("toi", f"(Telegram) {text}")
-        if ag.chef_inject(f"[Message de ton humain via Telegram] {text}"):
+        depot = _deposer_sur_board(text)
+        suite = (f" (déposé sur le Board {depot['espace']}, carte {depot['objet_id']} : son analyse te parviendra, "
+                 f"ne refais pas ce travail)") if depot else ""
+        if depot:
+            bot.send(owner, f"📌 Déposé sur le Board « {depot['espace']} » : Jarvis l'analyse.")
+        if ag.chef_inject(f"[Message de ton humain via Telegram] {text}{suite}"):
             bot.send(owner, "✔ Transmis au chef.")
-        else:
+        elif not depot:
             bot.send(owner, "⚠ Le chef n'est pas lancé. Sur ton PC : jarvis chef")
+
+
+def _deposer_sur_board(texte: str, fichier=None, nom: str = "") -> dict | None:
+    """Un lien, un fichier ou un message « #projet … » va aussi sur le Board (jamais une cause d'échec du pont)."""
+    try:
+        from . import missions, synchro
+        if not missions.backend().existe():
+            return None
+        return synchro.depuis_telegram(texte, fichier, nom)
+    except Exception as exc:  # noqa: BLE001
+        store.feed_add("erreur", f"Telegram → Board : {exc}")
+        return None
 
 
 BOITE = "boite"  # dossier des fichiers reçus, dans le dossier de travail du chef
@@ -1118,8 +1155,12 @@ def _transmettre_fichier(bot: Bot, owner: str, fichier: dict, legende: str) -> N
         bot.send(owner, f"⚠ Je n'ai pas pu récupérer le fichier : {exc}")
         return
     store.feed_add("toi", f"(Telegram) fichier {dest.name}" + (f" — {legende}" if legende else ""))
+    depot = _deposer_sur_board(legende, dest, fichier["nom"])
+    if depot:
+        bot.send(owner, f"📌 Déposé sur le Board « {depot['espace']} » : Jarvis l'analyse.")
     if ag.chef_inject(f"[Message de ton humain via Telegram] Fichier joint : {dest} (ouvre-le avec l'outil Read). "
-                      f"Légende : {legende or '(aucune)'}"):
+                      f"Légende : {legende or '(aucune)'}"
+                      + (f" (aussi déposé sur le Board {depot['espace']}, carte {depot['objet_id']})" if depot else "")):
         bot.send(owner, "✔ Fichier transmis au chef.")
     else:
         bot.send(owner, f"⚠ Fichier enregistré ({dest.name}) mais le chef n'est pas lancé. Sur ton PC : jarvis chef")

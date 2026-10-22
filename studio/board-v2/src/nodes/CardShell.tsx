@@ -53,6 +53,10 @@ export const CardShell = memo(function CardShell({ objet, selected, classe, chil
           </div>
         )}
         {children}
+        {(objet.meta.source === "telegram" || objet.meta.source === "chef") && (
+          <span className="origine-carte" title={objet.meta.source === "telegram" ? "Arrivé par Telegram" : "Posé par le chef"}>
+            {objet.meta.source === "telegram" ? "via Telegram" : "par le chef"}</span>
+        )}
         <BandeauJarvis objet={objet} />
       </article>
     </>

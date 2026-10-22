@@ -597,3 +597,7 @@ button { font: inherit; color: inherit; }
 .interrupteur input:focus-visible + .piste { outline: 2px solid var(--brand-indigo-soft); outline-offset: 2px; }
 .interrupteur b { display: block; font-size: 13px; font-weight: 600; }
 .interrupteur small { display: block; font-size: 12px; color: var(--text-secondary); }
+
+/* origine d'une carte (Telegram, chef) */
+.origine-carte { position: absolute; right: 10px; bottom: 14px; z-index: 3; padding: 2px 8px; border-radius: 999px; font-size: 11px;
+  color: var(--text-secondary); background: rgba(18, 22, 34, 0.9); border: 1px solid var(--border-card); pointer-events: none; }

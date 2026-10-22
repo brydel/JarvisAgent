@@ -812,7 +812,9 @@ def _appliquer_resultat(c: sqlite3.Connection, executant_id: str, secret: str, r
         if t["type"] == "contextualiser":
             apres = _enregistrer_propositions(c, t, r["contenu"], now)
         else:
-            _poser_livrable(c, t, r["contenu"], now)
+            livrable = _poser_livrable(c, t, r["contenu"], now)
+            if livrable:
+                apres = [lambda: _synchro("apres_livrable", t["tenant_id"], livrable)]
         return {"acquitte": True, "doublon": False, "issue": "reussi", "statut": SUCCEEDED, "_apres": apres}
     if r["issue"] == "fournisseur_indisponible":
         c.execute("UPDATE connexions SET indisponible_jusqua=?, raison=? WHERE tenant_id=? AND fournisseur=?",
@@ -980,6 +982,9 @@ def lancer_contextualisation(tenant_id: str, objet_id: str, *, auteur: str, rela
     travail = {"objet_id": objet_id, "sorte": o["type"], "titre": titre, "document": o["contenu"][:20_000],
                "url": url, "asset_id": o["asset_id"], "missions_en_cours": missions_cours,
                "espace": o["espace"], "elements_voisins": voisins}
+    from . import synchro  # mémoire collective : ce que Jarvis sait déjà du sujet (donnée de contexte)
+    travail["memoire"] = synchro._effet("mémoire", synchro.memoire_pour, tenant_id,
+                                        f"{titre} {o['contenu'][:400]}", o["espace"]) or []
     cle = f"board-contexte:{objet_id}" + (f":{int(now * 1000)}" if relance else "")
     m = creer_mission(tenant_id, f"Contextualiser « {titre[:120]} »",
                       [{"type": "contextualiser", "niveau": "L1", "capacites": ["analyse"], "travail": travail}],
@@ -1103,6 +1108,7 @@ def decider_proposition(tenant_id: str, objet_id: str, index: int, decision: str
         c.execute("UPDATE board_objets SET meta=?, version=version+1, maj=? WHERE id=? AND tenant_id=?",
                   (json.dumps(m2, ensure_ascii=False), now, objet_id, tenant_id))
         _evenement(c, tenant_id, "board_proposition", now=now, objet_id=objet_id, index=index, decision=decision, par=par)
+    _synchro("apres_decision", tenant_id, objet_id, index, decision, par)
     return sortie
 
 
@@ -1145,10 +1151,19 @@ def _enregistrer_propositions(c, t, contenu: str, now: float) -> list:
         pass
     # le chef ne lance que l'action qu'il a lui-même jugée réalisable seul (rien si aucune)
     index = next((i for i, a in enumerate(actions) if a.get("auto") and a["niveau"] == "L1"), None)
-    if index is None or not _reglages(c, t["tenant_id"])["board_actions_auto"]:
-        return []
-    # décision autonome, bornée : UNE action L1 (sans effet externe) par élément ; L2/L3 attendent toujours l'humain
-    return [lambda: decider_proposition(t["tenant_id"], oid, index, "lancer", par="jarvis:auto")]
+    tenant = t["tenant_id"]
+    effets = []
+    if index is not None and _reglages(c, tenant)["board_actions_auto"]:
+        # décision autonome, bornée : UNE action L1 (sans effet externe) par élément ; L2/L3 attendent toujours l'humain
+        effets.append(lambda: decider_proposition(tenant, oid, index, "lancer", par="jarvis:auto"))
+    # puis Telegram, le chef et la mémoire collective apprennent l'analyse (avec l'action déjà lancée)
+    effets.append(lambda: _synchro("apres_contextualisation", tenant, oid, liens=liens))
+    return effets
+
+
+def _synchro(nom: str, *args, **kw) -> None:
+    from . import synchro  # import tardif : synchro lit le moteur
+    synchro._effet(nom, getattr(synchro, nom), *args, **kw)
 
 
 MARGE_CARTES = 60
@@ -1173,7 +1188,7 @@ def place_libre(c, tenant_id: str, espace: str, x: float, y: float, l: float, h:
     return x, y
 
 
-def _poser_livrable(c, t, contenu: str, now: float) -> None:
+def _poser_livrable(c, t, contenu: str, now: float) -> str | None:
     """Le livrable d'une mission présente sur le Board devient une carte, reliée à la carte de mission (une fois)."""
     carte = c.execute("SELECT * FROM board_objets WHERE tenant_id=? AND mission_id=? AND type='mission' AND supprime=0 "
                       "ORDER BY cree LIMIT 1", (t["tenant_id"], t["mission_id"])).fetchone()
@@ -1196,6 +1211,7 @@ def _poser_livrable(c, t, contenu: str, now: float) -> None:
                                                 "alimente", now, now, "jarvis"))
     _evenement(c, t["tenant_id"], "board_objet", mission_id=t["mission_id"], now=now, objet_id=oid, type="note",
                espace=carte["espace"], livrable=True)
+    return oid
 
 
 def board(tenant_id: str, espace: str) -> list[dict]:
