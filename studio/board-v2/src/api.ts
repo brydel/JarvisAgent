@@ -4,6 +4,7 @@
 //                  jamais présenté comme des missions ou des agents réels.
 import type { Approbation, Asset, EtatBoard, LienBoard, ObjetBoard, StyleLien } from "./types";
 import { fixtureDemo, inspectionDemo } from "./demo/fixture";
+import type { DemandeMission } from "./components/DialogueMission";
 
 const ENTETE = { "Content-Type": "application/json", "X-Jarvis-Studio": "1" } as const;
 
@@ -67,7 +68,7 @@ export interface Source {
   decider(id: string, accord: boolean): Promise<void>;
   commentaires(objetId: string): Promise<{ id: string; auteur: string; texte: string; cree: number }[]>;
   commenter(objetId: string, texte: string): Promise<void>;
-  lancerMission(objectif: string, x: number, y: number): Promise<string>;
+  lancerMission(demande: DemandeMission, x: number, y: number): Promise<string>;
 }
 
 export interface Inspection {
@@ -142,8 +143,8 @@ export class SourceReelle implements Source {
   async commenter(objetId: string, texte: string) {
     await poster(`/api/v2/objets/${objetId}/commentaires`, { texte });
   }
-  async lancerMission(objectif: string, x: number, y: number) {
-    const r = await poster<{ objet_id: string }>("/api/v2/missions", { objectif, x, y, espace: this.espace });
+  async lancerMission(demande: DemandeMission, x: number, y: number) {
+    const r = await poster<{ objet_id: string }>("/api/v2/missions", { ...demande, x, y, espace: this.espace });
     return r.objet_id;
   }
 }
@@ -257,8 +258,9 @@ export class SourceDemo implements Source {
     l.push({ id: this.id("CM"), auteur: "vous (démo)", texte, cree: Date.now() / 1000 });
     this.commentairesDemo.set(objetId, l);
   }
-  async lancerMission(objectif: string, x: number, y: number) {
-    return this.creer({ type: "note", contenu: `Mission (démo, non lancée) : ${objectif}`, x, y, largeur: 400, hauteur: 260 });
+  async lancerMission(demande: DemandeMission, x: number, y: number) {
+    return this.creer({ type: "note", contenu: `**Mission (démo, non lancée)** : ${demande.objectif}\n\n${demande.contexte}`.trim(),
+      x, y, largeur: 408, hauteur: 300, priorite: demande.priorite, meta: { titre: "Mission (démo)" } });
   }
 }
 

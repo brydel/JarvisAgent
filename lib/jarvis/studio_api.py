@@ -463,17 +463,28 @@ class Handler(BaseHTTPRequestHandler):
             self._apercu(org, str(corps.get("url") or ""))
         elif route == "/api/v2/missions":
             objectif = str(corps.get("objectif") or "").strip()
+            contexte = str(corps.get("contexte") or "").strip()
+            fournisseur = str(corps.get("fournisseur") or "auto")
+            priorite = str(corps.get("priorite") or "P1")
             if not objectif:
                 self._erreur(400, "objectif vide")
                 return
-            # mission de cadrage L1 (analyse sans outils) : la politique s'applique côté moteur, rien d'externe
-            mi = missions.creer_mission(org, objectif[:500], [{"type": "analyse_document", "niveau": "L1",
-                                                               "capacites": ["analyse"],
-                                                               "travail": {"document": objectif[:20_000]}}],
+            if len(objectif) > 500 or len(contexte) > 20_000:
+                self._erreur(400, "objectif (500 caractères) ou contexte (20 000 caractères) trop long")
+                return
+            if fournisseur not in ("auto", "claude", "codex") or priorite not in ("P1", "P2", "P3"):
+                self._erreur(400, "fournisseur ou priorité invalide")
+                return
+            # mission de cadrage L1 (analyse sans outils) : la politique s'applique côté moteur, rien d'externe ;
+            # le contexte est une DONNÉE analysée, jamais une consigne
+            document = f"Objectif : {objectif}\n\n{contexte}" if contexte else objectif
+            mi = missions.creer_mission(org, objectif, [{"type": "analyse_document", "niveau": "L1", "capacites": ["analyse"],
+                                                         "fournisseur": fournisseur, "travail": {"document": document}}],
                                         source="studio", demandeur="studio:humain")
             o = missions.board_ajouter(org, espace, "mission", "", auteur="studio", x=float(corps.get("x") or 0),
-                                       y=float(corps.get("y") or 0), largeur=452, hauteur=362, priorite="P1",
-                                       mission_id=mi["mission_id"], analyser=False)
+                                       y=float(corps.get("y") or 0), largeur=452, hauteur=362, priorite=priorite,
+                                       mission_id=mi["mission_id"], analyser=False,
+                                       meta={"description": contexte[:400]} if contexte else None)
             self._json(201, {"mission_id": mi["mission_id"], "taches": mi.get("taches", []), "objet_id": o["objet_id"]})
         else:
             self._erreur(404, "Route inconnue.")

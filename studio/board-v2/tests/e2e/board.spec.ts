@@ -246,11 +246,35 @@ test.describe("board réel", () => {
     await page.getByRole("button", { name: "Ajuster à la vue" }).click();
   });
 
+  test("dialogue « Lancer une mission » : validation, Échap, focus rendu", async ({ page }) => {
+    await ouvrir(page);
+    const bouton = page.getByRole("button", { name: "Lancer une mission" });
+    await bouton.click();
+    const dialogue = page.getByRole("dialog", { name: "Lancer une mission" });
+    await expect(dialogue).toBeVisible();
+    await expect(dialogue.getByRole("textbox", { name: /Objectif/ })).toBeFocused();
+    await expect(dialogue.getByRole("button", { name: "Lancer la mission" })).toBeDisabled();
+    await dialogue.getByRole("textbox", { name: /Objectif/ }).fill("   ");
+    await expect(dialogue.getByRole("button", { name: "Lancer la mission" })).toBeDisabled();
+    await expect(dialogue.getByText(/L1/).first()).toBeVisible();
+    await page.keyboard.press("Escape");
+    await expect(dialogue).toBeHidden();
+    await expect(bouton).toBeFocused();
+  });
+
   test("lancer une mission : carte réelle mise à jour en direct par le flux SSE", async ({ page }) => {
     await ouvrir(page);
-    page.once("dialog", (d) => d.accept("Analyser le compte rendu de la réunion produit"));
     await page.getByRole("button", { name: "Lancer une mission" }).click();
+    const dialogue = page.getByRole("dialog", { name: "Lancer une mission" });
+    await dialogue.getByRole("textbox", { name: /Objectif/ }).fill("Analyser le compte rendu de la réunion produit");
+    await dialogue.getByRole("textbox", { name: /Contexte/ }).fill("Démo vendredi 14 h ; budget à confirmer.");
+    await dialogue.getByRole("radio", { name: "P2" }).check();
+    await expect(dialogue.getByRole("radio", { name: "P2" })).toBeChecked();
+    await page.screenshot({ path: path.join(RAPPORTS, "etat-dialogue-mission.png") });
+    await page.keyboard.press("Control+Enter");
+    await expect(dialogue).toBeHidden();
     const carte = page.locator(".react-flow__node-mission").filter({ hasText: "Analyser le compte rendu" });
+    await expect(carte.locator(".badge-p.P2")).toHaveCount(0);  // la carte mission ne montre pas de badge (panneau)
     await expect(carte).toBeVisible();
     // l'exécutant factice du serveur de test prend la tâche : la carte passe à « Réussie » sans rechargement
     await expect(carte.getByText("Réussie")).toBeVisible({ timeout: 20_000 });
@@ -259,6 +283,31 @@ test.describe("board réel", () => {
     await expect(page.getByRole("complementary", { name: "Panneau contextuel" }).getByText("Tâches (1/1)")).toBeVisible();
     const agents = page.locator(".react-flow__node-agents");
     await expect(agents).toHaveCount(0); // aucune carte d'agents inventée
+  });
+
+  test("filtres, priorité, recherche et carte sélectionnée reflétés dans l'URL et conservés au rechargement", async ({ page }) => {
+    await ouvrir(page);
+    const id = await ajouterNote(page);
+    await page.locator(`.react-flow__node[data-id="${id}"]`).getByRole("button", { name: "Actions de la carte" }).click();
+    await page.getByRole("menuitemradio").filter({ hasText: "P2" }).click();
+    await page.getByRole("group", { name: "Filtrer par type" }).getByRole("button", { name: /^Notes/ }).click();
+    await page.getByRole("button", { name: "Filtrer par priorité" }).click();
+    await page.getByRole("button", { name: "Filtrer par priorité" }).click();  // P1 → P2
+    await page.getByRole("searchbox", { name: "Rechercher dans le Board" }).fill("Nouvelle");
+    await page.locator(`.react-flow__node[data-id="${id}"]`).click({ position: { x: 150, y: 30 } });
+    await expect.poll(() => new URL(page.url()).searchParams.toString()).toContain("filtre=notes");
+    const u = new URL(page.url());
+    expect([u.searchParams.get("filtre"), u.searchParams.get("priorite"), u.searchParams.get("q"), u.searchParams.get("carte")])
+      .toEqual(["notes", "P2", "Nouvelle", id]);
+    await page.reload();
+    await expect(page.getByRole("group", { name: "Filtrer par type" }).getByRole("button", { name: /^Notes/ })).toHaveAttribute("aria-pressed", "true");
+    await expect(page.getByRole("searchbox", { name: "Rechercher dans le Board" })).toHaveValue("Nouvelle");
+    await expect(page.locator(".subbar .badge-p.P2")).toBeVisible();
+    await expect(page.getByRole("complementary", { name: "Panneau contextuel" }).getByRole("heading", { name: "Note" })).toBeVisible();
+    // une valeur invalide est ignorée
+    await page.goto("/v2/?filtre=inconnu&priorite=P9&carte=../../x");
+    await expect(page.getByRole("group", { name: "Filtrer par type" }).getByRole("button", { name: /^Tous/ })).toHaveAttribute("aria-pressed", "true");
+    expect(new URL(page.url()).searchParams.get("filtre")).toBeNull();
   });
 
   test("mouvement réduit et en-têtes de sécurité", async ({ page }) => {

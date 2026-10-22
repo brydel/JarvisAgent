@@ -472,3 +472,43 @@ button { font: inherit; color: inherit; }
 .carte-resume .badge-p { position: absolute; top: 14px; left: 14px; height: 38px; min-width: 54px; font-size: 22px; }
 .carte-resume .titre-resume { font-size: 30px; font-weight: 600; color: var(--text-primary); line-height: 1.2; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
 .react-flow__node-mission .carte-resume { border-color: var(--brand-indigo); }
+
+/* dialogue « Lancer une mission » */
+.dialogue { padding: 0; border: 0; background: transparent; color: var(--text-primary); max-width: min(620px, calc(100vw - 32px)); width: 100%; overflow: visible; }
+.dialogue::backdrop { background: rgba(5, 7, 12, 0.62); }
+@media (prefers-reduced-motion: no-preference) { .dialogue[open]::backdrop { animation: voile var(--dur-panel) var(--ease-standard); } }
+@keyframes voile { from { opacity: 0; } }
+.dialogue-carte { border-radius: 16px; border: 1px solid var(--border-strong); background: linear-gradient(180deg, #161B2B, #121622);
+  box-shadow: 0 30px 80px rgba(0, 0, 0, 0.55), 0 0 0 1px rgba(91, 108, 255, 0.12); overflow: hidden; }
+.dialogue-tete { display: grid; grid-template-columns: auto 1fr auto; gap: 14px; align-items: start; padding: 20px 20px 4px; }
+.dialogue-tete h2 { margin: 0; font-size: 18px; font-weight: 600; letter-spacing: -0.01em; }
+.dialogue-tete p { margin: 3px 0 0; color: var(--text-secondary); font-size: 13px; }
+.dialogue-icone { width: 40px; height: 40px; border-radius: 11px; display: grid; place-items: center; color: white;
+  background: linear-gradient(135deg, #7C5CFF, #4E63FC 55%, #22D3EE); box-shadow: 0 6px 18px rgba(78, 99, 252, 0.4); }
+.dialogue-corps { display: grid; gap: 16px; padding: 16px 20px 6px; }
+.champ-groupe { display: grid; gap: 6px; }
+.champ-libelle { font-size: 12.5px; font-weight: 500; color: var(--text-secondary); padding: 0; }
+.requis { color: var(--p1); }
+.facultatif { margin-left: 6px; font-weight: 400; color: var(--text-muted); }
+.champ-aide { justify-self: end; font-size: 11.5px; color: var(--text-muted); }
+.champ.zone { height: auto; min-height: 110px; padding: 10px; resize: vertical; line-height: 1.5; }
+.champ:focus-visible { outline: 2px solid var(--brand-indigo-soft); outline-offset: 1px; }
+.dialogue-ligne { display: flex; flex-wrap: wrap; gap: 16px 24px; }
+.segments { border: 0; margin: 0; padding: 0; display: flex; gap: 4px; flex-wrap: wrap; }
+.segments legend { margin-bottom: 6px; }
+.segments label { position: relative; display: inline-flex; align-items: center; gap: 7px; height: 34px; padding: 0 12px; border-radius: 9px;
+  border: 1px solid var(--border-card); background: var(--surface-inset); color: var(--text-secondary); font-size: 13px; cursor: pointer;
+  transition: border-color var(--dur-hover), color var(--dur-hover), background var(--dur-hover); }
+.segments label:hover { color: var(--text-primary); }
+.segments label.actif { color: var(--text-primary); border-color: var(--brand-indigo); background: rgba(91, 108, 255, 0.12); }
+.segments input { position: absolute; opacity: 0; inset: 0; margin: 0; cursor: pointer; }
+.segments label:focus-within { outline: 2px solid var(--brand-indigo-soft); outline-offset: 2px; }
+.dialogue-politique { display: flex; gap: 10px; align-items: flex-start; margin: 0; padding: 10px 12px; border-radius: 10px;
+  background: rgba(63, 185, 132, 0.07); border: 1px solid rgba(63, 185, 132, 0.25); color: var(--text-secondary); font-size: 12.5px; line-height: 1.5; }
+.dialogue-politique svg { color: var(--success); flex: none; margin-top: 1px; }
+.dialogue-politique b { color: var(--text-primary); }
+.dialogue-demo { margin: 0; font-size: 12.5px; color: var(--p2); }
+.dialogue-erreur { margin: 0; padding: 8px 12px; border-radius: 9px; background: var(--danger-bg); color: #F7A1B6; font-size: 13px; }
+.dialogue-pied { display: flex; align-items: center; justify-content: flex-end; gap: 10px; padding: 14px 20px 18px; }
+.dialogue-pied .raccourci { margin-right: auto; font-size: 11.5px; color: var(--text-muted); }
+.dialogue-pied .bouton { height: 36px; padding: 0 14px; }

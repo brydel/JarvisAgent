@@ -38,7 +38,7 @@ de quelques pixels, plus les écarts **volontaires** ci-dessous.
 
 - Python : **310 tests** verts (`python3 -m unittest discover -s tests`), dont 34 du Board V2, et la suite PostgreSQL
   (77 tests, Board V2 compris) rejouée sur **PostgreSQL 18.6** (RLS, nouvelles tables, droits du rôle applicatif).
-- Playwright (`studio/board-v2`) : **20 tests** verts — 5 visuels (4 tailles + états, `toHaveScreenshot`), 12
+- Playwright (`studio/board-v2`) : **22 tests** verts (dont dialogue de mission et état dans l'URL) — 5 visuels (4 tailles + états, `toHaveScreenshot`), 12
   fonctionnels sur base réelle isolée (note éditée et persistée ; image collée ; plusieurs URL collées avec repli
   d'aperçu ; audio lu avec forme d'onde calculée ; vidéo WebM lue et avancée ; MP4 : message de codec explicite dans ce
   Chromium sans H.264 ; PDF rendu par pdf.js et HTML déguisé refusé ; déplacer / redimensionner / prioriser persistés ;
@@ -73,5 +73,8 @@ aucun contenu collé ne déclenche d'action L3/L4 ; un lien collé n'est pas ana
 
 ## Revue « Web Interface Guidelines » (règles récupérées le 22/10/2026)
 Respecté : libellés ARIA, focus visible, `aria-live`, « … », chiffres tabulaires, mouvement réduit, animations
-`transform`/`opacity`, annulation des suppressions, `color-scheme` et `theme-color`. Non fait : l'URL ne reflète pas
-les filtres, pas de lien d'évitement, « Lancer une mission » utilise encore une invite native.
+`transform`/`opacity`, annulation des suppressions, `color-scheme` et `theme-color`, **état dans l'URL** (filtre,
+priorité, recherche, carte sélectionnée — `replaceState`, valeurs inconnues ignorées), **dialogue modal accessible**
+pour « Lancer une mission » (`<dialog>`, focus sur l'objectif puis rendu au bouton, Échap, Ctrl+Entrée, envoi
+indiqué, erreur dans le dialogue, rappel de la politique L1 ; capture `etat-dialogue-mission.png`). Non fait : lien
+d'évitement.

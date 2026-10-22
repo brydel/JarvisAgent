@@ -13,6 +13,7 @@ import { RelationEdge, type DonneesLien } from "./edges/RelationEdge";
 import { ContexteActions, TAILLES, type ActionsBoard } from "./nodes/contexte";
 import { BarreHaut, BarreOutils, FILTRES, SaisieUrl, SousBarre, type Filtre, type Outil } from "./components/Coque";
 import { Panneau } from "./components/Panneau";
+import { DialogueMission, type DemandeMission } from "./components/DialogueMission";
 import { Historique } from "./lib/historique";
 import { cascade, depuisTexte, depuisTransfert, familleFichier, type Element } from "./lib/ingestion";
 
@@ -54,9 +55,11 @@ export function Board({ source, charge }: Props) {
   const [etat, setEtat] = useState<EtatBoard | null>(null);
   const [noeuds, setNoeuds] = useState<Node<DonneesNoeud>[]>([]);
   const [erreur, setErreur] = useState("");
-  const [filtre, setFiltre] = useState<Filtre>("tous");
-  const [prio, setPrio] = useState("");
-  const [recherche, setRecherche] = useState("");
+  const initial = useMemo(() => lireUrl(), []);
+  const [filtre, setFiltre] = useState<Filtre>(initial.filtre);
+  const [prio, setPrio] = useState(initial.priorite);
+  const [recherche, setRecherche] = useState(initial.q);
+  const [dialogueMission, setDialogueMission] = useState(false);
   const [magnetisme, setMagnetisme] = useState(false);
   const [selection, setSelection] = useState<string[]>([]);
   const [saisieUrl, setSaisieUrl] = useState(false);
@@ -492,17 +495,15 @@ export function Board({ source, charge }: Props) {
     }
   }, [centreVue, creer, charger, ingerer, toast]);
 
-  const lancerMission = useCallback(async () => {
-    const objectif = window.prompt("Objectif de la mission (analyse L1, sans action externe) :");
-    if (!objectif?.trim()) return;
-    try {
-      await source.lancerMission(objectif.trim(), centreVue().x, centreVue().y);
-      toast(source.demo ? "Mode démo : aucune mission réelle n'est lancée" : "Mission créée : un exécutant va la prendre en charge");
-      charger();
-    } catch (x) {
-      toast(x instanceof Error ? x.message : "mission refusée", { erreur: true });
-    }
-  }, [source, centreVue, charger, toast]);
+  const ouvrirDialogueMission = useCallback(() => setDialogueMission(true), []);
+  const lancerMission = useCallback(async (d: DemandeMission) => {
+    const p = centreVue();
+    const id = await source.lancerMission(d, p.x, p.y);  // une erreur reste affichée dans le dialogue
+    toast(source.demo ? "Mode démo : aucune mission réelle n'est lancée" : "Mission créée : un exécutant va la prendre en charge");
+    await charger();
+    rf.setNodes((ns) => ns.map((n) => ({ ...n, selected: n.id === id })));
+    setSelection([id]);
+  }, [source, centreVue, charger, toast, rf]);
 
   /* ------------------------------------------------------------ sélection multiple ---------------------- */
   const aligner = useCallback(async (mode: "gauche" | "haut" | "centreH" | "centreV" | "distribuerH") => {
@@ -523,6 +524,30 @@ export function Board({ source, charge }: Props) {
     await modifier(mods, "Alignement", objs.map((o) => ({ id: o.id, champs: { x: o.x, y: o.y } })));
   }, [selection, objet, modifier]);
 
+  /* ------------------------------------------------------------ état dans l'URL -------------------------- */
+  // filtre, priorité, recherche et carte sélectionnée : partageables et conservés au rechargement (replaceState :
+  // l'historique du navigateur n'est pas rempli à chaque frappe)
+  useEffect(() => {
+    const u = new URL(location.href);
+    const poser = (cle: string, v: string) => (v ? u.searchParams.set(cle, v) : u.searchParams.delete(cle));
+    poser("filtre", filtre === "tous" ? "" : filtre);
+    poser("priorite", prio);
+    poser("q", recherche.trim());
+    poser("carte", selection.length === 1 ? selection[0]! : "");
+    if (u.href !== location.href) history.replaceState(history.state, "", u);
+  }, [filtre, prio, recherche, selection]);
+
+  const carteRestauree = useRef(false);
+  useEffect(() => {
+    if (carteRestauree.current || !etat || !initial.carte) return;
+    carteRestauree.current = true;
+    const o = etat.objets.find((x) => x.id === initial.carte);
+    if (!o) return;
+    rf.setNodes((ns) => ns.map((n) => ({ ...n, selected: n.id === o.id })));
+    setSelection([o.id]);
+    window.setTimeout(() => rf.setCenter(o.x + (o.largeur || 400) / 2, o.y + (o.hauteur || 300) / 2, { zoom: Math.max(0.7, rf.getZoom()), duration: 250 }), 120);
+  }, [etat, initial.carte, rf]);
+
   /* ------------------------------------------------------------ rendu ------------------------------------ */
   const selectionne = selection.length === 1 ? objet(selection[0]!) ?? null : null;
   const vueInitiale: Viewport = source.demo ? { x: 0, y: 0, zoom: 0.8 } : { x: 40, y: 20, zoom: 0.8 };
@@ -533,7 +558,7 @@ export function Board({ source, charge }: Props) {
       <div className="app">
         <BarreHaut recherche={recherche} setRecherche={setRecherche} notifications={approbations.length} />
         <SousBarre projet={source.demo ? "Projet Site Web IA" : "Espace accueil"} demo={source.demo} compteurs={compteurs} filtre={filtre} setFiltre={setFiltre}
-          priorite={prio} setPriorite={setPrio} magnetisme={magnetisme} setMagnetisme={setMagnetisme} lancer={lancerMission} />
+          priorite={prio} setPriorite={setPrio} magnetisme={magnetisme} setMagnetisme={setMagnetisme} lancer={ouvrirDialogueMission} />
         <div className="travail">
           <section className="canevas" aria-label="Canevas du Board"
             onDragOver={(e) => { if (e.dataTransfer.types.includes("Files") || e.dataTransfer.types.includes("text/uri-list")) { e.preventDefault(); setDepot(true); } }}
@@ -612,6 +637,7 @@ export function Board({ source, charge }: Props) {
             decider={async (id, accord) => { await source.decider(id, accord); charger(); }} />
         </div>
       </div>
+      <DialogueMission ouvert={dialogueMission} demo={source.demo} fermer={() => setDialogueMission(false)} lancer={lancerMission} />
       {visionneuse && (
         <div className="visionneuse" role="dialog" aria-label={visionneuse.titre || "Image"} onClick={() => setVisionneuse(null)}
           onKeyDown={(e) => e.key === "Escape" && setVisionneuse(null)}>
@@ -621,6 +647,22 @@ export function Board({ source, charge }: Props) {
       )}
     </ContexteActions.Provider>
   );
+}
+
+const FILTRES_VALIDES = new Set<string>(FILTRES.map((f) => f.cle));
+
+/** État initial lu dans l'URL ; toute valeur inconnue est ignorée. */
+function lireUrl(): { filtre: Filtre; priorite: string; q: string; carte: string } {
+  const p = new URLSearchParams(location.search);
+  const f = p.get("filtre") ?? "";
+  const pr = p.get("priorite") ?? "";
+  const carte = p.get("carte") ?? "";
+  return {
+    filtre: (FILTRES_VALIDES.has(f) ? f : "tous") as Filtre,
+    priorite: ["P1", "P2", "P3"].includes(pr) ? pr : "",
+    q: (p.get("q") ?? "").slice(0, 200),
+    carte: /^BO-[A-Za-z0-9-]{1,40}$/.test(carte) ? carte : "",
+  };
 }
 
 /** Mode charge (démo, ?charge=N) : N cartes de types mixtes pour mesurer les performances. Jamais en mode réel. */
