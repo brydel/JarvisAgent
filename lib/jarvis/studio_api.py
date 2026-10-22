@@ -28,9 +28,9 @@ import threading
 import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from urllib.parse import parse_qs, urlsplit
+from urllib.parse import parse_qs, unquote, urlsplit
 
-from . import config, missions
+from . import apercus, board, config, missions, studio_product
 
 PORT_DEFAUT = 7718
 STATIQUES = {
@@ -45,6 +45,17 @@ CORPS_MAX = 60_000
 HOTES_LOCAUX = ("localhost", "127.0.0.1", "::1")
 CSP = ("default-src 'none'; script-src 'self'; style-src 'self'; connect-src 'self'; img-src 'self' data:; "
        "base-uri 'none'; form-action 'self'; frame-ancestors 'none'")
+# Board V2 : scripts toujours limités à ce serveur ; styles en ligne autorisés (React Flow positionne les nœuds par
+# attributs style) ; médias et images du serveur ou de blobs locaux (aperçus avant envoi) ; worker pdf.js local.
+CSP_V2 = ("default-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; font-src 'self'; "
+          "img-src 'self' data: blob:; media-src 'self' blob:; connect-src 'self'; worker-src 'self' blob:; "
+          "base-uri 'none'; form-action 'self'; frame-ancestors 'none'")
+DOSSIER_V2 = Path(__file__).resolve().parent / "studio_v2"
+TYPES_V2 = {".html": "text/html; charset=utf-8", ".js": "text/javascript; charset=utf-8", ".mjs": "text/javascript; charset=utf-8",
+            ".css": "text/css; charset=utf-8", ".woff2": "font/woff2", ".png": "image/png", ".jpg": "image/jpeg",
+            ".svg": "image/svg+xml", ".json": "application/json", ".mp3": "audio/mpeg", ".mp4": "video/mp4",
+            ".webp": "image/webp", ".wav": "audio/wav", ".pdf": "application/pdf"}
+MO_FLUX = 256 * 1024
 
 _sessions: dict[str, float] = {}
 _verrou = threading.Lock()
@@ -97,14 +108,14 @@ class Handler(BaseHTTPRequestHandler):
 
     # --- réponses ---
     def _envoyer(self, code: int, corps: bytes, ctype: str = "application/json; charset=utf-8",
-                 entetes: dict | None = None) -> None:
+                 entetes: dict | None = None, *, csp: str = CSP, cache: str = "no-store") -> None:
         self.send_response(code)
         self.send_header("Content-Type", ctype)
         self.send_header("Content-Length", str(len(corps)))
-        self.send_header("Cache-Control", "no-store")
+        self.send_header("Cache-Control", cache)
         self.send_header("X-Content-Type-Options", "nosniff")
         self.send_header("Referrer-Policy", "no-referrer")
-        self.send_header("Content-Security-Policy", CSP)
+        self.send_header("Content-Security-Policy", csp)
         for k, v in (entetes or {}).items():
             self.send_header(k, v)
         self.end_headers()
@@ -169,6 +180,9 @@ class Handler(BaseHTTPRequestHandler):
         if route == "/api/session":
             self._json(200, {"authentifie": self._authentifie()})
             return
+        if route == "/v2" or route.startswith("/v2/"):
+            self._page_v2(route)
+            return
         if not route.startswith("/api/"):
             self._erreur(404, "Page inconnue.")
             return
@@ -177,7 +191,11 @@ class Handler(BaseHTTPRequestHandler):
             return
         org = missions.tenant_local()
         try:
-            if route == "/api/board":
+            if route == "/api/v2/atelier":
+                self._json(200, studio_product.catalogue(org))
+            elif m := re.fullmatch(r"/api/v2/atelier/candidats/(RB-[0-9]{4,})", route):
+                self._json(200, studio_product.comparer(org, m.group(1)))
+            elif route == "/api/board":
                 self._json(200, {"objets": missions.board(org, (q.get("espace") or ["accueil"])[0][:80])})
             elif route == "/api/missions":
                 self._json(200, {"missions": missions.missions(org, 50)})
@@ -193,12 +211,126 @@ class Handler(BaseHTTPRequestHandler):
             elif route == "/api/flux":
                 apres = self.headers.get("Last-Event-ID") or (q.get("apres") or ["0"])[0]
                 self._flux(org, int(apres or 0))
+            elif route == "/api/v2/board":
+                self._json(200, {**board.objets(org, board.nom_espace((q.get("espace") or ["accueil"])[0])),
+                                 "reglages": missions.reglages_board(org)})
+            elif route == "/api/v2/espaces":
+                self._json(200, {"espaces": board.espaces(org)})
+            elif m := re.match(r"^/api/v2/fichiers/(AS-[0-9a-f]{12})$", route):
+                self._fichier(*board.fichier(org, m.group(1)))
+            elif m := re.match(r"^/api/v2/objets/(BO-[0-9a-f]{12})/commentaires$", route):
+                self._json(200, {"commentaires": board.commentaires(org, m.group(1))})
             else:
                 self._erreur(404, "Route inconnue.")
         except ValueError:
             self._erreur(400, "paramètre invalide")
         except missions.MissionError as exc:
-            self._erreur(404 if exc.code == "inconnue" else 400, str(exc))
+            self._erreur(404 if exc.code == "inconnue" else 403 if exc.code == "interdit" else 400, str(exc))
+
+    def _page_v2(self, route: str) -> None:
+        """Board V2 : application construite (studio/board-v2 → lib/jarvis/studio_v2). Noms de fichiers filtrés."""
+        nom = route[len("/v2/"):] if route.startswith("/v2/") else ""
+        if nom in ("", "index.html", "connexion"):
+            nom = "index.html"
+        if not re.fullmatch(r"(assets/|demo/)?[A-Za-z0-9._-]+", nom) or ".." in nom:
+            self._erreur(404, "Page inconnue.")
+            return
+        chemin = DOSSIER_V2 / nom
+        if not chemin.is_file():
+            self._erreur(404, "Board V2 non construit : cd studio/board-v2 && npm install && npm run build"
+                         if nom == "index.html" else "Ressource inconnue.")
+            return
+        ctype = TYPES_V2.get(chemin.suffix, "application/octet-stream")
+        cache = "no-store" if nom == "index.html" else "public, max-age=31536000, immutable"  # noms avec empreinte
+        self._envoyer(200, chemin.read_bytes(), ctype, csp=CSP_V2, cache=cache)
+
+    def _fichier(self, chemin: Path, info: dict) -> None:
+        """Sert un fichier du Board, par plages (avance dans l'audio et la vidéo). Jamais interprété par la page :
+        type MIME issu de la reconnaissance des octets, nosniff, CSP « sandbox »."""
+        taille = chemin.stat().st_size
+        debut, fin, partiel = 0, taille - 1, False
+        plage = re.fullmatch(r"bytes=(\d*)-(\d*)", self.headers.get("Range", "").strip())
+        if plage and (plage.group(1) or plage.group(2)):
+            if plage.group(1):
+                debut = int(plage.group(1))
+                fin = min(int(plage.group(2)), taille - 1) if plage.group(2) else taille - 1
+            else:
+                debut, fin = max(0, taille - int(plage.group(2))), taille - 1
+            if debut > fin or debut >= taille:
+                self.send_response(416)
+                self.send_header("Content-Range", f"bytes */{taille}")
+                self.send_header("Content-Length", "0")
+                self.end_headers()
+                return
+            partiel = True
+        self.send_response(206 if partiel else 200)
+        self.send_header("Content-Type", info["mime"])
+        self.send_header("Content-Length", str(fin - debut + 1))
+        self.send_header("Accept-Ranges", "bytes")
+        self.send_header("Cache-Control", "private, max-age=86400")
+        self.send_header("X-Content-Type-Options", "nosniff")
+        self.send_header("Content-Security-Policy", "sandbox; default-src 'none'")
+        self.send_header("Cross-Origin-Resource-Policy", "same-origin")
+        if partiel:
+            self.send_header("Content-Range", f"bytes {debut}-{fin}/{taille}")
+        self.end_headers()
+        if self.command == "HEAD":
+            return
+        try:
+            with chemin.open("rb") as fh:
+                fh.seek(debut)
+                reste = fin - debut + 1
+                while reste > 0:
+                    bloc = fh.read(min(256 * 1024, reste))
+                    if not bloc:
+                        break
+                    self.wfile.write(bloc)
+                    reste -= len(bloc)
+        except (BrokenPipeError, ConnectionResetError, OSError):
+            pass
+
+    def _televerser(self, org: str) -> None:
+        """Corps brut écrit en flux dans un fichier temporaire, puis reconnu, borné et rangé par board.py."""
+        try:
+            n = int(self.headers.get("Content-Length") or 0)
+        except ValueError:
+            n = 0
+        if n <= 0 or n > max(board.LIMITES.values()):
+            self._erreur(413 if n > 0 else 400, "taille de fichier absente ou trop grande")
+            return
+        tmp = board.fichier_temporaire()
+        try:
+            with tmp.open("wb") as fh:
+                reste = n
+                while reste > 0:
+                    bloc = self.rfile.read(min(MO_FLUX, reste))
+                    if not bloc:
+                        raise ValueError("téléversement interrompu")
+                    fh.write(bloc)
+                    reste -= len(bloc)
+            nom = unquote(self.headers.get("X-Nom-Fichier", ""))[:200]
+            self._json(201, board.enregistrer_fichier(org, tmp, nom, auteur="studio"))
+        except ValueError as exc:
+            self._erreur(400, str(exc))
+        except missions.MissionError as exc:
+            self._erreur(415 if exc.code == "fichier" else 400, str(exc))
+        finally:
+            tmp.unlink(missing_ok=True)
+
+    def _apercu(self, org: str, url: str) -> None:
+        def ranger(octets: bytes, nom: str):
+            chemin = apercus.ecrire_temp(octets, board.config.STATE_DIR / "board_assets" / "televersements")
+            try:
+                return board.enregistrer_fichier(org, chemin, nom, auteur="apercu")
+            except missions.MissionError:
+                return None
+            finally:
+                chemin.unlink(missing_ok=True)
+        try:
+            self._json(200, apercus.apercu(url, enregistrer_image=ranger,
+                                           autoriser_prives=getattr(self.server, "apercus_prives", False)))
+        except apercus.ApercuRefuse as exc:
+            self._json(422, {"erreur": str(exc), "url": url})
 
     def _flux(self, org: str, apres: int) -> None:
         """Server-Sent Events : chaque événement porte son numéro ; le navigateur reprend où il s'était arrêté."""
@@ -242,6 +374,12 @@ class Handler(BaseHTTPRequestHandler):
         if not self._ecriture_autorisee():
             return
         route = urlsplit(self.path).path
+        if route == "/api/v2/fichiers":  # corps binaire, pas du JSON
+            if not self._authentifie():
+                self._erreur(401, "Session absente ou expirée.")
+                return
+            self._televerser(missions.tenant_local())
+            return
         corps = self._corps()
         if corps is None:
             self._erreur(400, "Corps JSON attendu (60 000 octets au plus).")
@@ -280,13 +418,105 @@ class Handler(BaseHTTPRequestHandler):
                 self._json(200, {"statut": statut})
             elif m := re.match(r"^/api/missions/(MI-[0-9a-f]{12})/annuler$", route):
                 self._json(200, {"annulees": missions.annuler_mission(org, m.group(1), par="studio:humain")})
+            elif route.startswith("/api/v2/"):
+                self._post_v2(org, route, corps)
             else:
                 self._erreur(404, "Route inconnue.")
         except (TypeError, ValueError):
             self._erreur(400, "valeur invalide")
         except missions.MissionError as exc:
-            self._erreur(404 if exc.code == "inconnue" else 409 if exc.code in ("approbation", "transition") else 400,
-                         str(exc))
+            conflits = ("approbation", "transition", "conflit", "verrouille", "concurrence")
+            self._erreur(404 if exc.code == "inconnue" else 403 if exc.code == "interdit" else 409 if exc.code in conflits else 400, str(exc))
+
+    def _post_v2(self, org: str, route: str, corps: dict) -> None:
+        espace = board.nom_espace(corps.get("espace"))
+        if m := re.fullmatch(r"/api/v2/atelier/agents/([a-z0-9_-]{1,64})/(verifier|proposer)", route):
+            action = studio_product.verifier if m.group(2) == "verifier" else studio_product.proposer
+            self._json(200 if m.group(2) == "verifier" else 201, action(org, m.group(1), corps))
+        elif m := re.fullmatch(r"/api/v2/atelier/candidats/(RB-[0-9]{4,})/decider", route):
+            self._json(200, studio_product.decider(org, m.group(1), corps))
+        elif route == "/api/v2/objets":
+            type_ = str(corps.get("type") or "note")
+            o = missions.board_ajouter(
+                org, espace, type_, str(corps.get("contenu") or ""), auteur="studio",
+                x=float(corps.get("x") or 0), y=float(corps.get("y") or 0), largeur=float(corps.get("largeur") or 0),
+                hauteur=float(corps.get("hauteur") or 0), priorite=str(corps.get("priorite") or ""),
+                meta=corps.get("meta") if isinstance(corps.get("meta"), dict) else {},
+                asset_id=corps.get("asset_id") or None, mission_id=corps.get("mission_id") or None,
+                # Board V2 : tout élément est contextualisé par le chef ; « analyser: false » (duplication, note vide) l'évite
+                analyser=False, contextualiser=corps.get("analyser") is not False)
+            self._json(201, o)
+        elif route == "/api/v2/objets/lot":
+            mods = corps.get("modifications")
+            if not isinstance(mods, list):
+                self._erreur(400, "« modifications » : liste attendue")
+                return
+            self._json(200, {"resultats": board.mettre_a_jour_lot(org, mods, par="studio")})
+        elif route == "/api/v2/objets/supprimer":
+            ids = [str(i) for i in corps.get("ids") or [] if isinstance(i, str)]
+            self._json(200, {"n": board.supprimer(org, ids, par="studio", restaurer=bool(corps.get("restaurer")))})
+        elif m := re.match(r"^/api/v2/objets/(BO-[0-9a-f]{12})$", route):
+            champs = corps.get("champs")
+            if not isinstance(champs, dict):
+                self._erreur(400, "« champs » : objet attendu")
+                return
+            self._json(200, board.mettre_a_jour(org, m.group(1), champs, version=corps.get("version"), par="studio"))
+        elif route == "/api/v2/reglages":
+            valeurs = {k: corps[k] for k in ("auto_analyse", "actions_auto") if isinstance(corps.get(k), bool)}
+            if not valeurs:
+                self._erreur(400, "« auto_analyse » ou « actions_auto » : booléen attendu")
+                return
+            self._json(200, missions.regler_board(org, **valeurs, par="studio:humain"))
+        elif m := re.match(r"^/api/v2/objets/(BO-[0-9a-f]{12})/contextualiser$", route):
+            self._json(201, {"mission_id": missions.lancer_contextualisation(org, m.group(1), auteur="studio:humain",
+                                                                             relance=True)})
+        elif m := re.match(r"^/api/v2/objets/(BO-[0-9a-f]{12})/propositions$", route):
+            index = corps.get("index")
+            if not isinstance(index, int) or isinstance(index, bool):
+                self._erreur(400, "« index » : entier attendu")
+                return
+            self._json(200, missions.decider_proposition(org, m.group(1), index, str(corps.get("decision") or ""),
+                                                         par="studio:humain"))
+        elif m := re.match(r"^/api/v2/objets/(BO-[0-9a-f]{12})/commentaires$", route):
+            self._json(201, {"id": board.commenter(org, m.group(1), str(corps.get("texte") or ""), auteur="studio:humain")})
+        elif route == "/api/v2/liens":
+            self._json(201, {"id": board.lier(org, espace, str(corps.get("source_id")), str(corps.get("cible_id")),
+                                              libelle=str(corps.get("libelle") or ""),
+                                              style=str(corps.get("style") or "defaut"), par="studio")})
+        elif m := re.match(r"^/api/v2/liens/(BL-[0-9a-f]{12})$", route):
+            board.modifier_lien(org, m.group(1), libelle=corps.get("libelle"), style=corps.get("style"),
+                                supprime=corps.get("supprime") if isinstance(corps.get("supprime"), bool) else None,
+                                par="studio")
+            self._json(200, {"ok": True})
+        elif route == "/api/v2/apercu":
+            self._apercu(org, str(corps.get("url") or ""))
+        elif route == "/api/v2/missions":
+            objectif = str(corps.get("objectif") or "").strip()
+            contexte = str(corps.get("contexte") or "").strip()
+            fournisseur = str(corps.get("fournisseur") or "auto")
+            priorite = str(corps.get("priorite") or "P1")
+            if not objectif:
+                self._erreur(400, "objectif vide")
+                return
+            if len(objectif) > 500 or len(contexte) > 20_000:
+                self._erreur(400, "objectif (500 caractères) ou contexte (20 000 caractères) trop long")
+                return
+            if fournisseur not in ("auto", "claude", "codex") or priorite not in ("P1", "P2", "P3"):
+                self._erreur(400, "fournisseur ou priorité invalide")
+                return
+            # mission de cadrage L1 (analyse sans outils) : la politique s'applique côté moteur, rien d'externe ;
+            # le contexte est une DONNÉE analysée, jamais une consigne
+            document = f"Objectif : {objectif}\n\n{contexte}" if contexte else objectif
+            mi = missions.creer_mission(org, objectif, [{"type": "analyse_document", "niveau": "L1", "capacites": ["analyse"],
+                                                         "fournisseur": fournisseur, "travail": {"document": document}}],
+                                        source="studio", demandeur="studio:humain")
+            o = missions.board_ajouter(org, espace, "mission", "", auteur="studio", x=float(corps.get("x") or 0),
+                                       y=float(corps.get("y") or 0), largeur=452, hauteur=362, priorite=priorite,
+                                       mission_id=mi["mission_id"], analyser=False,
+                                       meta={"description": contexte[:400]} if contexte else None)
+            self._json(201, {"mission_id": mi["mission_id"], "taches": mi.get("taches", []), "objet_id": o["objet_id"]})
+        else:
+            self._erreur(404, "Route inconnue.")
 
     def do_HEAD(self):  # noqa: N802
         if urlsplit(self.path).path in STATIQUES:

@@ -13,7 +13,8 @@ from __future__ import annotations
 
 VERSION = 1
 VERSIONS_ACCEPTEES = (1,)
-TAILLE_MAX_CONTENU = 200_000  # caractères d'un artefact renvoyé (borne contre l'épuisement de la base)
+TAILLE_MAX_CONTENU = 200_000
+OUTILS_MAX = 10  # outils déclarés par l'exécutant pour une tentative (affichés sur le Board, jamais exécutés)  # caractères d'un artefact renvoyé (borne contre l'épuisement de la base)
 
 CHAMPS_TACHE = {
     "version": int,
@@ -93,11 +94,16 @@ def valider_resultat(env: object) -> dict:
         raise EnveloppeInvalide(f"résultat : contenu trop long ({len(contenu)} > {TAILLE_MAX_CONTENU})")
     if env["issue"] == "reussi" and not contenu.strip():
         raise EnveloppeInvalide("résultat : une réussite sans contenu n'est pas une preuve")
+    outils = env.get("outils", [])
+    if not isinstance(outils, list) or len(outils) > OUTILS_MAX or not all(
+            isinstance(o, dict) and set(o) <= {"outil", "detail"} and all(isinstance(v, str) and len(v) <= 200
+                                                                         for v in o.values()) for o in outils):
+        raise EnveloppeInvalide(f"résultat : « outils » mal formés ({OUTILS_MAX} au plus, textes courts)")
     return env
 
 
 def resultat(tache: dict, issue: str, *, contenu: str = "", erreur: str = "", fournisseur: str = "",
-             factice: bool = False) -> dict:
+             factice: bool = False, outils: list | None = None) -> dict:
     """Construit le résultat d'une tentative, lié à son bail (jeton de clôture) et à sa clé d'idempotence."""
     return {
         "version": VERSION,
@@ -110,4 +116,6 @@ def resultat(tache: dict, issue: str, *, contenu: str = "", erreur: str = "", fo
         "erreur": erreur[:2000],
         "fournisseur": fournisseur,
         "factice": factice,
+        **({"outils": [{k: str(v)[:200] for k, v in o.items() if k in ("outil", "detail")} for o in outils][:OUTILS_MAX]}
+           if outils else {}),
     }

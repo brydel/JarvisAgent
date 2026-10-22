@@ -25,9 +25,12 @@ AIDE = (
     "/pause — bloque tout nouveau lancement\n"
     "/reprendre — lève ta pause (les causes automatiques restent)\n"
     "/pauses — causes de pause et réservations en cours\n"
+    "/board [projet] — le Board : cartes, analyses de Jarvis, actions à lancer (boutons)\n"
     "/aide — cette aide\n\n"
     "Tout autre message est transmis directement au chef d'orchestre. "
-    "Tu peux aussi lui envoyer une image (maquette, direction artistique) ou un fichier, avec une légende."
+    "Tu peux aussi lui envoyer une image (maquette, direction artistique) ou un fichier, avec une légende.\n"
+    "Un lien, un fichier ou un message commençant par #projet est aussi déposé sur le Board de ce projet, "
+    "où Jarvis l'analyse ; sa réponse arrive ici."
 )
 
 
@@ -873,6 +876,56 @@ def missions_check() -> None:
         missions.recuperer()
 
 
+def executant_loop(stop: threading.Event) -> None:
+    """Exécutant local de missions dans le démon : ce que tu déposes sur le Board est analysé sans commande à
+    lancer. Même verrou que `jarvis mission executer` : jamais deux exécutants pour la même identité."""
+    from . import coureur, missions
+    verrou, attendu = None, False
+    while not stop.is_set():
+        try:
+            ident = coureur.identite()
+            if not config.settings().get("missions", {}).get("executant_demon", True) or ident is None \
+                    or not missions.backend().existe():
+                stop.wait(60)
+                continue
+            verrou = coureur.prendre_verrou(ident["id"])
+            if verrou is None:
+                if not attendu:
+                    store.feed_add("systeme", "exécutant de missions déjà lancé ailleurs : le démon attend")
+                    attendu = True
+                stop.wait(30)
+                continue
+            break
+        except Exception as exc:  # noqa: BLE001
+            store.feed_add("erreur", f"exécutant de missions : {exc}")
+            stop.wait(30)
+    if stop.is_set():
+        return
+    # plusieurs voies : une longue rédaction ne retient plus les analyses déposées après elle
+    voies = max(1, min(4, int(config.settings().get("missions", {}).get("paralleles", VOIES_EXECUTANT))))
+    fils = [threading.Thread(target=_voie_executant, args=(stop, ident, i), name=f"executant-{i}", daemon=True)
+            for i in range(voies)]
+    for f in fils:
+        f.start()
+    stop.wait()
+    verrou.close()
+
+
+VOIES_EXECUTANT = 2  # exécutions de missions simultanées (Claude / Codex par abonnement) ; réglage missions.paralleles
+
+
+def _voie_executant(stop: threading.Event, ident: dict, voie: int) -> None:
+    from . import adaptateurs, coureur
+    cr = coureur.Coureur(coureur.TransportLocal(ident["id"], ident["secret"]), adaptateurs.par_defaut(), voie=voie)
+    while not stop.is_set():
+        try:
+            if cr.tour()["etat"] != "fait":
+                stop.wait(5)
+        except Exception as exc:  # noqa: BLE001 — une mission en échec ne doit pas arrêter l'exécutant
+            store.feed_add("erreur", f"exécutant de missions (voie {voie}) : {exc}")
+            stop.wait(30)
+
+
 def watch_loop(stop: threading.Event) -> None:
     first = True
     while not stop.is_set():
@@ -965,6 +1018,14 @@ def handle_update(bot: Bot, chat_id: str, upd: dict) -> None:
             if msg.get("message_id"):
                 bot.edit(owner, msg["message_id"], f"{msg.get('text', '')}\n\n{verdict}")
             return
+        if action in ("bpl", "bpe"):  # action proposée sur le Board : même règle que le panneau
+            from . import synchro
+            verdict = synchro.decider_depuis_telegram(plan_id, action == "bpl")
+            bot.answer(cb["id"], verdict[:190])
+            msg = cb.get("message", {})
+            if msg.get("message_id"):
+                bot.edit(owner, msg["message_id"], f"{msg.get('text', '')}\n\n{verdict}")
+            return
         if action not in ("ok", "non"):
             bot.answer(cb["id"], "Bouton inconnu")
             return
@@ -1041,15 +1102,41 @@ def handle_update(bot: Bot, chat_id: str, upd: dict) -> None:
         else:
             ag.chef_inject("[JARVIS] Pause levée par ton humain : tu peux reprendre ta boucle.")
             bot.send(owner, "▶ C'est reparti.")
+    elif cmd == "/board":
+        from . import board, missions, synchro
+        org = missions.tenant_local()
+        espace = board.nom_espace(text.split(maxsplit=1)[1] if len(text.split()) > 1 else "accueil")
+        bot.send(owner, synchro.texte_board(org, espace)[:3900])
+        for o in board.objets(org, espace)["objets"]:
+            props = o["meta"].get("propositions") or []
+            if any(p.get("statut") == "proposee" for p in props):
+                bot.send(owner, synchro.texte_analyse(o), synchro.boutons(o["id"], props))
     elif cmd == "/pauses":
         from . import admission, pauses
         bot.send(owner, pauses.texte() + "\n\n" + admission.texte_etat())
     else:
         store.feed_add("toi", f"(Telegram) {text}")
-        if ag.chef_inject(f"[Message de ton humain via Telegram] {text}"):
+        depot = _deposer_sur_board(text)
+        suite = (f" (déposé sur le Board {depot['espace']}, carte {depot['objet_id']} : son analyse te parviendra, "
+                 f"ne refais pas ce travail)") if depot else ""
+        if depot:
+            bot.send(owner, f"📌 Déposé sur le Board « {depot['espace']} » : Jarvis l'analyse.")
+        if ag.chef_inject(f"[Message de ton humain via Telegram] {text}{suite}"):
             bot.send(owner, "✔ Transmis au chef.")
-        else:
+        elif not depot:
             bot.send(owner, "⚠ Le chef n'est pas lancé. Sur ton PC : jarvis chef")
+
+
+def _deposer_sur_board(texte: str, fichier=None, nom: str = "") -> dict | None:
+    """Un lien, un fichier ou un message « #projet … » va aussi sur le Board (jamais une cause d'échec du pont)."""
+    try:
+        from . import missions, synchro
+        if not missions.backend().existe():
+            return None
+        return synchro.depuis_telegram(texte, fichier, nom)
+    except Exception as exc:  # noqa: BLE001
+        store.feed_add("erreur", f"Telegram → Board : {exc}")
+        return None
 
 
 BOITE = "boite"  # dossier des fichiers reçus, dans le dossier de travail du chef
@@ -1089,8 +1176,12 @@ def _transmettre_fichier(bot: Bot, owner: str, fichier: dict, legende: str) -> N
         bot.send(owner, f"⚠ Je n'ai pas pu récupérer le fichier : {exc}")
         return
     store.feed_add("toi", f"(Telegram) fichier {dest.name}" + (f" — {legende}" if legende else ""))
+    depot = _deposer_sur_board(legende, dest, fichier["nom"])
+    if depot:
+        bot.send(owner, f"📌 Déposé sur le Board « {depot['espace']} » : Jarvis l'analyse.")
     if ag.chef_inject(f"[Message de ton humain via Telegram] Fichier joint : {dest} (ouvre-le avec l'outil Read). "
-                      f"Légende : {legende or '(aucune)'}"):
+                      f"Légende : {legende or '(aucune)'}"
+                      + (f" (aussi déposé sur le Board {depot['espace']}, carte {depot['objet_id']})" if depot else "")):
         bot.send(owner, "✔ Fichier transmis au chef.")
     else:
         bot.send(owner, f"⚠ Fichier enregistré ({dest.name}) mais le chef n'est pas lancé. Sur ton PC : jarvis chef")
@@ -1133,6 +1224,7 @@ def run() -> None:
         threading.Thread(target=watch_loop, args=(stop,), name="surveillance", daemon=True),
         threading.Thread(target=telegram_loop, args=(stop,), name="telegram", daemon=True),
         threading.Thread(target=sante_loop, args=(stop,), name="sante", daemon=True),
+        threading.Thread(target=executant_loop, args=(stop,), name="executant", daemon=True),
     ]
     web_cfg = config.settings()["web"]
     if web_cfg.get("actif", True):

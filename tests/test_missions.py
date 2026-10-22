@@ -513,6 +513,20 @@ class AdaptateursTest(unittest.TestCase):
         consigne = vu["args"][vu["args"].index("-p") + 1]
         self.assertEqual(consigne.count("DOCUMENT>>>"), 1, "le document ne peut pas fermer son propre délimiteur")
 
+    def test_claude_lit_le_fichier_joint_et_rien_d_autre(self):
+        pieces = self.dossier / "pieces"
+        pieces.mkdir()
+        (pieces / "piece.png").write_bytes(b"x")
+        env = {"travail": {"type": "contextualiser", "sorte": "image", "titre": "offre", "document": ""},
+               "pieces": {"dossier": str(pieces), "fichier": "piece.png", "image": True}, "delai_s": 30}
+        with mock.patch.dict(os.environ, {"JOURNAL_FAUX": str(self.journal)}):
+            ad.ClaudeCode(binaire=str(self.bin)).executer(env)
+        vu = json.loads(self.journal.read_text())
+        self.assertEqual(vu["cwd"], str(pieces))
+        i = vu["args"].index("--tools")
+        self.assertEqual(vu["args"][i:i + 4], ["--tools", "Read", "--allowedTools", "Read(./**)"])
+        self.assertIn("piece.png", vu["args"][vu["args"].index("-p") + 1])
+
     def test_quota_devient_indisponible(self):
         with mock.patch.dict(os.environ, {"JOURNAL_FAUX": str(self.journal), "FAUX_QUOTA": "1"}):
             r = ad.ClaudeCode(binaire=str(self.bin)).executer(self.env)

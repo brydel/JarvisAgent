@@ -1,0 +1,20 @@
+{
+ "capture": "c4.png",
+ "pixels_differents_pct": 15.4,
+ "ecart_couleur_moyen": {
+  "barre_haut": 12.8,
+  "seconde_rangee": 13.9,
+  "outils": 15.9,
+  "panneau": 20.3,
+  "image": 33.3,
+  "lien": 26.1,
+  "pdf": 34.4,
+  "note": 21,
+  "mission": 25.1,
+  "agents": 25.7,
+  "audio": 18.8,
+  "video": 33.3,
+  "dossier": 18.5,
+  "global": 19.4
+ }
+}

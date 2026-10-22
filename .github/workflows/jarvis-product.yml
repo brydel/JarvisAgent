@@ -1,0 +1,64 @@
+name: Jarvis product quality
+
+on:
+  push:
+    branches: [codex/jarvis-product-studio]
+  pull_request:
+    paths: ['studio/**', 'lib/jarvis/**', 'services/model_bridge/**', 'tests/**', '.github/workflows/jarvis-product.yml']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: jarvis-product-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Installer les dependances verrouillees du Studio
+        working-directory: studio/board-v2
+        run: npm ci
+      - name: Verifier TypeScript et construire le Studio
+        working-directory: studio/board-v2
+        run: npm run build
+      - name: Verifier la syntaxe Python et shell
+        run: |
+          python -m compileall -q lib/jarvis services
+          bash -n install.sh bin/jarvis
+      - name: Tests du moteur, du Board, de l'atelier et de la passerelle
+        run: |
+          python -m unittest discover -s tests -p 'test_missions.py' -v
+          python -m unittest discover -s tests -p 'test_board_v2.py' -v
+          python -m unittest discover -s tests -p 'test_studio*.py' -v
+          python -m unittest discover -s services/model_bridge/tests -v
+      - name: Verifier le navigateur fourni par l'image GitHub
+        run: google-chrome --version
+      - name: Parcours produit et captures bureau/mobile
+        working-directory: studio/board-v2
+        env:
+          JARVIS_TEST_BROWSER_CHANNEL: chrome
+        run: npx playwright test product.spec.ts
+      - name: Conserver les preuves visuelles et les resultats
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: jarvis-product-evidence-${{ github.sha }}
+          path: |
+            reports/product-studio
+            reports/board-v2/playwright-resultats.json
+            reports/board-v2/playwright-sorties
+          if-no-files-found: warn
+          retention-days: 7

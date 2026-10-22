@@ -1,0 +1,96 @@
+{
+ "environnement": {
+  "navigateur": "Chromium 156.0.8078.4 (Playwright, sans GPU, WSL2)",
+  "machine": "ASUS — Intel Core i9-13900H, 20 fils (WSL2)",
+  "date": "2026-10-22T17:27:54.910Z",
+  "viewport": "1672×941",
+  "note": "Chiffres pessimistes : rendu logiciel. Chrome/Edge Windows avec GPU sur l'ASUS non mesuré par ce test."
+ },
+ "charge_0": {
+  "cartes_total": 9,
+  "noeuds_rendus_vue_ensemble": 9,
+  "panoramique": {
+   "images": 129,
+   "mediane_ms": 16.7,
+   "p95_ms": 33.4,
+   "max_ms": 50,
+   "ips_moyen": 42,
+   "images_longues_50ms": 0
+  },
+  "zoom_molette": {
+   "images": 87,
+   "mediane_ms": 16.7,
+   "p95_ms": 33.4,
+   "max_ms": 33.4,
+   "ips_moyen": 51,
+   "images_longues_50ms": 0
+  },
+  "glisser_carte": {
+   "images": 73,
+   "mediane_ms": 16.7,
+   "p95_ms": 33.4,
+   "max_ms": 33.4,
+   "ips_moyen": 47,
+   "images_longues_50ms": 0
+  },
+  "clic_ajouter_vers_carte_ms": 137
+ },
+ "charge_100": {
+  "cartes_total": 109,
+  "noeuds_rendus_vue_ensemble": 109,
+  "panoramique": {
+   "images": 207,
+   "mediane_ms": 33.3,
+   "p95_ms": 50.1,
+   "max_ms": 66.8,
+   "ips_moyen": 34,
+   "images_longues_50ms": 11
+  },
+  "zoom_molette": {
+   "images": 108,
+   "mediane_ms": 16.7,
+   "p95_ms": 16.8,
+   "max_ms": 33.3,
+   "ips_moyen": 59,
+   "images_longues_50ms": 0
+  },
+  "glisser_carte": {
+   "images": 152,
+   "mediane_ms": 33.3,
+   "p95_ms": 50.1,
+   "max_ms": 66.8,
+   "ips_moyen": 34,
+   "images_longues_50ms": 10
+  },
+  "clic_ajouter_vers_carte_ms": 163
+ },
+ "charge_250": {
+  "cartes_total": 259,
+  "noeuds_rendus_vue_ensemble": 209,
+  "panoramique": {
+   "images": 267,
+   "mediane_ms": 33.3,
+   "p95_ms": 100,
+   "max_ms": 183.4,
+   "ips_moyen": 23,
+   "images_longues_50ms": 88
+  },
+  "zoom_molette": {
+   "images": 121,
+   "mediane_ms": 16.7,
+   "p95_ms": 33.3,
+   "max_ms": 83.4,
+   "ips_moyen": 54,
+   "images_longues_50ms": 2
+  },
+  "glisser_carte": {
+   "images": 122,
+   "mediane_ms": 33.3,
+   "p95_ms": 83.3,
+   "max_ms": 116.7,
+   "ips_moyen": 28,
+   "images_longues_50ms": 22
+  },
+  "clic_ajouter_vers_carte_ms": 292
+ }
+}

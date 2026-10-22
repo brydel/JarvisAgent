@@ -9,3 +9,9 @@
 Thumbs.db
 __pycache__/
 *.pyc
+
+# Board V2 (studio/board-v2)
+node_modules/
+reports/board-v2/playwright-sorties/
+reports/board-v2/playwright-resultats.json
+test-results/

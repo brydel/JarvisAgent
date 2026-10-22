@@ -17,10 +17,61 @@ from __future__ import annotations
 
 import json
 import os
+import shutil
+import tempfile
 import threading
+from pathlib import Path
 from typing import Callable
 
 from . import adaptateurs as ad, config, missions, pauses, protocole_executant as proto
+
+EXTENSIONS = {"image/png": ".png", "image/jpeg": ".jpg", "image/gif": ".gif", "image/webp": ".webp",
+              "application/pdf": ".pdf"}
+
+
+def outils_prepares(pieces: dict) -> list[dict]:
+    """Ce que l'exécutant a fait lui-même avant l'appel au modèle : affiché sur le Board, tel quel."""
+    if not pieces:
+        return []
+    sortie = []
+    if pieces.get("fichier"):
+        sortie.append({"outil": "copie isolée", "detail": pieces["fichier"]})
+    if pieces.get("page"):
+        sortie.append({"outil": "lecture web", "detail": f"{len(pieces['page'])} caractères lus"})
+    if pieces.get("note"):
+        sortie.append({"outil": "pièce indisponible", "detail": pieces["note"][:200]})
+    return sortie
+
+
+def preparer_pieces(env: dict, dossier: Path) -> dict:
+    """Pièces d'une contextualisation, préparées par l'exécutant LOCAL (même machine que le Board) : copie du
+    fichier seul dans `dossier`, texte de la page d'un lien (règles anti-SSRF). Ne lève jamais : une pièce
+    manquante devient une note que le modèle doit signaler."""
+    travail, pieces = env["travail"], {"dossier": str(dossier), "fichier": None, "image": False, "page": "", "note": ""}
+    if travail.get("type") != "contextualiser":
+        return {}
+    try:
+        if travail.get("asset_id"):
+            from . import board
+            chemin, a = board.fichier(env["tenant_id"], travail["asset_id"])
+            ext = EXTENSIONS.get(a["mime"])
+            if ext:
+                shutil.copyfile(chemin, dossier / f"piece{ext}")
+                pieces.update(fichier=f"piece{ext}", image=a["mime"].startswith("image/"))
+            else:
+                m = a.get("meta") or {}
+                pieces["note"] = (f"Fichier {a['mime']} « {a['nom']} », {a['taille']} octets"
+                                  + (f", durée {m['duree']:.0f} s" if isinstance(m.get('duree'), (int, float)) else "")
+                                  + " : contenu non transmis (seuls les métadonnées sont connues).")
+        elif travail.get("url"):
+            from . import apercus
+            try:
+                pieces["page"] = apercus.texte_page(travail["url"])
+            except apercus.ApercuRefuse as exc:
+                pieces["note"] = f"Page non lisible : {exc}. Analyse seulement l'adresse et ce que l'utilisateur a écrit."
+    except (missions.MissionError, OSError) as exc:
+        pieces["note"] = f"Pièce indisponible : {exc}"
+    return pieces
 
 
 class TransportLocal:
@@ -57,6 +108,27 @@ def _ecrire_atomique(chemin, data) -> None:
     os.replace(tmp, chemin)
 
 
+def identite() -> dict | None:
+    """Identité de l'exécutant enrôlé sur ce poste (jarvis mission enroler), ou None."""
+    try:
+        return json.loads((_dossier() / "identite.json").read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return None
+
+
+def prendre_verrou(executant_id: str):
+    """Un seul processus par identité d'exécutant (démon OU `jarvis mission executer`) : verrou exclusif non
+    bloquant, tenu tant que l'objet renvoyé reste ouvert. None si un autre processus le tient déjà."""
+    import fcntl
+    fh = open(_dossier() / f"{executant_id}.lock", "w")  # noqa: SIM115 — ouvert pour la durée du processus
+    try:
+        fcntl.flock(fh, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except OSError:
+        fh.close()
+        return None
+    return fh
+
+
 def arret_local() -> str:
     if (_dossier() / "STOP").exists():
         return "fichier coureur/STOP présent"
@@ -67,11 +139,13 @@ def arret_local() -> str:
 
 class Coureur:
     def __init__(self, transport, adaptateurs: dict[str, ad.Adaptateur], *,
-                 avant_envoi: Callable[[dict], None] | None = None, intervalle_battement: float | None = None):
+                 avant_envoi: Callable[[dict], None] | None = None, intervalle_battement: float | None = None,
+                 voie: int = 0):
         self.transport, self.adaptateurs = transport, adaptateurs
         self.avant_envoi = avant_envoi  # crochet de test : simuler un plantage entre exécution et envoi
         self.intervalle = intervalle_battement or missions.BAIL_S / 3
-        self.journal = _dossier() / f"{transport.id}.json"
+        # plusieurs voies d'une même identité (dans le même processus) : un journal chacune, jamais partagé
+        self.journal = _dossier() / (f"{transport.id}.json" if voie == 0 else f"{transport.id}-v{voie}.json")
 
     # -- journal des résultats non acquittés --
     def _en_attente(self) -> list[dict]:
@@ -139,7 +213,10 @@ class Coureur:
                           "erreur": f"adaptateur « {env['fournisseur']} » absent de cet exécutant", "factice": False}
             else:
                 try:
-                    sortie = adaptateur.executer(env)
+                    with tempfile.TemporaryDirectory(prefix="jarvis-pieces-") as d:
+                        pieces = preparer_pieces(env, Path(d))
+                        sortie = adaptateur.executer({**env, "pieces": pieces} if pieces else env)
+                        sortie["outils"] = outils_prepares(pieces) + list(sortie.get("outils") or [])
                 except ValueError as exc:
                     sortie = {"issue": "echec", "contenu": "", "erreur": str(exc), "factice": False}
         finally:
@@ -147,7 +224,7 @@ class Coureur:
             fil.join(timeout=5)
         resultat = proto.resultat(env, sortie["issue"], contenu=sortie.get("contenu", ""),
                                   erreur=sortie.get("erreur", ""), fournisseur=env["fournisseur"],
-                                  factice=bool(sortie.get("factice")))
+                                  factice=bool(sortie.get("factice")), outils=sortie.get("outils"))
         try:
             proto.valider_resultat(resultat)
         except proto.EnveloppeInvalide as exc:  # réponse vide, trop longue… : un échec, pas un résultat
