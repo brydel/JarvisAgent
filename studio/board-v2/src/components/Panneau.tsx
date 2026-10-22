@@ -1,9 +1,10 @@
 import { memo, useEffect, useState } from "react";
 import { AnimatePresence, motion } from "motion/react";
-import { Calendar, Check, CircleDashed, FileText, Image as IconeImage, Link2, Loader, MoreHorizontal, Music, Play, Plus, ShieldCheck, Sparkles, Star, Target, Video, X } from "lucide-react";
+import { Calendar, Check, CircleDashed, Copy, FileText, Image as IconeImage, Link2, Loader, MoreHorizontal, Music, Play, Plus, ShieldCheck, Sparkles, Star, Target, Video, X } from "lucide-react";
 import type { Approbation, Evenement, ObjetBoard, Priorite } from "../types";
 import type { Inspection, Source } from "../api";
 import { ilya, libelleTache, taille } from "../lib/format";
+import { rendreNote } from "../lib/markdown";
 import { Avatar } from "./Avatar";
 import { statutAgent } from "../nodes/CartesVivantes";
 import { etatJarvis } from "../nodes/CardShell";
@@ -185,6 +186,30 @@ function SectionJarvis({ objet, contextualiser, deciderProposition }: {
   );
 }
 
+/** Dernier livrable accepté par la revue (sinon le dernier reçu, signalé) : le texte réel, jamais un résumé inventé. */
+function Livrable({ artefacts }: { artefacts: Inspection["artefacts"] }) {
+  const [tout, setTout] = useState(false);
+  const [copie, setCopie] = useState(false);
+  const a = [...artefacts].reverse().find((x) => x.revue === "acceptee") ?? artefacts[artefacts.length - 1];
+  if (!a) return null;
+  const long = a.contenu.length > 900;
+  return (
+    <section className="section section-livrable" aria-label="Livrable">
+      <div className="tete"><h4><FileText size={17} /> Livrable</h4>
+        <span className="meta-carte">{a.fournisseur}{a.factice && a.fournisseur !== "factice" ? " · factice" : ""}{a.revue !== "acceptee" ? " · refusé par la revue" : ""}</span></div>
+      <div className={`livrable-texte${long && !tout ? " replie" : ""}`}>{rendreNote(a.contenu)}</div>
+      <div className="livrable-actions">
+        {long && <button type="button" className="lien-texte" onClick={() => setTout((v) => !v)}>{tout ? "Réduire" : "Tout afficher"}</button>}
+        <button type="button" className="bouton" onClick={async () => {
+          await navigator.clipboard?.writeText(a.contenu).catch(() => undefined);
+          setCopie(true);
+          window.setTimeout(() => setCopie(false), 1500);
+        }}><Copy size={13} /> {copie ? "Copié" : "Copier"}</button>
+      </div>
+    </section>
+  );
+}
+
 function ListeActivite({ activite, max }: { activite: { cle: string; texte: string; ts: number; agent?: string }[]; max?: number }) {
   return (
     <ul className="activite">
@@ -306,6 +331,7 @@ function Details({ objet, insp, approbations, demo, activite, priorite, modifier
           </ul>
         </div>
       )}
+      {insp && <Livrable artefacts={insp.artefacts} />}
       {m && (
         <div className="section ligne-agents">Agents assignés
           <span className="pile">

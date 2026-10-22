@@ -64,10 +64,13 @@ export const ProductNav = memo(function ProductNav({ recherche = "", setRecherch
           {notifications} à valider<ArrowUpRight size={14} />
         </button>
       )}
-      <span className={`p-mode ${demo ? "is-demo" : ""}`}
-        title={demo ? "Données fictives. Aucune exécution réelle." : "Interface locale ; ce badge ne prouve pas la disponibilité des fournisseurs."}>
-        {demo ? "DÉMO" : "LOCAL"}
-      </span>
+      {/* le Board affiche déjà son propre bandeau « DÉMO » : un seul badge par écran */}
+      {!(demo && vue === "board") && (
+        <span className={`p-mode ${demo ? "is-demo" : ""}`}
+          title={demo ? "Données fictives. Aucune exécution réelle." : "Interface locale ; ce badge ne prouve pas la disponibilité des fournisseurs."}>
+          {demo ? "DÉMO" : "LOCAL"}
+        </span>
+      )}
     </header>
   );
 });

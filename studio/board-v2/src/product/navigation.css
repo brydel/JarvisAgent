@@ -3,6 +3,10 @@
 .product-nav.topbar .product-brand { margin-right:0; }
 .product-nav.topbar .nav { display:flex; }
 .product-nav.topbar .nav button span { display:inline; }
+/* la recherche garde une largeur lisible : ce sont les libellés de la navigation qui cèdent */
+.product-nav.topbar .recherche { flex:0 0 auto; width:220px; }
+/* une seule colonne, jamais plus large que la fenêtre : la navigation défile, la page ne déborde pas */
+.app:has(> .product-nav) { grid-template-columns:minmax(0,1fr); }
 .app:has(> .product-nav) { grid-template-rows:60px var(--subbar-h) minmax(0,1fr); }
 @media (min-width:761px) {
   .product-app .p-editor { position:sticky; top:18px; max-height:calc(100dvh - 100px); display:flex; flex-direction:column; }

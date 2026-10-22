@@ -310,6 +310,12 @@ test.describe("board réel", () => {
     await expect(page.getByRole("complementary", { name: "Panneau contextuel" }).getByRole("heading", { name: /Préparer : Résumer/ })).toBeVisible();
     await expect(page.getByText("proposé par Jarvis")).toBeVisible();
     await expect(mission.getByText("Réussie")).toBeVisible({ timeout: 20_000 });
+    // le livrable réel est lisible dans le panneau, titres Markdown rendus
+    const livrable = page.getByRole("region", { name: "Livrable" });
+    await expect(livrable.getByRole("heading", { name: "Livrable" , exact: true }).last()).toBeVisible();
+    await expect(livrable.getByText("factice", { exact: true })).toBeVisible();
+    await expect(livrable.getByText(/Action à préparer : Résumer/)).toBeVisible();
+    await expect(livrable.getByRole("button", { name: "Copier" })).toBeVisible();
     await page.screenshot({ path: path.join(RAPPORTS, "etat-chef-mission-preparee.png") });
     // plus aucune proposition ouverte : le bandeau l'indique
     await carte.getByRole("button", { name: "Jarvis : Contextualisé. Ouvrir les détails" }).click();

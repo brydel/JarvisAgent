@@ -24,7 +24,26 @@ export function rendreNote(texte: string): ReactNode[] {
       liste = [];
     }
   };
+  let code: string[] | null = null;  // bloc ``` en cours : rendu tel quel
   for (const ligne of texte.split("\n")) {
+    if (/^\s*```/.test(ligne)) {
+      vider();
+      if (code) {
+        blocs.push(<pre key={`c${blocs.length}`}>{code.join("\n")}</pre>);
+        code = null;
+      } else code = [];
+      continue;
+    }
+    if (code) {
+      code.push(ligne);
+      continue;
+    }
+    const titre = /^\s*#{1,4}\s+(.*)$/.exec(ligne);
+    if (titre && titre[1] !== undefined) {
+      vider();
+      blocs.push(<h5 key={`h${blocs.length}`}>{enligne(titre[1], `h${blocs.length}`)}</h5>);
+      continue;
+    }
     const m = /^\s*[-*•]\s+(.*)$/.exec(ligne);
     if (m && m[1] !== undefined) {
       liste.push(m[1]);
@@ -34,5 +53,6 @@ export function rendreNote(texte: string): ReactNode[] {
     if (ligne.trim()) blocs.push(<p key={`p${blocs.length}`}>{enligne(ligne, `p${blocs.length}`)}</p>);
   }
   vider();
+  if (code) blocs.push(<pre key={`c${blocs.length}`}>{code.join("\n")}</pre>);  // bloc jamais fermé
   return blocs;
 }
