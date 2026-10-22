@@ -27,7 +27,15 @@
 TaskDependency, Policy, Document, KnowledgeEntity, KnowledgeRelation, UsageRecord, AuditEvent (le journal chaîné
 existant tient ce rôle localement).
 
-## PostgreSQL et RLS — PROPOSED (M2)
+## PostgreSQL et RLS — VERIFIED (PostgreSQL 18.6, 21 octobre 2026)
+
+Implémenté dans `services/controle_pg/` (ADR-0006) et vérifié par `tests/test_controle_pg.py` contre un vrai
+serveur : sans contexte aucune ligne n'est visible ; un tenant ne voit que lui-même même sans filtre dans la
+requête ; écrire dans un autre tenant est refusé ; jarvis_app n'est ni superutilisateur ni BYPASSRLS ; journal
+en ajout seul ; table des comptes illisible. Toutes les suites du moteur et du Studio repassent sur PostgreSQL.
+Comptes (`comptes`, `adhesions`) : scrypt, rôles propriétaire / membre / lecteur.
+
+Conception d'origine :
 
 `ALTER TABLE … ENABLE ROW LEVEL SECURITY` + `FORCE`, politique `tenant_id = current_setting('jarvis.tenant_id')`
 posée par connexion ; le rôle applicatif n'est pas propriétaire des tables ; un rôle d'administration distinct

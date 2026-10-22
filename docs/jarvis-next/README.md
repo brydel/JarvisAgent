@@ -26,12 +26,12 @@ Branche : `claude/jarvis-next-m1`, empilée sur `claude/vague-3-leadership` (pil
 | [TARGET_ARCHITECTURE.md](TARGET_ARCHITECTURE.md) | trois plans (expérience, contrôle, exécution), monolithe modulaire | PROPOSED |
 | [HYBRID_DEPLOYMENT.md](HYBRID_DEPLOYMENT.md) | Studio Cloud + exécutants, profils de déploiement | PROPOSED |
 | [RUNNER_PROTOCOL.md](RUNNER_PROTOCOL.md) | identité, enrôlement, enveloppes v1, baux, idempotence | v1 local : VERIFIED ; transport réseau : PROPOSED |
-| [MISSION_ENGINE.md](MISSION_ENGINE.md) | machine d'états, transitions, reprise, schéma | VERIFIED (SQLite) ; PostgreSQL : PROPOSED |
+| [MISSION_ENGINE.md](MISSION_ENGINE.md) | machine d'états, transitions, reprise, schéma | VERIFIED (SQLite et PostgreSQL) |
 | [POLICY_ENGINE.md](POLICY_ENGINE.md) | niveaux L0–L4, approbations, délégation bornée | VERIFIED (M1) |
 | [PROVIDER_COMPATIBILITY.md](PROVIDER_COMPATIBILITY.md) | matrice de capacités Claude Code / Codex / factice | partiellement VERIFIED |
 | [COMMERCIAL_COMPLIANCE.md](COMMERCIAL_COMPLIANCE.md) | sources officielles datées, règles par profil | sources consultées le 21 octobre 2026 |
 | [BUDGET_GOVERNANCE.md](BUDGET_GOVERNANCE.md) | budget avant envoi, inconnu ≠ zéro | VERIFIED (inférence) / PROPOSED (reste) |
-| [TENANT_SECURITY.md](TENANT_SECURITY.md) | modèle multi-tenant, RLS, tests d'isolation | VERIFIED (applicatif) ; RLS : PROPOSED |
+| [TENANT_SECURITY.md](TENANT_SECURITY.md) | modèle multi-tenant, RLS, tests d'isolation | VERIFIED (applicatif et RLS PostgreSQL) |
 | [THREAT_MODEL.md](THREAT_MODEL.md) | menaces, mesures, résidu | PROPOSED |
 | [AGENT_HIERARCHY.md](AGENT_HIERARCHY.md) | organisation dynamique, définitions versionnées | PROPOSED (bornes de délégation : VERIFIED) |
 | [MEMORY_ARCHITECTURE.md](MEMORY_ARCHITECTURE.md) | mémoires, récupération sans 3ᵉ fournisseur | PROPOSED |
@@ -41,4 +41,4 @@ Branche : `claude/jarvis-next-m1`, empilée sur `claude/vague-3-leadership` (pil
 | [MIGRATION_ROADMAP.md](MIGRATION_ROADMAP.md) | M0 → M7, critères de sortie, compatibilité | PROPOSED |
 | [RISK_REGISTER.md](RISK_REGISTER.md) | risques suivis | PROPOSED |
 | [OPEN_DECISIONS.md](OPEN_DECISIONS.md) | ce que le fondateur doit trancher | en attente |
-| [adr/](adr/) | décisions d'architecture avec alternatives rejetées | PROPOSED |
+| [adr/](adr/) | décisions d'architecture avec alternatives rejetées (0001 à 0006) | PROPOSED |

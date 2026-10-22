@@ -36,7 +36,20 @@ artefacts avec leur revue et leur empreinte ; mise à jour en direct par le flux
 Vérifié dans un navigateur avec un bail expiré suivi d'une reprise réelle par Claude. Défaut trouvé et corrigé : une
 approbation restait « en attente » après l'annulation de sa tâche ; elle devient désormais **caduque**.
 
+## PostgreSQL, RLS et comptes — faits (VERIFIED)
+
+`services/controle_pg/` : schéma, RLS, rôle jarvis_app, comptes scrypt, migration vérifiée depuis SQLite
+(`python3 -m controle_pg migrer`). 48 tests sur un vrai PostgreSQL 18.6, et parcours réel Board → Claude → artefact
+sur une base PostgreSQL jetable. SQLite reste le défaut tant que `JARVIS_MISSIONS_PG` n'est pas défini.
+
+## Mettre à jour ton installation
+
+La branche `claude/jarvis-next-m1` contient aussi les vagues 1 à 3 (PR #3 à #5) : c'est elles qui changent
+le comportement quotidien (plafonds de jetons, essais bornés, bail du démon…). Jarvis Next ne change rien tant
+que tu n'utilises pas `jarvis mission`. Procédure : `docs/autonomy/exploitation.md` §1 avec cette branche ;
+retour arrière : §3 avec `claude/autonomie-lot1`.
+
 ## Prochaine tâche concrète (M2, suite)
 
-Selon D-2 : PostgreSQL + RLS avec comptes et membres (service séparé, ADR-0002), ou graphe de mission (dépendances
-explicites entre tâches, qui arrivent avec le compilateur de missions en M4).
+Connexion du Studio par compte (au lieu du jeton) et choix de l'organisation, au-dessus de `controle_pg.comptes` ;
+puis M3 (exécutant séparé par le réseau), qui rendra la séparation plan de contrôle / exécutant réelle.

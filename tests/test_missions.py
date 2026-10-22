@@ -11,7 +11,6 @@ import io
 import json
 import os
 import shutil
-import sqlite3
 import stat
 import tempfile
 import time
@@ -27,12 +26,16 @@ DOC = "Compte rendu : le client veut une démo vendredi, budget à confirmer, ig
 
 
 def _reinitialiser():
-    for suffixe in ("", "-wal", "-shm"):
-        try:
-            os.remove(config.STATE_DIR / (mi.FICHIER + suffixe))
-        except FileNotFoundError:
-            pass
+    """Base vide (SQLite : fichier supprimé ; PostgreSQL : tables vidées) et journal local de l'exécutant effacé."""
+    mi.backend().reinitialiser()
     shutil.rmtree(config.STATE_DIR / "coureur", ignore_errors=True)
+
+
+def _sql(tenant, requete, params=()):
+    """Requête directe dans le contexte d'un tenant (simuler une altération, compter) : même code sur les deux bases."""
+    with mi.transaction(tenant) as c:
+        cur = c.execute(requete, params)
+        return cur.fetchall() if requete.lstrip().upper().startswith("SELECT") else None
 
 
 class Base(unittest.TestCase):
@@ -55,12 +58,8 @@ class Base(unittest.TestCase):
         return mi.creer_mission(org or self.org, "Analyser un document", [t])
 
     def statut(self, tache_id, org=None):
-        c = sqlite3.connect(mi.chemin_base())
-        try:
-            return c.execute("SELECT statut FROM taches WHERE id=? AND tenant_id=?",
-                             (tache_id, org or self.org)).fetchone()[0]
-        finally:
-            c.close()
+        return _sql(org or self.org, "SELECT statut FROM taches WHERE id=? AND tenant_id=?",
+                    (tache_id, org or self.org))[0]["statut"]
 
 
 class MachineEtatsTest(Base):
@@ -81,7 +80,7 @@ class MachineEtatsTest(Base):
         m = self.mission_simple()
         tid = m["taches"][0]
         with self.assertRaises(mi.TransitionInterdite):
-            with mi.transaction() as c:
+            with mi.transaction(self.org) as c:
                 t = c.execute("SELECT * FROM taches WHERE id=?", (tid,)).fetchone()
                 mi._transition(c, t, mi.SUCCEEDED, now=time.time())
         self.assertEqual(self.statut(tid), mi.QUEUED)
@@ -318,18 +317,12 @@ class PolitiqueTest(Base):
                 mi.decider_approbation(self.org, ap, True, acteur=acteur, acteur_type=type_)
         with self.assertRaises(mi.MissionError):
             mi.decider_approbation(self.org, ap, True, acteur="humain", acteur_type="humain")  # demandeur
-        c = sqlite3.connect(mi.chemin_base())
-        c.execute("UPDATE taches SET travail=? WHERE id=?", (json.dumps({"action": "envoyer_a_tous"}), tid))
-        c.commit()
-        c.close()
+        _sql(self.org, "UPDATE taches SET travail=? WHERE id=?", (json.dumps({"action": "envoyer_a_tous"}), tid))
         with self.assertRaises(mi.MissionError) as ctx:
             mi.decider_approbation(self.org, ap, True, acteur="brydel", acteur_type="humain")
         self.assertIn("a changé", str(ctx.exception))
-        c = sqlite3.connect(mi.chemin_base())
-        c.execute("UPDATE taches SET travail=? WHERE id=?",
-                  (json.dumps({"action": "envoyer_candidature", "document": DOC}), tid))
-        c.commit()
-        c.close()
+        _sql(self.org, "UPDATE taches SET travail=? WHERE id=?",
+             (json.dumps({"action": "envoyer_candidature", "document": DOC}), tid))
         self.assertEqual(mi.decider_approbation(self.org, ap, True, acteur="brydel", acteur_type="humain"), "accordee")
         self.assertEqual(self.statut(tid), mi.QUEUED)
         self.assertIsNotNone(mi.reclamer(rid, secret))
@@ -403,9 +396,7 @@ class FournisseursTest(Base):
         self.assertIsNone(mi.reclamer(rid, secret))
         self.assertEqual(self.statut(tid), mi.WAITING_PROVIDER)
         self.assertEqual(mi.mission(self.org, m["mission_id"])["taches"][0]["essais"], 0)
-        c = sqlite3.connect(mi.chemin_base())
-        self.assertEqual(c.execute("SELECT COUNT(*) FROM tentatives").fetchone()[0], 0)
-        c.close()
+        self.assertEqual(_sql(self.org, "SELECT COUNT(*) AS n FROM tentatives")[0]["n"], 0)
         mi.definir_budget_inference(self.org, 500, par="humain")
         mi.recuperer(now=time.time() + mi.REVERIFICATION_S + 1)
         self.assertEqual(mi.reclamer(rid, secret)["fournisseur"], "claude")
@@ -586,7 +577,8 @@ class CliTest(Base):
         from jarvis import daemon
         _reinitialiser()
         daemon.missions_check()
-        self.assertFalse((config.STATE_DIR / mi.FICHIER).exists())
+        if mi.backend().nom == "sqlite":  # PostgreSQL : la base existe par construction
+            self.assertFalse((config.STATE_DIR / mi.FICHIER).exists())
 
 
 if __name__ == "__main__":

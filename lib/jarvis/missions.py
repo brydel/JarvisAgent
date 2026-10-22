@@ -30,9 +30,12 @@ import contextlib
 import hashlib
 import hmac
 import json
+import os
 import secrets
 import sqlite3
+import sys
 import time
+from pathlib import Path
 from typing import Iterator
 
 from . import config, protocole_executant as proto
@@ -172,28 +175,100 @@ def chemin_base():
     return config.STATE_DIR / FICHIER
 
 
-def _connecter() -> sqlite3.Connection:
-    c = sqlite3.connect(chemin_base(), timeout=30, isolation_level=None)
-    c.row_factory = sqlite3.Row
-    c.execute("PRAGMA journal_mode=WAL")
-    c.execute("PRAGMA busy_timeout=30000")
-    c.execute("PRAGMA foreign_keys=ON")
-    c.executescript(_SCHEMA)
-    ligne = c.execute("SELECT valeur FROM meta WHERE cle='schema_version'").fetchone()
-    if ligne is None:
-        c.execute("INSERT OR IGNORE INTO meta VALUES ('schema_version', ?)", (str(SCHEMA_VERSION),))
-    elif int(ligne["valeur"]) > SCHEMA_VERSION:
-        c.close()
-        raise MissionError("schema", f"base missions en version {ligne['valeur']}, ce code connaît {SCHEMA_VERSION}")
+class BackendSQLite:
+    """Base locale par défaut (bibliothèque standard). Le tenant est appliqué par les requêtes du moteur ; le
+    backend PostgreSQL (services/controle_pg) l'impose EN PLUS par la RLS de la base."""
+
+    nom = "sqlite"
+    verrou_file = ""  # BEGIN IMMEDIATE sérialise déjà les écritures
+
+    def connecter(self, tenant_id: str | None):
+        c = sqlite3.connect(chemin_base(), timeout=30, isolation_level=None)
+        c.row_factory = sqlite3.Row
+        c.execute("PRAGMA journal_mode=WAL")
+        c.execute("PRAGMA busy_timeout=30000")
+        c.execute("PRAGMA foreign_keys=ON")
+        c.executescript(_SCHEMA)
+        ligne = c.execute("SELECT valeur FROM meta WHERE cle='schema_version'").fetchone()
+        if ligne is None:
+            c.execute("INSERT INTO meta VALUES ('schema_version', ?) ON CONFLICT DO NOTHING", (str(SCHEMA_VERSION),))
+        elif int(ligne["valeur"]) > SCHEMA_VERSION:
+            c.close()
+            raise MissionError("schema", f"base missions en version {ligne['valeur']}, ce code connaît {SCHEMA_VERSION}")
+        return c
+
+    def debut(self, c) -> None:
+        c.execute("BEGIN IMMEDIATE")
+
+    def definir_tenant(self, c, tenant_id: str) -> None:
+        pass
+
+    def tenant_de_executant(self, c, executant_id: str) -> str | None:
+        r = c.execute("SELECT tenant_id FROM executants WHERE id=?", (executant_id,)).fetchone()
+        return r["tenant_id"] if r else None
+
+    def tenants(self) -> list[str]:
+        c = self.connecter(None)
+        try:
+            return [r["id"] for r in c.execute("SELECT id FROM organisations ORDER BY id")]
+        finally:
+            c.close()
+
+    def existe(self) -> bool:
+        return (config.STATE_DIR / FICHIER).exists()
+
+    def reinitialiser(self) -> None:
+        """Tests seulement : efface la base."""
+        for suffixe in ("", "-wal", "-shm"):
+            try:
+                (config.STATE_DIR / (FICHIER + suffixe)).unlink()
+            except FileNotFoundError:
+                pass
+
+
+_BACKEND = None
+
+
+def backend():
+    """Le backend actif : PostgreSQL si JARVIS_MISSIONS_PG (DSN) est défini, sinon SQLite local.
+    Le pilote PostgreSQL (psycopg) n'est importé que dans ce cas : le cœur reste sans dépendance."""
+    global _BACKEND
+    if _BACKEND is None:
+        dsn = os.environ.get("JARVIS_MISSIONS_PG", "")
+        if dsn:
+            service = Path(__file__).resolve().parents[2] / "services" / "controle_pg"
+            if str(service) not in sys.path:
+                sys.path.insert(0, str(service))
+            from controle_pg.backend import BackendPostgres  # noqa: PLC0415 — dépendance du service seulement
+            _BACKEND = BackendPostgres(dsn)
+        else:
+            _BACKEND = BackendSQLite()
+    return _BACKEND
+
+
+def utiliser(b) -> None:
+    """Choisit le backend (tests, service). None : revient au choix par l'environnement."""
+    global _BACKEND
+    _BACKEND = b
+
+
+def _connecter(tenant_id: str | None = None):
+    b = backend()
+    c = b.connecter(tenant_id)
+    if tenant_id:
+        b.definir_tenant(c, tenant_id)
     return c
 
 
 @contextlib.contextmanager
-def transaction() -> Iterator[sqlite3.Connection]:
-    """Une transaction d'écriture : tout ou rien (un COMMIT en échec annule)."""
-    c = _connecter()
+def transaction(tenant_id: str | None = None) -> Iterator[sqlite3.Connection]:
+    """Une transaction d'écriture : tout ou rien (un COMMIT en échec annule). `tenant_id` : contexte RLS."""
+    b = backend()
+    c = b.connecter(tenant_id)
     try:
-        c.execute("BEGIN IMMEDIATE")
+        b.debut(c)
+        if tenant_id:
+            b.definir_tenant(c, tenant_id)
         try:
             yield c
             c.execute("COMMIT")
@@ -224,8 +299,10 @@ def _transition(c: sqlite3.Connection, tache: sqlite3.Row | dict, vers: str, *, 
     if vers not in TRANSITIONS[de]:
         raise TransitionInterdite(de, vers)
     sets = ["statut=?", "maj=?", "raison=?"] + [f"{k}=?" for k in champs]
-    c.execute(f"UPDATE taches SET {', '.join(sets)} WHERE id=? AND statut=?",
-              (vers, now, raison, *champs.values(), tache["id"], de))
+    n = c.execute(f"UPDATE taches SET {', '.join(sets)} WHERE id=? AND statut=?",
+                  (vers, now, raison, *champs.values(), tache["id"], de)).rowcount
+    if n != 1:  # un autre processus a changé la tâche entre la lecture et l'écriture : on n'écrase rien
+        raise MissionError("concurrence", f"la tâche {tache['id']} n'est plus {de}")
     _evenement(c, tache["tenant_id"], "tache_etat", mission_id=tache["mission_id"], tache_id=tache["id"], now=now,
                de=de, vers=vers, raison=raison)
     if vers in TERMINAUX:
@@ -253,9 +330,9 @@ def creer_organisation(nom: str, *, id_: str | None = None, niveaux_auto=AUTO_PA
     now = now or time.time()
     niveaux = [n for n in niveaux_auto if n in NIVEAUX and n not in JAMAIS_AUTO]
     oid = id_ or _id("ORG")
-    with transaction() as c:
-        c.execute("INSERT OR IGNORE INTO organisations VALUES (?,?,?)", (oid, nom, now))
-        c.execute("INSERT OR IGNORE INTO reglages_tenant (tenant_id, niveaux_auto) VALUES (?,?)",
+    with transaction(oid) as c:
+        c.execute("INSERT INTO organisations VALUES (?,?,?) ON CONFLICT DO NOTHING", (oid, nom, now))
+        c.execute("INSERT INTO reglages_tenant (tenant_id, niveaux_auto) VALUES (?,?) ON CONFLICT DO NOTHING",
                   (oid, json.dumps(niveaux)))
     return oid
 
@@ -275,7 +352,7 @@ def _reglages(c: sqlite3.Connection, tenant_id: str) -> sqlite3.Row:
 def arret_urgence(tenant_id: str, actif: bool, *, par: str, now: float | None = None) -> None:
     """Interrupteur du plan de contrôle : plus aucune tâche n'est confiée tant qu'il est posé."""
     now = now or time.time()
-    with transaction() as c:
+    with transaction(tenant_id) as c:
         _reglages(c, tenant_id)
         c.execute("UPDATE reglages_tenant SET arret_urgence=? WHERE tenant_id=?", (int(actif), tenant_id))
         _evenement(c, tenant_id, "arret_urgence", now=now, actif=actif, par=par)
@@ -286,7 +363,7 @@ def definir_budget_inference(tenant_id: str, centimes: int, *, par: str, now: fl
     if centimes < 0:
         raise MissionError("budget", "un budget ne peut pas être négatif")
     now = now or time.time()
-    with transaction() as c:
+    with transaction(tenant_id) as c:
         _reglages(c, tenant_id)
         c.execute("UPDATE reglages_tenant SET budget_inference_centimes=? WHERE tenant_id=?", (centimes, tenant_id))
         _evenement(c, tenant_id, "budget_inference", now=now, centimes=centimes, par=par)
@@ -301,7 +378,7 @@ def declarer_connexion(tenant_id: str, fournisseur: str, mode_auth: str, *, paya
         raise MissionError("fournisseur", f"mode d'authentification inconnu : {mode_auth}")
     if mode_auth == "api":
         payant = True
-    with transaction() as c:
+    with transaction(tenant_id) as c:
         _reglages(c, tenant_id)
         c.execute("INSERT INTO connexions (tenant_id, fournisseur, mode_auth, payant) VALUES (?,?,?,?) "
                   "ON CONFLICT (tenant_id, fournisseur) DO UPDATE SET mode_auth=excluded.mode_auth, "
@@ -387,7 +464,7 @@ def creer_mission(tenant_id: str, objectif: str, taches: list[dict], *, source: 
     if not taches or len(taches) > TACHES_PAR_MISSION_MAX:
         raise MissionError("spec", f"1 à {TACHES_PAR_MISSION_MAX} tâches par mission")
     specs = [_valider_spec(t) for t in taches]
-    with transaction() as c:
+    with transaction(tenant_id) as c:
         _reglages(c, tenant_id)
         if cle_idempotence:
             existante = c.execute("SELECT id FROM missions WHERE tenant_id=? AND cle_idempotence=?",
@@ -406,7 +483,7 @@ def deleguer(tenant_id: str, parent_id: str, spec: dict, *, demandeur: str, now:
     """Sous-tâche d'une tâche existante : jamais plus de droits que le parent, profondeur et largeur bornées."""
     now = now or time.time()
     s = _valider_spec(spec)
-    with transaction() as c:
+    with transaction(tenant_id) as c:
         parent = c.execute("SELECT * FROM taches WHERE id=? AND tenant_id=?", (parent_id, tenant_id)).fetchone()
         if parent is None:
             raise MissionError("inconnue", f"tâche inconnue : {parent_id}")
@@ -414,10 +491,10 @@ def deleguer(tenant_id: str, parent_id: str, spec: dict, *, demandeur: str, now:
             raise MissionError("delegation", "la tâche parente est terminée")
         if parent["profondeur"] + 1 > PROFONDEUR_MAX:
             raise MissionError("delegation", f"profondeur de délégation maximale atteinte ({PROFONDEUR_MAX})")
-        enfants = c.execute("SELECT COUNT(*) FROM taches WHERE parent_id=?", (parent_id,)).fetchone()[0]
+        enfants = c.execute("SELECT COUNT(*) AS n FROM taches WHERE parent_id=?", (parent_id,)).fetchone()["n"]
         if enfants >= LARGEUR_MAX:
             raise MissionError("delegation", f"largeur de délégation maximale atteinte ({LARGEUR_MAX})")
-        total = c.execute("SELECT COUNT(*) FROM taches WHERE mission_id=?", (parent["mission_id"],)).fetchone()[0]
+        total = c.execute("SELECT COUNT(*) AS n FROM taches WHERE mission_id=?", (parent["mission_id"],)).fetchone()["n"]
         if total >= TACHES_PAR_MISSION_MAX:
             raise MissionError("delegation", "nombre maximal de tâches pour cette mission atteint")
         if NIVEAUX.index(s["niveau"]) > NIVEAUX.index(parent["niveau"]):
@@ -433,7 +510,7 @@ def decider_approbation(tenant_id: str, approbation_id: str, accord: bool, *, ac
     now = now or time.time()
     if acteur_type != "humain":
         raise MissionError("approbation", "seul un humain peut décider d'une approbation")
-    with transaction() as c:
+    with transaction(tenant_id) as c:
         ap = c.execute("SELECT * FROM approbations WHERE id=? AND tenant_id=?", (approbation_id, tenant_id)).fetchone()
         if ap is None:
             raise MissionError("inconnue", f"approbation inconnue : {approbation_id}")
@@ -455,7 +532,7 @@ def decider_approbation(tenant_id: str, approbation_id: str, accord: bool, *, ac
 
 def annuler_mission(tenant_id: str, mission_id: str, *, par: str, now: float | None = None) -> int:
     now = now or time.time()
-    with transaction() as c:
+    with transaction(tenant_id) as c:
         n = 0
         for t in c.execute("SELECT * FROM taches WHERE mission_id=? AND tenant_id=?", (mission_id, tenant_id)).fetchall():
             if CANCELLED in TRANSITIONS[t["statut"]]:
@@ -475,7 +552,7 @@ def enroler_executant(tenant_id: str, nom: str, *, capacites: list[str], fournis
         raise MissionError("executant", f"profil inconnu : {profil}")
     now = now or time.time()
     rid, secret = _id("RU"), secrets.token_urlsafe(32)
-    with transaction() as c:
+    with transaction(tenant_id) as c:
         _reglages(c, tenant_id)
         c.execute("INSERT INTO executants (id, tenant_id, nom, secret_empreinte, capacites, fournisseurs, profil, "
                   "version, systeme, cree) VALUES (?,?,?,?,?,?,?,?,?,?)",
@@ -487,13 +564,17 @@ def enroler_executant(tenant_id: str, nom: str, *, capacites: list[str], fournis
 
 def revoquer_executant(tenant_id: str, executant_id: str, *, par: str, now: float | None = None) -> None:
     now = now or time.time()
-    with transaction() as c:
+    with transaction(tenant_id) as c:
         c.execute("UPDATE executants SET revoque=1 WHERE id=? AND tenant_id=?", (executant_id, tenant_id))
         _evenement(c, tenant_id, "executant_revoque", now=now, executant_id=executant_id, par=par)
 
 
 def _authentifier(c: sqlite3.Connection, executant_id: str, secret: str) -> sqlite3.Row:
-    e = c.execute("SELECT * FROM executants WHERE id=?", (executant_id,)).fetchone()
+    b = backend()
+    tenant = b.tenant_de_executant(c, executant_id)
+    if tenant:
+        b.definir_tenant(c, tenant)  # sous PostgreSQL, la RLS ne montre ensuite que ce tenant
+    e = c.execute("SELECT * FROM executants WHERE id=?", (executant_id,)).fetchone() if tenant else None
     attendu = e["secret_empreinte"] if e else hashlib.sha256(b"").hexdigest()
     ok = hmac.compare_digest(attendu, hashlib.sha256(secret.encode()).hexdigest())
     if e is None or not ok:
@@ -515,24 +596,30 @@ def reclamer(executant_id: str, secret: str, *, now: float | None = None) -> dic
         if _reglages(c, tenant)["arret_urgence"]:
             return None
         caps = set(json.loads(e["capacites"]))
-        for t in c.execute("SELECT * FROM taches WHERE tenant_id=? AND statut=? ORDER BY cree, id",
-                           (tenant, QUEUED)).fetchall():
+        # PostgreSQL : les tâches prises par une réclamation concurrente sont sautées (SKIP LOCKED)
+        for t in c.execute("SELECT * FROM taches WHERE tenant_id=? AND statut=? ORDER BY cree, id"
+                           + backend().verrou_file, (tenant, QUEUED)).fetchall():
             if not set(json.loads(t["capacites"])) <= caps:
                 continue
             fournisseur, raison = _router(c, t, e, now)
-            if not fournisseur:
-                _transition(c, t, WAITING_PROVIDER, now=now, raison=raison, prochaine_tentative=None)
-                continue
             jeton = t["bail_jeton"] + 1
             aid = _id("AT")
             cle = f"{t['id']}:{jeton}"
+            expire = now + BAIL_S
+            try:  # la transition d'abord : si un autre l'a déjà prise, rien n'est écrit pour elle
+                if not fournisseur:
+                    _transition(c, t, WAITING_PROVIDER, now=now, raison=raison, prochaine_tentative=None)
+                    continue
+                _transition(c, t, LEASED, now=now, raison=f"bail {jeton} → {executant_id}",
+                            bail_executant=executant_id, bail_jeton=jeton, bail_expire=expire, tentative_id=aid,
+                            fournisseur_choisi=fournisseur, essais=t["essais"] + 1)
+            except MissionError as exc:
+                if exc.code == "concurrence":
+                    continue
+                raise
             c.execute("INSERT INTO tentatives (id, tenant_id, tache_id, executant_id, bail_jeton, fournisseur, "
                       "cle_idempotence, debut) VALUES (?,?,?,?,?,?,?,?)",
                       (aid, tenant, t["id"], executant_id, jeton, fournisseur, cle, now))
-            expire = now + BAIL_S
-            _transition(c, t, LEASED, now=now, raison=f"bail {jeton} → {executant_id}", bail_executant=executant_id,
-                        bail_jeton=jeton, bail_expire=expire, tentative_id=aid, fournisseur_choisi=fournisseur,
-                        essais=t["essais"] + 1)
             m = c.execute("SELECT correlation_id FROM missions WHERE id=?", (t["mission_id"],)).fetchone()
             return {
                 "version": proto.VERSION, "tenant_id": tenant, "mission_id": t["mission_id"], "tache_id": t["id"],
@@ -676,31 +763,44 @@ def recuperer(*, now: float | None = None) -> dict:
     """Balayage du plan de contrôle (démon) : baux expirés, nouveaux essais échus, fournisseurs revenus, échéances."""
     now = now or time.time()
     bilan = {"baux_expires": 0, "relances": 0, "fournisseurs": 0, "expirees": 0}
-    with transaction() as c:
-        for t in c.execute("SELECT * FROM taches WHERE statut IN (?,?) AND bail_expire < ?",
-                           (LEASED, RUNNING, now)).fetchall():
+    for tenant in backend().tenants():  # un tenant à la fois : sous PostgreSQL, la RLS s'applique au balayage aussi
+        with transaction(tenant) as c:
+            _recuperer_tenant(c, tenant, now, bilan)
+    return bilan
+
+
+def _recuperer_tenant(c, tenant: str, now: float, bilan: dict) -> None:
+    def tenter(compteur: str, action) -> None:
+        try:
+            action()
+            bilan[compteur] += 1
+        except MissionError as exc:  # la tâche a changé entre-temps (résultat arrivé) : elle n'est plus à reprendre
+            if exc.code != "concurrence":
+                raise
+
+    for t in c.execute("SELECT * FROM taches WHERE tenant_id=? AND statut IN (?,?) AND bail_expire < ?",
+                       (tenant, LEASED, RUNNING, now)).fetchall():
+        def expirer(t=t):
+            _echec(c, t, now, f"bail {t['bail_jeton']} expiré (exécutant {t['bail_executant']} muet)")
             c.execute("UPDATE tentatives SET fin=?, issue='bail_expire' WHERE id=? AND issue IS NULL",
                       (now, t["tentative_id"]))
-            _echec(c, t, now, f"bail {t['bail_jeton']} expiré (exécutant {t['bail_executant']} muet)")
-            bilan["baux_expires"] += 1
-        for t in c.execute("SELECT * FROM taches WHERE statut=? AND prochaine_tentative <= ?",
-                           (RETRY_SCHEDULED, now)).fetchall():
-            _transition(c, t, QUEUED, now=now, raison="nouvel essai")
-            bilan["relances"] += 1
-        for t in c.execute("SELECT * FROM taches WHERE statut=?", (WAITING_PROVIDER,)).fetchall():
-            # revenu depuis la mise en attente, ou nouvel essai de routage périodique (connexion ou budget changés)
-            revenu = c.execute("SELECT 1 FROM connexions WHERE tenant_id=? AND active=1 AND indisponible_jusqua > ? "
-                               "AND indisponible_jusqua <= ?", (t["tenant_id"], t["maj"], now)).fetchone()
-            a_rerouter = t["prochaine_tentative"] is not None and t["prochaine_tentative"] <= now
-            if revenu or a_rerouter or now - t["maj"] >= REVERIFICATION_S:
-                _transition(c, t, QUEUED, now=now, raison="nouveau routage vers un fournisseur",
-                            prochaine_tentative=None)
-                bilan["fournisseurs"] += 1
-        for t in c.execute("SELECT * FROM taches WHERE statut IN (?,?,?,?) AND echeance IS NOT NULL AND echeance < ?",
-                           (WAITING_APPROVAL, QUEUED, WAITING_PROVIDER, RETRY_SCHEDULED, now)).fetchall():
-            _transition(c, t, EXPIRED, now=now, raison="échéance dépassée")
-            bilan["expirees"] += 1
-    return bilan
+        tenter("baux_expires", expirer)
+    for t in c.execute("SELECT * FROM taches WHERE tenant_id=? AND statut=? AND prochaine_tentative <= ?",
+                       (tenant, RETRY_SCHEDULED, now)).fetchall():
+        tenter("relances", lambda t=t: _transition(c, t, QUEUED, now=now, raison="nouvel essai"))
+    for t in c.execute("SELECT * FROM taches WHERE tenant_id=? AND statut=?", (tenant, WAITING_PROVIDER)).fetchall():
+        # revenu depuis la mise en attente, ou nouvel essai de routage périodique (connexion ou budget changés)
+        revenu = c.execute("SELECT 1 FROM connexions WHERE tenant_id=? AND active=1 AND indisponible_jusqua > ? "
+                           "AND indisponible_jusqua <= ?", (tenant, t["maj"], now)).fetchone()
+        a_rerouter = t["prochaine_tentative"] is not None and t["prochaine_tentative"] <= now
+        if revenu or a_rerouter or now - t["maj"] >= REVERIFICATION_S:
+            tenter("fournisseurs", lambda t=t: _transition(c, t, QUEUED, now=now,
+                                                           raison="nouveau routage vers un fournisseur",
+                                                           prochaine_tentative=None))
+    for t in c.execute("SELECT * FROM taches WHERE tenant_id=? AND statut IN (?,?,?,?) AND echeance IS NOT NULL "
+                       "AND echeance < ?", (tenant, WAITING_APPROVAL, QUEUED, WAITING_PROVIDER, RETRY_SCHEDULED,
+                                            now)).fetchall():
+        tenter("expirees", lambda t=t: _transition(c, t, EXPIRED, now=now, raison="échéance dépassée"))
 
 
 # --- Board -----------------------------------------------------------------------------
@@ -719,7 +819,7 @@ def board_ajouter(tenant_id: str, espace: str, type_: str, contenu: str, *, aute
         raise MissionError("board", "contenu vide ou trop long (50 000 caractères au plus)")
     now = now or time.time()
     oid = _id("BO")
-    with transaction() as c:
+    with transaction(tenant_id) as c:
         reglages = _reglages(c, tenant_id)
         c.execute("INSERT INTO board_objets (id, tenant_id, espace, type, contenu, x, y, auteur, cree) "
                   "VALUES (?,?,?,?,?,?,?,?,?)", (oid, tenant_id, espace, type_, contenu, x, y, auteur, now))
@@ -732,7 +832,7 @@ def board_ajouter(tenant_id: str, espace: str, type_: str, contenu: str, *, aute
             [{"type": "analyse_document", "niveau": "L1", "capacites": ["analyse"],
               "travail": {"objet_id": oid, "document": contenu}}],
             source="board", demandeur=f"board:{auteur}", cle_idempotence=f"board:{oid}", now=now)
-        with transaction() as c:
+        with transaction(tenant_id) as c:
             c.execute("UPDATE board_objets SET mission_id=? WHERE id=? AND tenant_id=?",
                       (mission["mission_id"], oid, tenant_id))
     return {"objet_id": oid, "mission_id": mission["mission_id"] if mission else None}
@@ -740,7 +840,7 @@ def board_ajouter(tenant_id: str, espace: str, type_: str, contenu: str, *, aute
 
 def board(tenant_id: str, espace: str) -> list[dict]:
     """Objets du Board avec l'état de leur mission et les artefacts produits (ce que le Studio affiche)."""
-    c = _connecter()
+    c = _connecter(tenant_id)
     try:
         out = []
         for o in c.execute("SELECT * FROM board_objets WHERE tenant_id=? AND espace=? ORDER BY cree",
@@ -763,7 +863,7 @@ def board_deplacer(tenant_id: str, objet_id: str, x: float, y: float, *, par: st
     """Position d'un objet sur le canevas (bornée) ; l'événement permet aux autres onglets de suivre."""
     now = now or time.time()
     x, y = max(-100_000.0, min(100_000.0, float(x))), max(-100_000.0, min(100_000.0, float(y)))
-    with transaction() as c:
+    with transaction(tenant_id) as c:
         n = c.execute("UPDATE board_objets SET x=?, y=? WHERE id=? AND tenant_id=?", (x, y, objet_id, tenant_id)).rowcount
         if not n:
             raise MissionError("inconnue", f"objet inconnu : {objet_id}")
@@ -775,7 +875,7 @@ def board_deplacer(tenant_id: str, objet_id: str, x: float, y: float, *, par: st
 def etat_execution(tenant_id: str, now: float | None = None) -> dict:
     """Exécutants (sans secret) et connexions fournisseurs du tenant, pour le moniteur du Studio."""
     now = now or time.time()
-    c = _connecter()
+    c = _connecter(tenant_id)
     try:
         r = _reglages(c, tenant_id)
         executants = [{"id": e["id"], "nom": e["nom"], "profil": e["profil"], "revoque": bool(e["revoque"]),
@@ -786,8 +886,8 @@ def etat_execution(tenant_id: str, now: float | None = None) -> dict:
         connexions = [{"fournisseur": x["fournisseur"], "mode_auth": x["mode_auth"], "payant": bool(x["payant"]),
                        "disponible": x["indisponible_jusqua"] <= now, "raison": x["raison"]}
                       for x in c.execute("SELECT * FROM connexions WHERE tenant_id=? AND active=1", (tenant_id,))]
-        file = {s: n for s, n in c.execute("SELECT statut, COUNT(*) FROM taches WHERE tenant_id=? GROUP BY statut",
-                                           (tenant_id,))}
+        file = {r["statut"]: r["n"] for r in c.execute(
+            "SELECT statut, COUNT(*) AS n FROM taches WHERE tenant_id=? GROUP BY statut", (tenant_id,))}
         return {"executants": executants, "connexions": connexions, "taches": file,
                 "arret_urgence": bool(r["arret_urgence"]),
                 "budget_inference_centimes": r["budget_inference_centimes"]}
@@ -795,7 +895,7 @@ def etat_execution(tenant_id: str, now: float | None = None) -> dict:
         c.close()
 
 def mission(tenant_id: str, mission_id: str) -> dict:
-    c = _connecter()
+    c = _connecter(tenant_id)
     try:
         m = c.execute("SELECT * FROM missions WHERE id=? AND tenant_id=?", (mission_id, tenant_id)).fetchone()
         if m is None:
@@ -817,7 +917,7 @@ def inspecter(tenant_id: str, mission_id: str) -> dict:
     """Tout ce qui explique une mission : tâches avec leurs tentatives (baux, fournisseur, issue), artefacts et
     revues, approbations, et la chronologie des transitions avec leur raison. Lecture seule, filtrée par tenant."""
     m = mission(tenant_id, mission_id)
-    c = _connecter()
+    c = _connecter(tenant_id)
     try:
         ids = [t["id"] for t in m["taches"]]
         marques = ",".join("?" * len(ids))
@@ -843,7 +943,7 @@ def inspecter(tenant_id: str, mission_id: str) -> dict:
 
 
 def missions(tenant_id: str, limite: int = 20) -> list[dict]:
-    c = _connecter()
+    c = _connecter(tenant_id)
     try:
         return [dict(m) for m in c.execute("SELECT * FROM missions WHERE tenant_id=? ORDER BY cree DESC LIMIT ?",
                                            (tenant_id, limite))]
@@ -852,7 +952,7 @@ def missions(tenant_id: str, limite: int = 20) -> list[dict]:
 
 
 def approbations_en_attente(tenant_id: str) -> list[dict]:
-    c = _connecter()
+    c = _connecter(tenant_id)
     try:
         return [dict(a) for a in c.execute(
             "SELECT a.*, t.type, t.niveau, t.travail, t.mission_id FROM approbations a JOIN taches t ON t.id=a.tache_id "
@@ -863,7 +963,7 @@ def approbations_en_attente(tenant_id: str) -> list[dict]:
 
 def evenements(tenant_id: str, apres: int = 0, limite: int = 200) -> list[dict]:
     """Journal ordonné du tenant après le numéro `apres` : ce que le Studio rejoue à la reconnexion."""
-    c = _connecter()
+    c = _connecter(tenant_id)
     try:
         return [{**dict(r), "donnees": json.loads(r["donnees"])} for r in c.execute(
             "SELECT * FROM evenements WHERE tenant_id=? AND seq > ? ORDER BY seq LIMIT ?", (tenant_id, apres, limite))]

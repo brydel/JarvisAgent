@@ -58,7 +58,12 @@ reprise sera le worktree git + commits + fiche de tâche existants (`taches.py`)
 du dépôt, pas de la conversation (PROPOSED, M4). Les sessions workmux orphelines sont déjà réconciliées par
 `admission.reconcilier` et `poste.reprendre` (CURRENT) ; M4 les reliera aux baux.
 
-## Passage à PostgreSQL (PROPOSED, M2)
+## Passage à PostgreSQL — fait (VERIFIED, ADR-0006)
+
+Le même moteur tourne sur les deux bases (`missions.backend()`). Réalisé comme prévu ci-dessous, plus une
+transition conditionnelle qui refuse d'écraser une tâche modifiée entre-temps (code `concurrence`).
+
+Prévu à l'origine :
 
 Même schéma : chaque table porte `tenant_id` ; `UNIQUE (tenant_id, cle_idempotence)` ; séquence d'événements →
 `BIGSERIAL` ; `BEGIN IMMEDIATE` → `SELECT … FOR UPDATE SKIP LOCKED` pour la réclamation concurrente ; RLS par

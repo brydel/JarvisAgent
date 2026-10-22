@@ -869,7 +869,7 @@ def executant_check() -> None:
 def missions_check() -> None:
     """Jarvis Next : baux expirés, nouveaux essais, fournisseurs revenus. Rien tant que la base n'existe pas."""
     from . import missions
-    if (config.STATE_DIR / missions.FICHIER).exists():
+    if missions.backend().existe():
         missions.recuperer()
 
 
