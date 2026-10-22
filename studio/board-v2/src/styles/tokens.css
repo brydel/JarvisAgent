@@ -1,0 +1,80 @@
+/* Jetons du Board V2 — miroir exact de design/board-v2/tokens.json. Aucune couleur en dur ailleurs. */
+:root {
+  --bg-app: #0B0E15;
+  --bg-bar: #0E1119;
+  --bg-canvas: #0D1018;
+  --grid-dot: #232838;
+
+  --surface-card: #121621;
+  --surface-card-raised: #161B28;
+  --surface-panel: #121722;
+  --surface-inset: #0F131C;
+  --surface-hover: #1A2031;
+
+  --border-subtle: #1E2433;
+  --border-card: #252B3B;
+  --border-strong: #323A50;
+
+  --text-primary: #E8EAF2;
+  --text-secondary: #A1A7B8;
+  --text-muted: #6E7587;
+  --text-inverse: #0B0E15;
+
+  --brand-indigo: #5B6CFF;
+  --brand-indigo-strong: #4E63FC;
+  --brand-indigo-soft: #7E8BFF;
+  --brand-cobalt: #3D5AFE;
+
+  --accent-cyan: #22D3EE;
+  --accent-violet: #A855F7;
+  --accent-magenta: #C026D3;
+  --accent-green: #34D399;
+
+  --success: #3FB984;
+  --success-bg: #12382A;
+  --warning: #E5B53D;
+  --warning-bg: #3A2F12;
+  --danger: #E5486F;
+  --danger-bg: #3A1323;
+  --info: #60A5FA;
+
+  --p1: #E0457B;
+  --p1-bg: #3B1426;
+  --p2: #E2B93B;
+  --p2-bg: #3A3012;
+  --p3: #3FB984;
+  --p3-bg: #12382A;
+
+  --edge-inspire: #B26BF5;
+  --edge-alimente: #3FCF9A;
+  --edge-utilise: #38BDF8;
+  --edge-default: #5B6CFF;
+
+  --font-sans: "Inter Variable", Inter, "Segoe UI Variable", "Segoe UI", system-ui, sans-serif;
+
+  --radius-xs: 6px;
+  --radius-sm: 8px;
+  --radius-card: 12px;
+  --radius-panel: 14px;
+  --radius-pill: 999px;
+
+  --shadow-card: 0 1px 0 rgba(255, 255, 255, 0.03) inset, 0 8px 24px rgba(0, 0, 0, 0.35);
+  --shadow-lift: 0 16px 40px rgba(0, 0, 0, 0.5);
+  --shadow-mission: 0 0 0 1px rgba(91, 108, 255, 0.55), 0 0 28px rgba(76, 110, 255, 0.35);
+  --shadow-selection: 0 0 0 2px #5B6CFF, 0 0 18px rgba(91, 108, 255, 0.45);
+
+  --dur-hover: 140ms;
+  --dur-appear: 180ms;
+  --dur-panel: 220ms;
+  --dur-lift: 120ms;
+  --ease-standard: cubic-bezier(0.2, 0, 0, 1);
+  --ease-exit: cubic-bezier(0.4, 0, 1, 1);
+
+  --topbar-h: 56px;
+  --subbar-h: 64px;
+  --panel-w: 368px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root { --dur-hover: 0ms; --dur-appear: 0ms; --dur-panel: 0ms; --dur-lift: 0ms; }
+}

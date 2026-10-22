@@ -40,7 +40,7 @@ from typing import Iterator
 
 from . import config, protocole_executant as proto
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2  # 2 : Board V2 (géométrie, priorité, relations, fichiers, commentaires)
 FICHIER = "missions.db"
 
 TENANT_LOCAL = "ORG-personnel"
@@ -167,7 +167,26 @@ CREATE TABLE IF NOT EXISTS evenements (
     seq INTEGER PRIMARY KEY AUTOINCREMENT, tenant_id TEXT NOT NULL, mission_id TEXT, tache_id TEXT,
     type TEXT NOT NULL, donnees TEXT NOT NULL, ts REAL NOT NULL);
 CREATE INDEX IF NOT EXISTS evenements_tenant ON evenements (tenant_id, seq);
+CREATE TABLE IF NOT EXISTS board_liens (
+    id TEXT PRIMARY KEY, tenant_id TEXT NOT NULL, espace TEXT NOT NULL, source_id TEXT NOT NULL,
+    cible_id TEXT NOT NULL, libelle TEXT NOT NULL DEFAULT '', style TEXT NOT NULL DEFAULT 'defaut',
+    supprime INTEGER NOT NULL DEFAULT 0, cree REAL NOT NULL, maj REAL NOT NULL);
+CREATE TABLE IF NOT EXISTS board_assets (
+    id TEXT PRIMARY KEY, tenant_id TEXT NOT NULL, sha256 TEXT NOT NULL, mime TEXT NOT NULL, taille INTEGER NOT NULL,
+    nom TEXT NOT NULL, fichier TEXT NOT NULL, meta TEXT NOT NULL DEFAULT '{}', vignette_id TEXT, cree REAL NOT NULL,
+    UNIQUE (tenant_id, sha256));
+CREATE TABLE IF NOT EXISTS board_commentaires (
+    id TEXT PRIMARY KEY, tenant_id TEXT NOT NULL, objet_id TEXT NOT NULL, auteur TEXT NOT NULL, texte TEXT NOT NULL,
+    cree REAL NOT NULL);
 """
+
+# Colonnes du Board V2 ajoutées aux bases existantes (version 2 du schéma) : aucune donnée n'est réécrite.
+COLONNES_BOARD_V2 = (
+    ("largeur", "REAL NOT NULL DEFAULT 0"), ("hauteur", "REAL NOT NULL DEFAULT 0"), ("z", "INTEGER NOT NULL DEFAULT 0"),
+    ("priorite", "TEXT NOT NULL DEFAULT ''"), ("meta", "TEXT NOT NULL DEFAULT '{}'"), ("asset_id", "TEXT"),
+    ("parent_id", "TEXT"), ("verrouille", "INTEGER NOT NULL DEFAULT 0"), ("supprime", "INTEGER NOT NULL DEFAULT 0"),
+    ("version", "INTEGER NOT NULL DEFAULT 1"), ("maj", "REAL NOT NULL DEFAULT 0"),
+)
 
 
 def chemin_base():
@@ -190,11 +209,16 @@ class BackendSQLite:
         c.execute("PRAGMA foreign_keys=ON")
         c.executescript(_SCHEMA)
         ligne = c.execute("SELECT valeur FROM meta WHERE cle='schema_version'").fetchone()
-        if ligne is None:
-            c.execute("INSERT INTO meta VALUES ('schema_version', ?) ON CONFLICT DO NOTHING", (str(SCHEMA_VERSION),))
-        elif int(ligne["valeur"]) > SCHEMA_VERSION:
+        if ligne is not None and int(ligne["valeur"]) > SCHEMA_VERSION:
             c.close()
             raise MissionError("schema", f"base missions en version {ligne['valeur']}, ce code connaît {SCHEMA_VERSION}")
+        if ligne is None or int(ligne["valeur"]) < SCHEMA_VERSION:
+            presentes = {r["name"] for r in c.execute("PRAGMA table_info(board_objets)")}
+            for nom, definition in COLONNES_BOARD_V2:
+                if nom not in presentes:
+                    c.execute(f"ALTER TABLE board_objets ADD COLUMN {nom} {definition}")
+            c.execute("INSERT INTO meta VALUES ('schema_version', ?) ON CONFLICT (cle) DO UPDATE SET valeur=excluded.valeur",
+                      (str(SCHEMA_VERSION),))
         return c
 
     def debut(self, c) -> None:
@@ -805,26 +829,48 @@ def _recuperer_tenant(c, tenant: str, now: float, bilan: dict) -> None:
 
 # --- Board -----------------------------------------------------------------------------
 
-TYPES_BOARD = ("note", "texte", "lien", "capture", "image", "pdf", "document")
+TYPES_BOARD = ("note", "texte", "lien", "capture", "image", "pdf", "document", "audio", "video", "mission",
+               "agents", "dossier")
 ANALYSABLES = ("note", "texte", "lien")
+SANS_CONTENU = ("mission", "agents", "dossier", "image", "audio", "video", "pdf", "document", "capture")
+PRIORITES = ("", "P1", "P2", "P3")
 
 
 def board_ajouter(tenant_id: str, espace: str, type_: str, contenu: str, *, auteur: str, x: float = 0, y: float = 0,
+                  largeur: float = 0, hauteur: float = 0, priorite: str = "", meta: dict | None = None,
+                  asset_id: str | None = None, mission_id: str | None = None, analyser: bool | None = None,
                   now: float | None = None) -> dict:
     """Ajoute un objet au Board. Si le tenant l'autorise, déclenche une mission d'analyse (L1, sans effet externe).
-    Le contenu est une DONNÉE : il est transmis à la tâche comme document à analyser, jamais comme consigne."""
+    Le contenu est une DONNÉE : il est transmis à la tâche comme document à analyser, jamais comme consigne.
+    `analyser` : None = règle par type (note, texte, lien) ; False = jamais (ex. lien collé dans le Board V2)."""
     if type_ not in TYPES_BOARD:
         raise MissionError("board", f"type d'objet inconnu : {type_}")
-    if not contenu.strip() or len(contenu) > 50_000:
+    if (not contenu.strip() and type_ not in SANS_CONTENU) or len(contenu) > 50_000:
         raise MissionError("board", "contenu vide ou trop long (50 000 caractères au plus)")
+    if priorite not in PRIORITES:
+        raise MissionError("board", f"priorité inconnue : {priorite}")
+    meta_txt = json.dumps(meta or {}, ensure_ascii=False)
+    if len(meta_txt) > 20_000:
+        raise MissionError("board", "métadonnées trop volumineuses")
     now = now or time.time()
     oid = _id("BO")
     with transaction(tenant_id) as c:
         reglages = _reglages(c, tenant_id)
-        c.execute("INSERT INTO board_objets (id, tenant_id, espace, type, contenu, x, y, auteur, cree) "
-                  "VALUES (?,?,?,?,?,?,?,?,?)", (oid, tenant_id, espace, type_, contenu, x, y, auteur, now))
+        if asset_id and not c.execute("SELECT 1 FROM board_assets WHERE id=? AND tenant_id=?",
+                                      (asset_id, tenant_id)).fetchone():
+            raise MissionError("inconnue", f"fichier inconnu : {asset_id}")
+        if mission_id and not c.execute("SELECT 1 FROM missions WHERE id=? AND tenant_id=?",
+                                        (mission_id, tenant_id)).fetchone():
+            raise MissionError("inconnue", f"mission inconnue : {mission_id}")
+        z = (c.execute("SELECT COALESCE(MAX(z), 0) AS z FROM board_objets WHERE tenant_id=? AND espace=?",
+                       (tenant_id, espace)).fetchone()["z"] or 0) + 1
+        c.execute("INSERT INTO board_objets (id, tenant_id, espace, type, contenu, x, y, auteur, cree, largeur, hauteur, "
+                  "z, priorite, meta, asset_id, mission_id, maj) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                  (oid, tenant_id, espace, type_, contenu, x, y, auteur, now, max(0.0, float(largeur)),
+                   max(0.0, float(hauteur)), z, priorite, meta_txt, asset_id, mission_id, now))
         _evenement(c, tenant_id, "board_objet", now=now, objet_id=oid, type=type_, espace=espace)
-        declenche = bool(reglages["board_auto_analyse"]) and type_ in ANALYSABLES
+        auto = type_ in ANALYSABLES if analyser is None else analyser and type_ in ANALYSABLES
+        declenche = bool(reglages["board_auto_analyse"]) and auto and not mission_id
     mission = None
     if declenche:
         mission = creer_mission(
@@ -843,7 +889,7 @@ def board(tenant_id: str, espace: str) -> list[dict]:
     c = _connecter(tenant_id)
     try:
         out = []
-        for o in c.execute("SELECT * FROM board_objets WHERE tenant_id=? AND espace=? ORDER BY cree",
+        for o in c.execute("SELECT * FROM board_objets WHERE tenant_id=? AND espace=? AND supprime=0 ORDER BY cree",
                            (tenant_id, espace)):
             d = dict(o)
             if o["mission_id"]:

@@ -68,14 +68,39 @@ CREATE TABLE IF NOT EXISTS adhesions (
     role TEXT NOT NULL CHECK (role IN ('proprietaire', 'membre', 'lecteur')), cree DOUBLE PRECISION NOT NULL,
     PRIMARY KEY (compte_id, tenant_id));
 
-INSERT INTO meta VALUES ('schema_version', '1') ON CONFLICT DO NOTHING;
+-- Version 2 : Board V2 (géométrie, priorité, relations, fichiers, commentaires). Ajouts seulement.
+ALTER TABLE board_objets ADD COLUMN IF NOT EXISTS largeur DOUBLE PRECISION NOT NULL DEFAULT 0;
+ALTER TABLE board_objets ADD COLUMN IF NOT EXISTS hauteur DOUBLE PRECISION NOT NULL DEFAULT 0;
+ALTER TABLE board_objets ADD COLUMN IF NOT EXISTS z INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE board_objets ADD COLUMN IF NOT EXISTS priorite TEXT NOT NULL DEFAULT '';
+ALTER TABLE board_objets ADD COLUMN IF NOT EXISTS meta TEXT NOT NULL DEFAULT '{}';
+ALTER TABLE board_objets ADD COLUMN IF NOT EXISTS asset_id TEXT;
+ALTER TABLE board_objets ADD COLUMN IF NOT EXISTS parent_id TEXT;
+ALTER TABLE board_objets ADD COLUMN IF NOT EXISTS verrouille INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE board_objets ADD COLUMN IF NOT EXISTS supprime INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE board_objets ADD COLUMN IF NOT EXISTS version INTEGER NOT NULL DEFAULT 1;
+ALTER TABLE board_objets ADD COLUMN IF NOT EXISTS maj DOUBLE PRECISION NOT NULL DEFAULT 0;
+CREATE TABLE IF NOT EXISTS board_liens (
+    id TEXT PRIMARY KEY, tenant_id TEXT NOT NULL, espace TEXT NOT NULL, source_id TEXT NOT NULL,
+    cible_id TEXT NOT NULL, libelle TEXT NOT NULL DEFAULT '', style TEXT NOT NULL DEFAULT 'defaut',
+    supprime INTEGER NOT NULL DEFAULT 0, cree DOUBLE PRECISION NOT NULL, maj DOUBLE PRECISION NOT NULL);
+CREATE TABLE IF NOT EXISTS board_assets (
+    id TEXT PRIMARY KEY, tenant_id TEXT NOT NULL, sha256 TEXT NOT NULL, mime TEXT NOT NULL, taille BIGINT NOT NULL,
+    nom TEXT NOT NULL, fichier TEXT NOT NULL, meta TEXT NOT NULL DEFAULT '{}', vignette_id TEXT,
+    cree DOUBLE PRECISION NOT NULL, UNIQUE (tenant_id, sha256));
+CREATE TABLE IF NOT EXISTS board_commentaires (
+    id TEXT PRIMARY KEY, tenant_id TEXT NOT NULL, objet_id TEXT NOT NULL, auteur TEXT NOT NULL, texte TEXT NOT NULL,
+    cree DOUBLE PRECISION NOT NULL);
+
+INSERT INTO meta VALUES ('schema_version', '2') ON CONFLICT (cle) DO UPDATE SET valeur = excluded.valeur;
 
 -- --- RLS : une politique par table, sur le tenant du contexte ---------------------------------------------------
 DO $$
 DECLARE t TEXT;
 BEGIN
   FOREACH t IN ARRAY ARRAY['reglages_tenant', 'executants', 'connexions', 'missions', 'taches', 'tentatives',
-                           'approbations', 'artefacts', 'board_objets', 'evenements', 'adhesions'] LOOP
+                           'approbations', 'artefacts', 'board_objets', 'evenements', 'adhesions',
+                           'board_liens', 'board_assets', 'board_commentaires'] LOOP
     EXECUTE format('ALTER TABLE %I ENABLE ROW LEVEL SECURITY', t);
     EXECUTE format('DROP POLICY IF EXISTS par_tenant ON %I', t);
     EXECUTE format('CREATE POLICY par_tenant ON %I USING (tenant_id = current_setting(''jarvis.tenant_id'', true)) '

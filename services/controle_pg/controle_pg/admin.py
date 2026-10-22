@@ -22,13 +22,14 @@ from psycopg.rows import dict_row
 
 ROLE_APP = "jarvis_app"
 ECRITURE = ("organisations", "reglages_tenant", "executants", "connexions", "missions", "taches", "tentatives",
-            "approbations", "artefacts", "board_objets")
+            "approbations", "artefacts", "board_objets", "board_liens", "board_assets", "board_commentaires")
 FONCTIONS = ("jarvis_tenant_executant(TEXT)", "jarvis_tenants()", "jarvis_compte_connexion(TEXT)",
              "jarvis_adhesions(TEXT)")
 SCHEMA = Path(__file__).with_name("schema.sql")
 # ordre d'import (clés étrangères) : parents d'abord ; les comptes n'existent pas en SQLite
 ORDRE_IMPORT = ("organisations", "reglages_tenant", "executants", "connexions", "missions", "taches", "tentatives",
-                "approbations", "artefacts", "board_objets", "evenements")
+                "approbations", "artefacts", "board_objets", "evenements", "board_liens", "board_assets",
+                "board_commentaires")
 
 
 def dossier_config() -> Path:
