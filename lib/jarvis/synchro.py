@@ -301,6 +301,50 @@ def decider_depuis_telegram(donnees: str, lancer: bool) -> str:
     return "▶ Lancée : mission de préparation créée sur le Board" if r.get("mission_id") else "✕ Écartée"
 
 
+# --- lecture (Telegram /etat et /board, `jarvis etat`, `jarvis board voir`) ------------------------------------------
+
+EN_COURS = ("LEASED", "RUNNING", "REVIEW")
+ATTENTES = {"QUEUED": "en file", "RETRY_SCHEDULED": "nouvel essai prévu", "WAITING_PROVIDER": "fournisseur indisponible",
+            "WAITING_APPROVAL": "attend ton accord"}
+
+
+def _duree(s: float) -> str:
+    s = max(0, int(s))
+    return f"{s} s" if s < 60 else f"{s // 60} min" if s < 3600 else f"{s // 3600} h {s % 3600 // 60:02d}"
+
+
+def texte_missions(tenant_id: str, now: float | None = None) -> str:
+    """Missions du Board (moteur de missions) : ce qui s'exécute, depuis quand, avec quel fournisseur, et la file.
+    Distinct des agents de code (workmux) que le chef lance sur tes projets."""
+    import time
+    from . import missions
+    if not missions.backend().existe():
+        return ""
+    now = now or time.time()
+    c = missions._connecter(tenant_id)
+    try:
+        cours = c.execute("SELECT t.type, t.fournisseur_choisi AS f, m.objectif, a.debut FROM taches t "
+                          "JOIN missions m ON m.id=t.mission_id LEFT JOIN tentatives a ON a.id=t.tentative_id "
+                          f"WHERE t.tenant_id=? AND t.statut IN ({','.join('?' * len(EN_COURS))}) ORDER BY a.debut",
+                          (tenant_id, *EN_COURS)).fetchall()
+        file = {r["statut"]: r["n"] for r in c.execute(
+            "SELECT statut, COUNT(*) AS n FROM taches WHERE tenant_id=? GROUP BY statut", (tenant_id,))}
+        signe = c.execute("SELECT MAX(dernier_signe) AS s FROM executants WHERE tenant_id=? AND revoque=0",
+                          (tenant_id,)).fetchone()["s"]
+    finally:
+        c.close()
+    attentes = [f"{file[k]} {v}" for k, v in ATTENTES.items() if file.get(k)]
+    if not cours and not attentes:
+        return "MISSIONS DU BOARD : rien en cours."
+    vivant = signe and now - signe < 180
+    lignes = [f"MISSIONS DU BOARD : {len(cours)} en cours" + (f", {', '.join(attentes)}" if attentes else "")
+              + ("" if vivant else f" · ⚠ aucun exécutant actif{' depuis ' + _duree(now - signe) if signe else ''}"
+                 " (démon arrêté ? jarvis start)")]
+    for r in cours:
+        lignes.append(f"  ▶ {r['objectif'][:70]} — {r['f'] or '?'}, depuis {_duree(now - (r['debut'] or now))}")
+    return "\n".join(lignes)
+
+
 # --- lecture (Telegram /board, `jarvis board voir`) ------------------------------------------------------------------
 
 def texte_board(tenant_id: str, espace: str, *, detail: bool = False) -> str:

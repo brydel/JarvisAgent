@@ -139,11 +139,13 @@ def arret_local() -> str:
 
 class Coureur:
     def __init__(self, transport, adaptateurs: dict[str, ad.Adaptateur], *,
-                 avant_envoi: Callable[[dict], None] | None = None, intervalle_battement: float | None = None):
+                 avant_envoi: Callable[[dict], None] | None = None, intervalle_battement: float | None = None,
+                 voie: int = 0):
         self.transport, self.adaptateurs = transport, adaptateurs
         self.avant_envoi = avant_envoi  # crochet de test : simuler un plantage entre exécution et envoi
         self.intervalle = intervalle_battement or missions.BAIL_S / 3
-        self.journal = _dossier() / f"{transport.id}.json"
+        # plusieurs voies d'une même identité (dans le même processus) : un journal chacune, jamais partagé
+        self.journal = _dossier() / (f"{transport.id}.json" if voie == 0 else f"{transport.id}-v{voie}.json")
 
     # -- journal des résultats non acquittés --
     def _en_attente(self) -> list[dict]:

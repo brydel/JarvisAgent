@@ -683,6 +683,24 @@ class SynchroTest(Base):
         self.assertIn("Plan —dépend de→ Offre (Jarvis)", vu)
         self.assertEqual(jarvis("lier", oid, autre, "--nature", "pirate")[0], 1)
 
+    def test_etat_montre_les_missions_du_board(self):
+        mi.regler_board(self.org, actions_auto=False, par="test")
+        self.assertIn("rien en cours", synchro.texte_missions(self.org))
+        mi.board_ajouter(self.org, "accueil", "note", "Offre Bloomex", auteur="studio", contextualiser=True)
+        mi.board_ajouter(self.org, "accueil", "note", "Offre Syntronic", auteur="studio", contextualiser=True)
+        self.assertIn("2 en file", synchro.texte_missions(self.org))
+        env = self.cr.transport.reclamer()  # une voie prend la première : elle est « en cours »
+        self.cr.transport.demarrer(env)
+        texte = synchro.texte_missions(self.org)
+        self.assertIn("1 en cours, 1 en file", texte)
+        self.assertIn("▶ Contextualiser « Offre Bloomex »", texte)
+        self.assertIn("MISSIONS DU BOARD", texte)
+
+    def test_voies_paralleles_journaux_separes(self):
+        t = coureur.TransportLocal("EX-x", "s")
+        journaux = {coureur.Coureur(t, {}, voie=v).journal.name for v in range(3)}
+        self.assertEqual(journaux, {"EX-x.json", "EX-x-v1.json", "EX-x-v2.json"})
+
     def test_rien_ne_casse_si_telegram_ou_le_chef_tombent(self):
         def panne(*a, **k):
             raise OSError("réseau coupé")

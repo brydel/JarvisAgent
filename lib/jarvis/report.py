@@ -160,6 +160,13 @@ def text(snap: dict | None = None, detail: bool = True) -> str:
     if not snap.get("demon", True):
         head += " · ⚠ démon arrêté (jarvis start)"
     out.append(head)
+    try:  # les missions du Board ne sont pas des agents de code : section à part, toujours affichée
+        from . import missions, synchro
+        bloc = synchro.texte_missions(missions.tenant_local())
+        if bloc:
+            out += ["", bloc]
+    except Exception as exc:  # noqa: BLE001 — l'état des agents reste lisible même si la base est indisponible
+        out += ["", f"MISSIONS DU BOARD : illisibles ({exc})"]
 
     out.append("")
     out.append("JETONS")

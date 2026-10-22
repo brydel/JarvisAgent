@@ -117,7 +117,7 @@ export const MissionNode = memo(function MissionNode({ data, selected }: P) {
           <span className="etiquette-type">MISSION</span>
           <span className={`statut-pill ${s.classe}`}>
             {s.classe === "en-cours" ? <Loader size={17} className="tourne" /> : s.classe === "reussie" ? <Check size={17} /> : null}
-            {s.libelle}
+            {s.libelle}{s.classe === "en-cours" && <DepuisTravail agents={agents} />}
           </span>
         </div>
         <h3>{o.meta.titre || m.objectif}</h3>
@@ -153,6 +153,19 @@ export const MissionNode = memo(function MissionNode({ data, selected }: P) {
     </CardShell>
   );
 });
+
+/** Depuis quand l'agent en cours travaille (tentative réelle, sans fin) ; actualisé toutes les 30 s. */
+function DepuisTravail({ agents }: { agents: AgentResume[] }) {
+  const [, rafraichir] = useState(0);
+  useEffect(() => {
+    const t = window.setInterval(() => rafraichir((n) => n + 1), 30_000);
+    return () => window.clearInterval(t);
+  }, []);
+  const ag = agents.find((x) => !x.fin);
+  if (!ag) return null;
+  const s = Math.max(0, Date.now() / 1000 - ag.debut);
+  return <span className="depuis tab-num" title={`Agent au travail depuis ${Math.round(s)} s`}> · {s < 60 ? "< 1 min" : `${Math.floor(s / 60)} min`}</span>;
+}
 
 /** Dernière action réelle de l'équipe (outils déclarés par l'exécutant) : ce qui a été lu ou utilisé. */
 function OutilsAgents({ agents }: { agents: AgentResume[] }) {

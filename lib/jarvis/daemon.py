@@ -879,8 +879,8 @@ def missions_check() -> None:
 def executant_loop(stop: threading.Event) -> None:
     """Exécutant local de missions dans le démon : ce que tu déposes sur le Board est analysé sans commande à
     lancer. Même verrou que `jarvis mission executer` : jamais deux exécutants pour la même identité."""
-    from . import adaptateurs, coureur, missions
-    cr, verrou, attendu = None, None, False
+    from . import coureur, missions
+    verrou, attendu = None, False
     while not stop.is_set():
         try:
             ident = coureur.identite()
@@ -888,20 +888,41 @@ def executant_loop(stop: threading.Event) -> None:
                     or not missions.backend().existe():
                 stop.wait(60)
                 continue
+            verrou = coureur.prendre_verrou(ident["id"])
             if verrou is None:
-                verrou = coureur.prendre_verrou(ident["id"])
-                if verrou is None:
-                    if not attendu:
-                        store.feed_add("systeme", "exécutant de missions déjà lancé ailleurs : le démon attend")
-                        attendu = True
-                    stop.wait(30)
-                    continue
-                cr = coureur.Coureur(coureur.TransportLocal(ident["id"], ident["secret"]), adaptateurs.par_defaut())
-            r = cr.tour()
-            if r["etat"] != "fait":
+                if not attendu:
+                    store.feed_add("systeme", "exécutant de missions déjà lancé ailleurs : le démon attend")
+                    attendu = True
+                stop.wait(30)
+                continue
+            break
+        except Exception as exc:  # noqa: BLE001
+            store.feed_add("erreur", f"exécutant de missions : {exc}")
+            stop.wait(30)
+    if stop.is_set():
+        return
+    # plusieurs voies : une longue rédaction ne retient plus les analyses déposées après elle
+    voies = max(1, min(4, int(config.settings().get("missions", {}).get("paralleles", VOIES_EXECUTANT))))
+    fils = [threading.Thread(target=_voie_executant, args=(stop, ident, i), name=f"executant-{i}", daemon=True)
+            for i in range(voies)]
+    for f in fils:
+        f.start()
+    stop.wait()
+    verrou.close()
+
+
+VOIES_EXECUTANT = 2  # exécutions de missions simultanées (Claude / Codex par abonnement) ; réglage missions.paralleles
+
+
+def _voie_executant(stop: threading.Event, ident: dict, voie: int) -> None:
+    from . import adaptateurs, coureur
+    cr = coureur.Coureur(coureur.TransportLocal(ident["id"], ident["secret"]), adaptateurs.par_defaut(), voie=voie)
+    while not stop.is_set():
+        try:
+            if cr.tour()["etat"] != "fait":
                 stop.wait(5)
         except Exception as exc:  # noqa: BLE001 — une mission en échec ne doit pas arrêter l'exécutant
-            store.feed_add("erreur", f"exécutant de missions : {exc}")
+            store.feed_add("erreur", f"exécutant de missions (voie {voie}) : {exc}")
             stop.wait(30)
 
 

@@ -997,6 +997,7 @@ def lancer_contextualisation(tenant_id: str, objet_id: str, *, auteur: str, rela
 NIVEAUX_PROPOSABLES = ("L1", "L2", "L3")
 NATURES_LIEN = {"inspire": "inspire", "alimente": "alimente", "utilise": "utilise", "depend": "dépend de"}
 LIENS_AUTO_MAX = 3
+DELAI_PREPARATION_S = 900  # une rédaction prend plusieurs minutes ; au-delà, l'essai échoue et est replanifié
 
 
 def _bloc_json(contenu: str) -> dict:
@@ -1083,7 +1084,8 @@ def decider_proposition(tenant_id: str, objet_id: str, index: int, decision: str
                     + f"\nÉlément du Board ({o['type']}) : {meta.get('titre', '')}\n{o['contenu'][:15_000]}\n"
                     f"\nSynthèse du chef : {meta.get('jarvis_resume', '')}")
         m = creer_mission(tenant_id, f"Préparer : {p['titre']}"[:500],
-                          [{"type": "preparer", "niveau": "L1", "capacites": ["analyse"], "travail": {"document": document}}],
+                          [{"type": "preparer", "niveau": "L1", "capacites": ["analyse"], "travail": {"document": document},
+                            "delai_s": DELAI_PREPARATION_S}],
                           source="board-proposition", demandeur=par, cle_idempotence=f"proposition:{meta.get('jarvis_mission', objet_id)}:{index}", now=now)
         c = _connecter(tenant_id)
         try:
