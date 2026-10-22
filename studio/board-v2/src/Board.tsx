@@ -5,7 +5,7 @@ import {
 } from "@xyflow/react";
 import { AlignHorizontalJustifyCenter, AlignLeft, AlignStartVertical, ArrowUpToLine, Copy, FolderInput, Lock, Trash2, AlignVerticalJustifyCenter } from "lucide-react";
 import type { Source, NouvelObjet, Modification } from "./api";
-import type { Approbation, DonneesNoeud, EtatBoard, Evenement, ObjetBoard, Priorite, StyleLien } from "./types";
+import type { Approbation, DonneesNoeud, EtatBoard, Evenement, ObjetBoard, Priorite, StyleLien, EspaceBoard } from "./types";
 import { ImageNode, LienNode, PdfNode, DossierNode } from "./nodes/CartesVisuelles";
 import { NoteNode, MissionNode, AgentsNode } from "./nodes/CartesVivantes";
 import { AudioNode, VideoNode } from "./nodes/CartesMedia";
@@ -70,6 +70,18 @@ export function Board({ source, charge }: Props) {
   const [evenements, setEvenements] = useState<Evenement[]>([]);
   const [approbations, setApprobations] = useState<Approbation[]>([]);
   const [tick, setTick] = useState(0);
+  const [espaces, setEspaces] = useState<EspaceBoard[]>([]);
+  useEffect(() => {
+    source.espaces().then(setEspaces).catch(() => undefined);
+  }, [source, tick]);
+  // changer de projet = changer de Board : rechargement complet (flux, sélection et historique propres au Board)
+  const changerEspace = useCallback((nom: string) => {
+    const u = new URL(location.href);
+    for (const cle of ["carte", "filtre", "q", "priorite"]) u.searchParams.delete(cle);
+    if (nom === "accueil") u.searchParams.delete("espace");
+    else u.searchParams.set("espace", nom);
+    location.assign(u);
+  }, []);
   const [visionneuse, setVisionneuse] = useState<{ src: string; titre: string } | null>(null);
   const historique = useRef(new Historique());
   const etatRef = useRef<EtatBoard | null>(null);
@@ -123,8 +135,9 @@ export function Board({ source, charge }: Props) {
       setEvenements((l) => (l.length > 300 ? [...l.slice(-200), e] : [...l, e]));
       if (e.type !== "board_maj" || !e.donnees.par || e.donnees.par !== "studio") rechargerBientot();
       if (e.type === "board_propositions" && e.ts >= ouvertA) {
-        const n = Number(e.donnees.n ?? 0);
-        toast(`Jarvis a contextualisé un élément : ${n} action${n > 1 ? "s" : ""} proposée${n > 1 ? "s" : ""}`);
+        const n = Number(e.donnees.n ?? 0), l = Number(e.donnees.liens ?? 0);
+        toast(`Jarvis a contextualisé un élément : ${n} action${n > 1 ? "s" : ""} proposée${n > 1 ? "s" : ""}`
+          + (l ? `, ${l} lien${l > 1 ? "s" : ""} tracé${l > 1 ? "s" : ""}` : ""));
       }
     };
     return () => {
@@ -170,7 +183,7 @@ export function Board({ source, charge }: Props) {
 
   const aretes = useMemo<Edge<DonneesLien>[]>(() => (etat?.liens ?? []).map((l) => ({
     id: l.id, source: l.source_id, target: l.cible_id, type: "relation",
-    data: { libelle: l.libelle, style: l.style, renommer: renommerLien, cotes: l.cotes },
+    data: { libelle: l.libelle, style: l.style, renommer: renommerLien, cotes: l.cotes, auteur: l.auteur },
     markerEnd: { type: MarkerType.ArrowClosed, color: COULEUR_FLECHE[l.style] ?? COULEUR_FLECHE.defaut, width: 16, height: 16 },
   })), [etat?.liens, renommerLien]);
 
@@ -457,9 +470,11 @@ export function Board({ source, charge }: Props) {
       } else if (mod && k === "d" && selection.length) {
         e.preventDefault();
         dupliquer(selection);
-      } else if ((e.key === "Delete" || e.key === "Backspace") && selection.length) {
+      } else if ((e.key === "Delete" || e.key === "Backspace")
+        // la sélection d'état peut avoir un rendu de retard (rechargement du flux) : celle de React Flow fait foi
+        && (selection.length || rf.getNodes().some((n) => n.selected))) {
         e.preventDefault();
-        supprimer(selection);
+        supprimer(selection.length ? selection : rf.getNodes().filter((n) => n.selected).map((n) => n.id));
       } else if (e.shiftKey && e.key === "!") {
         rf.fitView({ duration: 220, padding: 0.08 });
       } else if (!mod && k === "n") {
@@ -575,7 +590,8 @@ export function Board({ source, charge }: Props) {
     <ContexteActions.Provider value={actions}>
       <div className="app">
         <BarreHaut recherche={recherche} setRecherche={setRecherche} notifications={approbations.length} />
-        <SousBarre projet={source.demo ? "Projet Site Web IA" : "Espace accueil"} demo={source.demo} compteurs={compteurs} filtre={filtre} setFiltre={setFiltre}
+        <SousBarre projet={source.espace === "accueil" ? "Accueil" : source.espace} espaces={espaces} changerEspace={changerEspace}
+          demo={source.demo} compteurs={compteurs} filtre={filtre} setFiltre={setFiltre}
           priorite={prio} setPriorite={setPrio} magnetisme={magnetisme} setMagnetisme={setMagnetisme} lancer={ouvrirDialogueMission} />
         <div className="travail">
           <section className="canevas" aria-label="Canevas du Board"
@@ -654,6 +670,15 @@ export function Board({ source, charge }: Props) {
             priorite={actions.priorite} modifierMeta={(o, meta) => modifier([{ id: o.id, champs: { meta } }], "Étiquettes", [{ id: o.id, champs: { meta: o.meta } }])}
             decider={async (id, accord) => { await source.decider(id, accord); charger(); }}
             contextualiser={actions.contextualiser}
+            reglages={etat?.reglages}
+            regler={async (v) => {
+              try {
+                await source.regler(v);
+                await charger();
+              } catch (x) {
+                toast(x instanceof Error ? x.message : "réglage refusé", { erreur: true });
+              }
+            }}
             deciderProposition={async (o, i, d) => {
               try {
                 const r = await source.deciderProposition(o.id, i, d);

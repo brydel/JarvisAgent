@@ -55,7 +55,13 @@ Réponds en français, en Markdown, avec exactement ces sections :
 ## Contexte (lien probable avec les missions et éléments listés ; « aucun lien évident » sinon)
 ## Points clés (puces)
 ## Actions proposées (1 à 4 puces, la plus utile d'abord)
-Termine par un bloc ```json reprenant ces actions : {{"actions":[{{"titre":"…","niveau":"L1","pourquoi":"…"}}]}}
+Termine par un bloc ```json reprenant ces actions et, s'il y en a de VRAIMENT évidents, les liens du nouvel élément
+vers des éléments listés (référence C1, C2… ; 3 au plus ; aucun plutôt qu'un lien douteux) :
+{{"actions":[{{"titre":"…","niveau":"L1","pourquoi":"…","auto":true}}],"liens":[{{"ref":"C1","nature":"depend","pourquoi":"…"}}]}}
+Natures : inspire, alimente, utilise, depend (le nouvel élément inspire / alimente / utilise / dépend de l'élément listé).
+« auto »: true sur AU PLUS une action L1 qu'un agent peut réaliser entièrement seul, tout de suite, avec ce qui est
+fourni (un livrable utile : brouillon, fiche, comparaison) ; jamais une action qui demande quelque chose à l'humain.
+Aucune action « auto » si rien ne s'y prête.
 Niveaux : L1 = analyser, résumer, rédiger un brouillon, comparer ; L2 = modifier un fichier local ; L3 = toute action
 externe (envoyer, publier, postuler, acheter). N'invente aucun fait absent de l'élément ; si une information manque
 (page inaccessible, image illisible), dis-le et propose comment l'obtenir.
@@ -63,7 +69,7 @@ externe (envoyer, publier, postuler, acheter). N'invente aucun fait absent de l'
 <<<CONTEXTE
 Missions en cours :
 {missions}
-Autres éléments du Board :
+Autres éléments du Board (référence — type — titre — résumé du chef) :
 {voisins}
 CONTEXTE>>>
 
@@ -119,7 +125,10 @@ def _consigne(env: dict) -> str:
         page = pieces.get("page") or ""
         return CONSIGNE_CONTEXTE.format(
             fichier=fichier, missions=liste(travail.get("missions_en_cours") or []),
-            voisins=liste(travail.get("elements_voisins") or []), sorte=_donnee(travail.get("sorte"), 40),
+            voisins="\n".join(f"- {_donnee(v.get('ref'), 5)} — {_donnee(v.get('type'), 20)} — {_donnee(v.get('titre'), 200)}"
+                              + (f" — {_donnee(v.get('resume'), 240)}" if v.get("resume") else "")
+                              for v in travail.get("elements_voisins") or [] if isinstance(v, dict)) or "(aucun)",
+            sorte=_donnee(travail.get("sorte"), 40),
             titre=_donnee(travail.get("titre"), 300), url=_donnee(travail.get("url"), 1000) or "(aucune)",
             document=_donnee(travail.get("document")),
             page=("Texte de la page :\n" + _donnee(page, 15_000)) if page else _donnee(pieces.get("note"), 500))
@@ -183,7 +192,9 @@ class Factice(Adaptateur):
             contenu = (f"[FACTICE — aucune IA n'a produit ce texte]\n## Résumé\nÉlément « {t.get('sorte')} » "
                        f"intitulé « {str(t.get('titre'))[:60]} ».\n## Contexte\n{len(t.get('missions_en_cours') or [])} "
                        "mission(s) en cours.\n## Points clés\n- démonstration\n## Actions proposées\n- Résumer l'élément\n"
-                       '```json\n{"actions":[{"titre":"Résumer l\'élément (factice)","niveau":"L1","pourquoi":"test"}]}\n```')
+                       '```json\n' + json.dumps({"actions": [{"titre": "Résumer l'élément (factice)", "niveau": "L1", "pourquoi": "test", "auto": True}],
+                                                   "liens": [{"ref": "C1", "nature": "inspire", "pourquoi": "test"}]
+                                                   if t.get("elements_voisins") else []}, ensure_ascii=False) + '\n```')
             return {"issue": "reussi", "contenu": contenu, "erreur": "", "factice": True}
         if env["travail"].get("type") == "preparer":
             return {"issue": "reussi", "factice": True, "erreur": "",
@@ -235,7 +246,12 @@ class ClaudeCode(Adaptateur):
             brut = (texte or r.stderr or r.stdout)[-500:]
             issue = "fournisseur_indisponible" if _indisponible(brut) else "echec"
             return {"issue": issue, "contenu": "", "erreur": brut, "factice": False}
-        return {"issue": "reussi", "contenu": texte, "erreur": "", "factice": False}
+        outils = []
+        if pieces.get("fichier") and int(sortie.get("num_turns") or 0) > 1:  # plus d'un tour : l'outil Read a servi
+            outils.append({"outil": "Read", "detail": pieces["fichier"]})
+        for refus in (sortie.get("permission_denials") or [])[:3]:
+            outils.append({"outil": "refusé", "detail": str(refus.get("tool_name") if isinstance(refus, dict) else refus)[:200]})
+        return {"issue": "reussi", "contenu": texte, "erreur": "", "factice": False, "outils": outils}
 
 
 class Codex(Adaptateur):
@@ -282,7 +298,8 @@ class Codex(Adaptateur):
             brut = (r.stderr or r.stdout)[-500:]
             issue = "fournisseur_indisponible" if _indisponible(brut) else "echec"
             return {"issue": issue, "contenu": "", "erreur": brut, "factice": False}
-        return {"issue": "reussi", "contenu": texte, "erreur": "", "factice": False}
+        outils = [{"outil": "image jointe", "detail": pieces["fichier"]}] if pieces.get("image") else []
+        return {"issue": "reussi", "contenu": texte, "erreur": "", "factice": False, "outils": outils}
 
 
 def par_defaut() -> dict[str, Adaptateur]:

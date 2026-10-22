@@ -1,13 +1,15 @@
 import { memo, useState } from "react";
 import {
-  BaseEdge, EdgeLabelRenderer, Position, getBezierPath, useInternalNode, type Edge, type EdgeProps, type InternalNode,
+  BaseEdge, EdgeLabelRenderer, Position, getBezierPath, useInternalNode, useReactFlow, type Edge, type EdgeProps, type InternalNode,
 } from "@xyflow/react";
+import { Sparkles, X } from "lucide-react";
 import type { CoteLien, StyleLien } from "../types";
 
 export interface DonneesLien extends Record<string, unknown> {
   libelle: string;
   style: StyleLien;
   renommer: (id: string, libelle: string) => void;
+  auteur?: string;
   cotes?: { s: CoteLien; sf: number; t: CoteLien; tf: number; c?: number; lt?: number };
 }
 
@@ -59,6 +61,7 @@ export const RelationEdge = memo(function RelationEdge({ id, source, target, dat
   const t = useInternalNode(target);
   const [edition, setEdition] = useState(false);
   const [valeur, setValeur] = useState(data?.libelle ?? "");
+  const { deleteElements } = useReactFlow();
   if (!s || !t || !data) return null;
   const c = data.cotes;
   const a = c ? ancre(s, c.s, c.sf) : bord(s, t), b = c ? ancre(t, c.t, c.tf) : bord(t, s);
@@ -71,7 +74,9 @@ export const RelationEdge = memo(function RelationEdge({ id, source, target, dat
         style={{ stroke: couleur, strokeWidth: selected ? 3.5 : 2.6, strokeDasharray: data.style === "utilise" ? "7 7" : undefined, color: couleur }} />
       {(data.libelle || edition || selected) && (
         <EdgeLabelRenderer>
-          <div className="etiquette-lien nodrag nopan" style={{ transform: `translate(-50%, -50%) translate(${lx}px, ${ly}px)`, color: couleur, borderColor: couleur }}
+          <div className={`etiquette-lien nodrag nopan${data.auteur === "jarvis" ? " par-jarvis" : ""}`}
+            title={data.auteur === "jarvis" ? "Relation tracée par Jarvis. Faux ? Sélectionne-la et retire-la." : undefined}
+            style={{ transform: `translate(-50%, -50%) translate(${lx}px, ${ly}px)`, color: couleur, borderColor: couleur }}
             onDoubleClick={() => {
               setValeur(data.libelle);
               setEdition(true);
@@ -87,7 +92,14 @@ export const RelationEdge = memo(function RelationEdge({ id, source, target, dat
                   if (e.key === "Enter") (e.target as HTMLInputElement).blur();
                   if (e.key === "Escape") setEdition(false);
                 }} />
-            ) : data.libelle || <span style={{ opacity: 0.7 }}>Nommer…</span>}
+            ) : <>
+              {data.auteur === "jarvis" && <Sparkles size={11} aria-label="Tracé par Jarvis" />}
+              {data.libelle || <span style={{ opacity: 0.7 }}>Nommer…</span>}
+            </>}
+            {selected && !edition && (
+              <button type="button" className="retirer-lien" aria-label="Retirer cette relation"
+                onClick={(e) => { e.stopPropagation(); deleteElements({ edges: [{ id }] }); }}><X size={12} /></button>
+            )}
           </div>
         </EdgeLabelRenderer>
       )}

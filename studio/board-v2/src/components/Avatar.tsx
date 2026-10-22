@@ -1,9 +1,10 @@
-// Avatars ORIGINAUX des agents : buste stylisé en SVG, teinte fixée par le rôle (ou par l'identifiant d'instance),
-// anneau de statut. Ce n'est ni une photo, ni le logo d'un fournisseur déguisé en personne.
-import { memo, useId } from "react";
+// Avatars des agents : personnages Notionists (DiceBear ; dessins de Zoish sous CC0, code MIT), générés dans le
+// navigateur à partir du rôle, fond teinté par le rôle, anneau de statut. Ni une photo, ni le logo d'un fournisseur.
+import { memo, useEffect, useState } from "react";
 import { siClaude } from "simple-icons";
 
 const TEINTES: { motif: RegExp; h: number }[] = [
+  { motif: /chef/i, h: 252 },
   { motif: /analy|recherche|veille/i, h: 232 },
   { motif: /design|ui|ux|maquette/i, h: 282 },
   { motif: /dev|code|backend|frontend|ing/i, h: 172 },
@@ -34,35 +35,54 @@ interface Props {
   titre?: string;
 }
 
+/** Graine stable par PERSONNAGE (le rôle, sinon l'identifiant) : le Chef a toujours le même visage. */
+function graine(role: string, id: string): string {
+  return (role || id).trim().toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "") || "agent";
+}
+
+function hex(h: number, s: number, l: number): string {
+  const a = (s / 100) * Math.min(l / 100, 1 - l / 100);
+  const f = (n: number) => {
+    const k = (n + h / 30) % 12;
+    const c = l / 100 - a * Math.max(-1, Math.min(k - 3, 9 - k, 1));
+    return Math.round(255 * c).toString(16).padStart(2, "0");
+  };
+  return `${f(0)}${f(8)}${f(4)}`;
+}
+
+const dessins = new Map<string, string>();
+let module: Promise<typeof import("./dessinAvatar")> | null = null;
+
+/** Dessin mis en cache par personnage ; tant qu'il se charge, un disque teinté occupe la place (aucun saut de mise en page). */
+function useDessin(cle: string, h: number): string | undefined {
+  const k = `${cle}|${h}`;
+  const [uri, setUri] = useState(() => dessins.get(k));
+  useEffect(() => {
+    if (dessins.has(k)) {
+      setUri(dessins.get(k));
+      return;
+    }
+    let actif = true;
+    module ??= import("./dessinAvatar");
+    module.then((m) => {
+      if (!dessins.has(k)) dessins.set(k, m.dessiner(cle, hex(h, 62, 72)));
+      if (actif) setUri(dessins.get(k));
+    }).catch(() => undefined);
+    return () => {
+      actif = false;
+    };
+  }, [k, cle, h]);
+  return uri;
+}
+
 export const Avatar = memo(function Avatar({ id, role, taille = 64, statut, point, fournisseur, titre }: Props) {
-  const h = teinte(role, id);
-  const g = useId().replace(/:/g, "");
-  const variante = hachage(id) % 3;
+  const cle = graine(role, id);
+  const h = teinte(role, cle);
+  const uri = useDessin(cle, h);
   return (
-    <span className="avatar" style={{ width: taille, height: taille }} title={titre} role="img" aria-label={titre}>
-      <svg width={taille} height={taille} viewBox="0 0 64 64" aria-hidden="true">
-        <defs>
-          <radialGradient id={`f${g}`} cx="50%" cy="30%" r="75%">
-            <stop offset="0" stopColor={`hsl(${h} 70% 46%)`} />
-            <stop offset="1" stopColor={`hsl(${h} 70% 14%)`} />
-          </radialGradient>
-          <linearGradient id={`p${g}`} x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0" stopColor={`hsl(${h} 60% 78%)`} />
-            <stop offset="1" stopColor={`hsl(${h} 55% 52%)`} />
-          </linearGradient>
-          <linearGradient id={`v${g}`} x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0" stopColor={`hsl(${h} 45% 30%)`} />
-            <stop offset="1" stopColor={`hsl(${h} 55% 18%)`} />
-          </linearGradient>
-        </defs>
-        <circle cx="32" cy="32" r="32" fill={`url(#f${g})`} />
-        <path d={variante === 1 ? "M8 64c2-13 11-19 24-19s22 6 24 19Z" : "M10 64c1-12 10-18 22-18s21 6 22 18Z"} fill={`url(#v${g})`} />
-        <path d="M27 40h10v7c-3 2-7 2-10 0Z" fill={`hsl(${h} 50% 58%)`} />
-        <ellipse cx="32" cy="28" rx="10.5" ry="12.5" fill={`url(#p${g})`} />
-        {variante === 0 && <path d="M21.5 25c0-8 4.7-12.5 10.5-12.5S42.5 17 42.5 25c-3-4-6-5.5-10.5-5.5S24.5 21 21.5 25Z" fill={`hsl(${h} 45% 22%)`} />}
-        {variante === 2 && <path d="M21.6 27c-1-9 4-14.5 10.4-14.5 6.6 0 11.4 5.5 10.4 14.5-1.6-5-4.4-8-10.4-8s-8.8 3-10.4 8Z" fill={`hsl(${h} 35% 16%)`} />}
-        <ellipse cx="28" cy="23" rx="4" ry="2.5" fill="white" opacity="0.18" />
-      </svg>
+    <span className="avatar" style={{ width: taille, height: taille, background: `#${hex(h, 62, 72)}`, borderRadius: "50%" }}
+      title={titre} role="img" aria-label={titre}>
+      {uri && <img src={uri} width={taille} height={taille} alt="" draggable={false} decoding="async" />}
       {statut && <span className="anneau" style={{ borderColor: ANNEAU[statut] }} />}
       {point && <span className="point" />}
       {fournisseur && <MarqueFournisseur fournisseur={fournisseur} />}

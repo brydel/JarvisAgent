@@ -39,6 +39,8 @@ export interface AgentResume {
   executant: string | null;
   role: string;
   statut_tache: string;
+  /** outils déclarés par l'exécutant pour cette tentative (copie isolée, lecture web, Read…) */
+  outils?: { outil: string; detail: string }[];
   /** démo seulement */
   nom?: string;
 }
@@ -85,6 +87,8 @@ export interface Proposition {
   niveau: "L1" | "L2" | "L3";
   statut: "proposee" | "lancee" | "ecartee";
   mission_id?: string;
+  /** « jarvis:auto » quand le chef l'a lancée seul */
+  par?: string;
 }
 
 export interface ObjetBoard {
@@ -120,15 +124,30 @@ export interface LienBoard {
   cible_id: string;
   libelle: string;
   style: StyleLien;
+  /** « jarvis » : relation posée par le chef (retirable comme les autres) */
+  auteur?: string;
   /** ancrages explicites (démo) ; sinon le lien part du bord le plus proche */
   cotes?: { s: CoteLien; sf: number; t: CoteLien; tf: number; c?: number; lt?: number };
 }
 export type CoteLien = "top" | "right" | "bottom" | "left";
 
+export interface ReglagesBoard {
+  auto_analyse: boolean;
+  actions_auto: boolean;
+}
+
 export interface EtatBoard {
   espace: string;
   objets: ObjetBoard[];
   liens: LienBoard[];
+  reglages?: ReglagesBoard;
+}
+
+export interface EspaceBoard {
+  nom: string;
+  objets: number;
+  projet: boolean;
+  description: string;
 }
 
 export interface Evenement {

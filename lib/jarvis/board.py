@@ -348,9 +348,41 @@ def _mission_resume(c, tenant_id: str, mission_id: str) -> dict | None:
         "ORDER BY a.debut DESC", (tenant_id, mission_id))]
     attente = c.execute("SELECT COUNT(*) AS n FROM approbations WHERE tenant_id=? AND statut='en_attente' AND tache_id IN "
                         "(SELECT id FROM taches WHERE mission_id=?)", (tenant_id, mission_id)).fetchone()["n"]
+    outils: dict[str, list] = {}
+    for e in c.execute("SELECT donnees FROM evenements WHERE tenant_id=? AND mission_id=? AND type='outils'",
+                       (tenant_id, mission_id)):
+        d = json.loads(e["donnees"])
+        outils[d.get("tentative_id", "")] = d.get("outils") or []
+    for a in agents:
+        a["outils"] = outils.get(a["id"], [])
     return {**dict(m), "taches": taches, "faites": faites, "total": len(taches),
             "progression": round(100 * faites / len(taches)) if taches else 0, "agents": agents,
             "approbations_en_attente": attente}
+
+
+def nom_espace(v: object) -> str:
+    """Nom d'espace (un Board par projet) : texte court, sans caractère de contrôle ; « accueil » par défaut."""
+    propre = "".join(ch for ch in str(v or "") if ch.isprintable()).strip()[:ESPACE_MAX]
+    return propre or "accueil"
+
+
+def espaces(tenant_id: str) -> list[dict]:
+    """Boards existants + projets Jarvis connus (chacun a son Board, créé au premier dépôt)."""
+    from . import config
+    c = _connecter(tenant_id)
+    try:
+        comptes = {r["espace"]: r["n"] for r in c.execute(
+            "SELECT espace, COUNT(*) AS n FROM board_objets WHERE tenant_id=? AND supprime=0 GROUP BY espace", (tenant_id,))}
+    finally:
+        c.close()
+    try:
+        projets = config.projects()
+    except Exception:  # noqa: BLE001 — un fichier de projets illisible ne bloque pas le Board
+        projets = {}
+    noms = {"accueil", *comptes, *projets}
+    return sorted(({"nom": n, "objets": comptes.get(n, 0), "projet": n in projets,
+                    "description": str(projets.get(n, {}).get("description", ""))[:200]} for n in noms),
+                  key=lambda e: (e["nom"] != "accueil", not e["projet"], e["nom"].lower()))
 
 
 def objets(tenant_id: str, espace: str) -> dict:
@@ -386,6 +418,7 @@ def objets(tenant_id: str, espace: str) -> dict:
 
 def lier(tenant_id: str, espace: str, source_id: str, cible_id: str, *, libelle: str = "", style: str = "defaut",
          par: str, now: float | None = None) -> str:
+    """Relation entre deux cartes du même espace. Une relation posée par le moteur porte l'auteur « jarvis »."""
     now = now or time.time()
     if source_id == cible_id:
         raise MissionError("board", "une relation relie deux objets différents")
@@ -401,8 +434,9 @@ def lier(tenant_id: str, espace: str, source_id: str, cible_id: str, *, libelle:
         if existant:
             return existant["id"]
         lid = _id("BL")
-        c.execute("INSERT INTO board_liens (id, tenant_id, espace, source_id, cible_id, libelle, style, cree, maj) "
-                  "VALUES (?,?,?,?,?,?,?,?,?)", (lid, tenant_id, espace, source_id, cible_id, libelle[:60], style, now, now))
+        c.execute("INSERT INTO board_liens (id, tenant_id, espace, source_id, cible_id, libelle, style, cree, maj, auteur) "
+                  "VALUES (?,?,?,?,?,?,?,?,?,?)", (lid, tenant_id, espace, source_id, cible_id, libelle[:60], style, now, now,
+                                                    "jarvis" if par.startswith("jarvis") else "humain"))
         _evenement(c, tenant_id, "board_lien", now=now, lien_id=lid, source_id=source_id, cible_id=cible_id, par=par)
         return lid
 

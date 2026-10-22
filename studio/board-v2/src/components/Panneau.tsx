@@ -1,7 +1,7 @@
 import { memo, useEffect, useState } from "react";
 import { AnimatePresence, motion } from "motion/react";
 import { Calendar, Check, CircleDashed, Copy, FileText, Image as IconeImage, Link2, Loader, MoreHorizontal, Music, Play, Plus, ShieldCheck, Sparkles, Star, Target, Video, X } from "lucide-react";
-import type { Approbation, Evenement, ObjetBoard, Priorite } from "../types";
+import type { Approbation, Evenement, ObjetBoard, Priorite, ReglagesBoard } from "../types";
 import type { Inspection, Source } from "../api";
 import { ilya, libelleTache, taille } from "../lib/format";
 import { rendreNote } from "../lib/markdown";
@@ -24,7 +24,9 @@ export function decrireEvenement(e: Evenement | Inspection["chronologie"][number
     case "board_lien": return "Relation créée";
     case "board_fichier": return `Fichier ${d.famille ?? ""} téléversé`;
     case "board_commentaire": return "Commentaire ajouté";
-    case "board_propositions": return `Jarvis a contextualisé l'élément (${d.n ?? 0} action(s) proposée(s))`;
+    case "board_propositions": return `Jarvis a contextualisé l'élément (${d.n ?? 0} action(s) proposée(s)${Number(d.liens) ? `, ${d.liens} lien(s)` : ""})`;
+    case "outils": return `Outils : ${((d.outils as unknown as { outil: string; detail: string }[]) ?? []).map((o) => `${o.outil} ${o.detail}`).join(" · ")}`;
+    case "reglages_board": return "Réglages du chef modifiés";
     case "board_proposition": return `Proposition ${d.decision === "lancer" ? "lancée" : "écartée"}`;
     case "mission_creee": return `Mission créée (${d.source ?? ""})`;
     case "mission_etat": return `Mission ${String(d.vers ?? "").toLowerCase()}`;
@@ -54,9 +56,11 @@ interface Props {
   decider: (id: string, accord: boolean) => Promise<void>;
   contextualiser: (id: string) => void;
   deciderProposition: (o: ObjetBoard, index: number, decision: "lancer" | "ecarter") => Promise<void>;
+  reglages?: ReglagesBoard;
+  regler: (v: Partial<ReglagesBoard>) => Promise<void>;
 }
 
-export const Panneau = memo(function Panneau({ source, objet, objets, evenements, approbations, tick, priorite, modifierMeta, decider, contextualiser, deciderProposition }: Props) {
+export const Panneau = memo(function Panneau({ source, objet, objets, evenements, approbations, tick, priorite, modifierMeta, decider, contextualiser, deciderProposition, reglages, regler }: Props) {
   const [onglet, setOnglet] = useState<Onglet>("details");
   const [insp, setInsp] = useState<Inspection | null>(null);
   const [comms, setComms] = useState<{ id: string; auteur: string; texte: string; cree: number }[]>([]);
@@ -108,7 +112,7 @@ export const Panneau = memo(function Panneau({ source, objet, objets, evenements
                   <Details objet={objet} insp={insp} approbations={approbations} demo={source.demo} activite={activite}
                     priorite={priorite} modifierMeta={modifierMeta} decider={decider} voirTout={() => setOnglet("activite")} />
                 </>
-              : <Apercu objets={objets} approbations={approbations} activite={activite} />)}
+              : <><ReglagesJarvis reglages={reglages} regler={regler} /><Apercu objets={objets} approbations={approbations} activite={activite} /></>)}
             {onglet === "activite" && (
               <div className="section">
                 {activite.length ? <ListeActivite activite={activite} /> : <p className="vide">Aucune activité enregistrée pour l'instant.</p>}
@@ -141,6 +145,26 @@ export const Panneau = memo(function Panneau({ source, objet, objets, evenements
     </aside>
   );
 });
+
+/** Ce que le chef a le droit de faire seul. Les actions L2/L3 attendent toujours ton accord, quel que soit le réglage. */
+function ReglagesJarvis({ reglages, regler }: { reglages?: ReglagesBoard; regler: (v: Partial<ReglagesBoard>) => Promise<void> }) {
+  if (!reglages) return null;
+  const ligne = (cle: keyof ReglagesBoard, titre: string, aide: string) => (
+    <label className="interrupteur">
+      <input type="checkbox" role="switch" checked={reglages[cle]} onChange={(e) => regler({ [cle]: e.target.checked })} />
+      <span className="piste" aria-hidden />
+      <span><b>{titre}</b><small>{aide}</small></span>
+    </label>
+  );
+  return (
+    <section className="section section-jarvis" aria-label="Autonomie de Jarvis">
+      <div className="tete"><h4><Sparkles size={17} /> Autonomie de Jarvis</h4></div>
+      {ligne("auto_analyse", "Analyser ce que je dépose", "Résumé, contexte, liens vers les autres cartes du projet.")}
+      {ligne("actions_auto", "Lancer seul les actions sans risque", "Une action L1 par élément (rédiger, résumer, comparer). Rien d'externe.")}
+      <p className="vide">Envoyer, publier, postuler ou modifier tes fichiers attend toujours ton accord.</p>
+    </section>
+  );
+}
 
 /** Lecture du chef : résumé et actions proposées. « Lancer » prépare (mission L1) ; l'humain garde l'étape externe. */
 function SectionJarvis({ objet, contextualiser, deciderProposition }: {
@@ -178,7 +202,7 @@ function SectionJarvis({ objet, contextualiser, deciderProposition }: {
                 <button type="button" className="bouton" aria-label={`Écarter « ${p.titre} »`} disabled={occupe !== null}
                   onClick={async () => { setOccupe(i); await deciderProposition(objet, i, "ecarter"); setOccupe(null); }}><X size={13} /> Écarter</button>
               </div>
-            ) : <span className="meta-carte">{p.statut === "lancee" ? "Lancée" : "Écartée"}</span>}
+            ) : <span className="meta-carte">{p.statut === "lancee" ? (p.par?.startsWith("jarvis") ? "Lancée par Jarvis" : "Lancée") : "Écartée"}</span>}
           </li>
         ))}
       </ul>

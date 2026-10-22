@@ -1,6 +1,6 @@
 import { memo, useCallback, useEffect, useRef, useState } from "react";
 import type { Node, NodeProps } from "@xyflow/react";
-import { Bold, Calendar, Check, FileText, Italic, List, Loader, MoreHorizontal, Target, Underline, Users, X } from "lucide-react";
+import { Bold, Calendar, Check, FileText, Italic, List, Loader, MoreHorizontal, Target, Underline, Users, Wrench, X } from "lucide-react";
 import type { AgentResume, DonneesNoeud, MissionResume } from "../types";
 import { libelleTache } from "../lib/format";
 import { rendreNote } from "../lib/markdown";
@@ -138,12 +138,13 @@ export const MissionNode = memo(function MissionNode({ data, selected }: P) {
           })}
           {m.taches.length > 4 && <li className="meta-carte">+ {m.taches.length - 4} autres tâches</li>}
         </ul>
+        <OutilsAgents agents={agents} />
         <div className="bas">
           <Calendar size={19} />
           {o.meta.echeance ? <>Échéance <span className="date">{String(o.meta.echeance)}</span></> : <span>Sans échéance</span>}
           <span className="pile-avatars">
             {agents.slice(0, 2).map((ag) => (
-              <Avatar key={ag.id} id={ag.id} role={ag.role} taille={40} titre={`${ag.nom ?? ag.executant ?? "agent"} — ${ag.fournisseur}`} />
+              <Avatar key={ag.id} id={ag.id} role={ag.nom ?? (NOMS_ROLES[ag.role]?.[0] ?? ag.role)} taille={40} titre={`${ag.nom ?? NOMS_ROLES[ag.role]?.[0] ?? ag.executant ?? "agent"} — ${ag.fournisseur}`} />
             ))}
             {agents.length > 2 && <span className="plus tab-num">+{agents.length - 2}</span>}
           </span>
@@ -153,8 +154,21 @@ export const MissionNode = memo(function MissionNode({ data, selected }: P) {
   );
 });
 
+/** Dernière action réelle de l'équipe (outils déclarés par l'exécutant) : ce qui a été lu ou utilisé. */
+function OutilsAgents({ agents }: { agents: AgentResume[] }) {
+  const ag = agents.find((x) => x.outils?.length);
+  if (!ag) return null;
+  const [nom] = NOMS_ROLES[ag.role] ?? [ag.role];
+  return (
+    <p className="outils-mission" title={ag.outils!.map((x) => `${x.outil} ${x.detail}`).join(" · ")}>
+      <Wrench size={13} /> <b>{nom}</b> {ag.outils!.map((x) => `${x.outil} · ${x.detail}`).join(" ; ")}
+    </p>
+  );
+}
+
 /* ---------------------------------------------------------------- équipe d'agents -------------------------- */
 const NOMS_ROLES: Record<string, [string, string]> = {
+  contextualiser: ["Chef", "Contexte"], preparer: ["Rédacteur", "Préparation"],
   recherche: ["Analyste", "Recherche"], analyse_document: ["Analyste", "Analyse"], design: ["Designer", "UI/UX"],
   developpement: ["Développeur", "Code"], tests: ["Testeur", "Qualité"], redaction: ["Rédacteur", "Contenu"],
 };
@@ -175,10 +189,12 @@ export const AgentsNode = memo(function AgentsNode({ data, selected }: P) {
             const [nom, role] = NOMS_ROLES[ag.role] ?? [ag.nom ?? ag.executant ?? "Agent", ag.role];
             return (
               <div key={ag.id} className="agent">
-                <Avatar id={ag.id} role={ag.role + " " + role} taille={80} statut={statutAgent(ag)} point={!ag.issue}
+                <Avatar id={ag.id} role={ag.nom ?? nom} taille={80} statut={statutAgent(ag)} point={!ag.issue}
                   fournisseur={ag.fournisseur} titre={`${ag.nom ?? nom} — ${ag.fournisseur}${ag.executant ? ` sur ${ag.executant}` : ""}`} />
                 <span className="nom">{ag.nom ?? nom}</span>
                 <span className="role">{ag.nom ? ag.role : role}</span>
+                {ag.outils?.[0] && <span className="outil-agent" title={ag.outils.map((x) => `${x.outil} ${x.detail}`).join(" · ")}>
+                  <Wrench size={11} /> {ag.outils[ag.outils.length - 1]!.outil}</span>}
               </div>
             );
           })}

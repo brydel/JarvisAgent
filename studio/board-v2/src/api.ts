@@ -2,7 +2,7 @@
 // - SourceReelle : l'API authentifiée du Studio (lib/jarvis/studio_api.py), seule source de vérité ;
 // - SourceDemo   : jeu de démonstration EN MÉMOIRE (src/demo/fixture.ts), signalé « DÉMO », jamais persisté,
 //                  jamais présenté comme des missions ou des agents réels.
-import type { Approbation, Asset, EtatBoard, LienBoard, ObjetBoard, StyleLien } from "./types";
+import type { Approbation, Asset, EspaceBoard, EtatBoard, LienBoard, ObjetBoard, ReglagesBoard, StyleLien } from "./types";
 import { fixtureDemo, inspectionDemo } from "./demo/fixture";
 import type { DemandeMission } from "./components/DialogueMission";
 
@@ -55,6 +55,10 @@ export interface Apercu {
 
 export interface Source {
   demo: boolean;
+  /** Board courant : un par projet */
+  espace: string;
+  espaces(): Promise<EspaceBoard[]>;
+  regler(valeurs: Partial<ReglagesBoard>): Promise<ReglagesBoard>;
   charger(): Promise<EtatBoard>;
   creer(o: NouvelObjet): Promise<string>;
   modifier(mods: Modification[]): Promise<{ id: string; ok: boolean; erreur?: string; version?: number }[]>;
@@ -94,7 +98,13 @@ export interface Inspection {
 
 export class SourceReelle implements Source {
   demo = false;
-  constructor(private espace = "accueil") {}
+  constructor(public readonly espace = "accueil") {}
+  async espaces() {
+    return (await json<{ espaces: EspaceBoard[] }>("/api/v2/espaces")).espaces;
+  }
+  regler(valeurs: Partial<ReglagesBoard>) {
+    return poster<ReglagesBoard>("/api/v2/reglages", valeurs);
+  }
   charger() {
     return json<EtatBoard>(`/api/v2/board?espace=${encodeURIComponent(this.espace)}`);
   }
@@ -160,6 +170,15 @@ export class SourceReelle implements Source {
 /** Démo en mémoire : chaque modification vit le temps de l'onglet. */
 export class SourceDemo implements Source {
   demo = true;
+  espace = "Projet Site Web IA";
+  private reglagesDemo: ReglagesBoard = { auto_analyse: true, actions_auto: true };
+  async espaces() {
+    return [{ nom: this.espace, objets: this.etat.objets.length, projet: true, description: "Démonstration" }];
+  }
+  async regler(valeurs: Partial<ReglagesBoard>) {
+    this.reglagesDemo = { ...this.reglagesDemo, ...valeurs };
+    return this.reglagesDemo;
+  }
   private etat: EtatBoard = fixtureDemo();
   private compteur = 0;
   private commentairesDemo = new Map<string, { id: string; auteur: string; texte: string; cree: number }[]>();

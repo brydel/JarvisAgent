@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { expect, test } from "@playwright/test";
-import { ajouterNote, attendreStable, DEMO, noeud, ouvrir, png, RAPPORTS } from "./outils";
+import { ajouterNote, attendreStable, DEMO, deposer, noeud, ouvrir, png, RAPPORTS, regler } from "./outils";
 
 test.describe.configure({ mode: "serial" });
 
@@ -76,7 +76,7 @@ test.describe("board réel", () => {
     const carte = noeud(page, "capture-ecran");
     await expect(carte).toBeVisible();
     await expect(carte.getByText("64 × 36")).toBeVisible();
-    await expect.poll(() => carte.locator("img").evaluate((i: HTMLImageElement) => i.naturalWidth)).toBe(64);
+    await expect.poll(() => carte.locator("img:not(.avatar img)").evaluate((i: HTMLImageElement) => i.naturalWidth)).toBe(64);
     await page.reload();
     await expect(noeud(page, "capture-ecran")).toBeVisible();
   });
@@ -122,7 +122,7 @@ test.describe("board réel", () => {
     const trouvee = page.locator(".react-flow__node-video").filter({ hasText: "presentation-produit" }).last();
     await expect(trouvee).toBeVisible();
     const carte = page.locator(`.react-flow__node[data-id="${await trouvee.getAttribute("data-id")}"]`);  // le titre disparaît pendant la lecture
-    await expect.poll(() => carte.locator("img").evaluate((i: HTMLImageElement) => i.naturalWidth)).toBeGreaterThan(100);
+    await expect.poll(() => carte.locator("img:not(.avatar img)").evaluate((i: HTMLImageElement) => i.naturalWidth)).toBeGreaterThan(100);
     await carte.getByRole("button", { name: "Lire la vidéo" }).first().click();
     await expect.poll(() => carte.locator("video").evaluate((v: HTMLVideoElement) => v.currentTime)).toBeGreaterThan(0.2);
     const curseur = carte.getByRole("slider", { name: "Position dans la vidéo" });
@@ -287,6 +287,7 @@ test.describe("board réel", () => {
 
   test("le chef contextualise un élément déposé et propose des actions, sans geste manuel", async ({ page }) => {
     await ouvrir(page);
+    await regler(page, { actions_auto: false });  // ce test suit le parcours manuel (Lancer)
     // dépôt tel que l'ingestion du Board le fait (aucune option « analyser ») : la contextualisation part seule
     const id = await page.evaluate(async () => {
       const r = await fetch("/api/v2/objets", { method: "POST", headers: { "Content-Type": "application/json", "X-Jarvis-Studio": "1" },
@@ -324,6 +325,56 @@ test.describe("board réel", () => {
     await carte.getByRole("button", { name: "Actions de la carte" }).click();
     await page.getByRole("menuitem", { name: "Analyser avec Jarvis" }).click();
     await expect(page.getByText("Jarvis analyse l'élément…").first()).toBeVisible();
+    await regler(page, { actions_auto: true });
+  });
+
+  test("le chef relie les cartes du projet, lance seul une action L1 et pose son livrable", async ({ page }) => {
+    await ouvrir(page);
+    await regler(page, { actions_auto: true });
+    const offre = await deposer(page, "Offre DevOps chez Sopra, candidature avant vendredi", "Offre Sopra", 120);
+    const carteOffre = page.locator(`.react-flow__node[data-id="${offre}"]`);
+    // décision autonome : la première action L1 est lancée, réalisée, et son livrable devient une carte reliée
+    await expect(carteOffre.getByRole("button", { name: "Jarvis : Contextualisé. Ouvrir les détails" })).toBeVisible({ timeout: 25_000 });
+    const livrable = page.locator(".react-flow__node").filter({ hasText: "Livrable — Préparer : Résumer" });
+    await expect(livrable).toBeVisible({ timeout: 25_000 });
+    await expect(page.locator(".etiquette-lien").filter({ hasText: "livrable" })).toBeVisible();
+    // une seconde carte : le chef la relie à l'offre (relation tracée par Jarvis, retirable)
+    await deposer(page, "Entretien téléphonique jeudi 10 h", "Entretien", 620);
+    const lienJarvis = page.locator(".etiquette-lien.par-jarvis").filter({ hasText: "inspire" });
+    await expect(lienJarvis).toBeVisible({ timeout: 25_000 });
+    await carteOffre.getByRole("button", { name: /Jarvis :/ }).click();
+    await expect(page.getByRole("region", { name: "Actions proposées par Jarvis" }).getByText("Lancée par Jarvis")).toBeVisible();
+    await page.screenshot({ path: path.join(RAPPORTS, "etat-chef-autonome.png") });
+  });
+
+  test("autonomie du chef réglable depuis le panneau", async ({ page }) => {
+    await ouvrir(page);
+    await regler(page, { actions_auto: true, auto_analyse: true });
+    await page.reload();
+    const zone = page.getByRole("region", { name: "Autonomie de Jarvis" });
+    const actions = zone.getByRole("switch", { name: /Lancer seul les actions sans risque/ });
+    await expect(actions).toBeChecked();
+    await actions.click({ force: true });
+    await expect(actions).not.toBeChecked();
+    expect(await page.evaluate(async () => (await (await fetch("/api/v2/board")).json()).reglages.actions_auto)).toBe(false);
+    await actions.click({ force: true });
+    await expect(actions).toBeChecked();
+  });
+
+  test("un Board par projet : créer, changer, cartes séparées", async ({ page }) => {
+    await ouvrir(page);
+    await ajouterNote(page);
+    await page.getByRole("button", { name: /Board : Accueil\. Changer de projet/ }).click();
+    await page.getByRole("menuitem", { name: "Nouveau Board" }).click();
+    await page.getByRole("textbox", { name: "Nom du nouveau Board" }).fill("Projet test e2e");
+    await page.getByRole("button", { name: "Créer" }).click();
+    await page.waitForURL(/espace=Projet\+test\+e2e|espace=Projet%20test%20e2e/);
+    await expect(page.getByRole("button", { name: /Board : Projet test e2e/ })).toBeVisible();
+    await expect(page.locator(".react-flow__node")).toHaveCount(0);  // un Board neuf, sans les cartes de l'accueil
+    await page.getByRole("button", { name: /Board : Projet test e2e/ }).click();
+    await page.getByRole("menuitemradio", { name: /Accueil/ }).click();
+    await page.waitForURL((u) => !u.searchParams.has("espace"));
+    await expect(page.locator(".react-flow__node").first()).toBeVisible();
   });
 
   test("filtres, priorité, recherche et carte sélectionnée reflétés dans l'URL et conservés au rechargement", async ({ page }) => {

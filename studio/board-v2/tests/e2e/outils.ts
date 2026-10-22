@@ -74,3 +74,20 @@ export async function ajouterNote(page: Page): Promise<string> {
   }).not.toBe("");
   return id;
 }
+
+/** Réglages d'autonomie du chef, par l'API authentifiée (en-tête du Studio). */
+export async function regler(page: Page, valeurs: { auto_analyse?: boolean; actions_auto?: boolean }) {
+  await page.evaluate(async (v) => {
+    await fetch("/api/v2/reglages", { method: "POST", headers: { "Content-Type": "application/json", "X-Jarvis-Studio": "1" },
+      body: JSON.stringify(v) });
+  }, valeurs);
+}
+
+/** Dépôt d'une note comme le fait l'ingestion du Board (contextualisée par défaut) ; renvoie son identifiant. */
+export async function deposer(page: Page, contenu: string, titre: string, x: number): Promise<string> {
+  return page.evaluate(async ({ contenu, titre, x }) => {
+    const r = await fetch("/api/v2/objets", { method: "POST", headers: { "Content-Type": "application/json", "X-Jarvis-Studio": "1" },
+      body: JSON.stringify({ type: "note", contenu, x, y: 140, largeur: 408, hauteur: 320, meta: { titre } }) });
+    return (await r.json()).objet_id as string;
+  }, { contenu, titre, x });
+}

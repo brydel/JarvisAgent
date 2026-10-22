@@ -81,7 +81,7 @@ class SchemaTest(Base):
         self.assertEqual((o["contenu"], o["x"], o["y"], o["priorite"], o["version"], o["supprime"]),
                          ("ancienne note", 120, 80, "", 1, 0))
         c = sqlite3.connect(mi.chemin_base())
-        self.assertEqual(c.execute("SELECT valeur FROM meta WHERE cle='schema_version'").fetchone()[0], "2")
+        self.assertEqual(c.execute("SELECT valeur FROM meta WHERE cle='schema_version'").fetchone()[0], str(mi.SCHEMA_VERSION))
         c.close()
 
 
@@ -343,8 +343,10 @@ class ChefTest(Base):
 
     def test_image_deposee_est_lue_puis_actions_proposees(self):
         a = self.fichier(png(40, 30), "offre.png")
-        mi.creer_mission(self.org, "Trouver un stage en IT", [{"type": "analyse_document", "niveau": "L1",
-                         "capacites": ["analyse"], "travail": {"document": "x"}}], source="studio")
+        m0 = mi.creer_mission(self.org, "Trouver un stage en IT", [{"type": "analyse_document", "niveau": "L1",
+                              "capacites": ["analyse"], "travail": {"document": "x"}}], source="studio")
+        # la mission est une carte de CE Board : elle fait partie du contexte du projet
+        mi.board_ajouter(self.org, "accueil", "mission", "", auteur="test", mission_id=m0["mission_id"])
         r = self.deposer("image", asset_id=a["id"], meta={"titre": "offre"})
         self.assertTrue(r["mission_id"], "une image est contextualisée sans geste manuel")
         self.assertEqual(self.cr.tour()["etat"], "fait")  # la mission « Trouver un stage » d'abord
@@ -356,7 +358,7 @@ class ChefTest(Base):
                          "le fichier est copié SEUL dans un dossier temporaire")
         self.assertFalse(os.path.exists(vu["pieces"]["dossier"]), "dossier des pièces effacé après l'exécution")
         m = self.meta(r["objet_id"])
-        self.assertEqual(m["propositions"][0]["statut"], "proposee")
+        self.assertEqual(m["propositions"][0]["statut"], "lancee", "action L1 lancée seule (réglage par défaut)")
         self.assertIn("image", m["jarvis_resume"])
         self.assertEqual(m["jarvis_mission"], r["mission_id"])
 
@@ -405,6 +407,7 @@ class ChefTest(Base):
         self.assertEqual((m["titre"], len(m["propositions"])), ("Entretien", 1))
 
     def test_lancer_et_ecarter_une_proposition(self):
+        mi.regler_board(self.org, actions_auto=False, par="test")  # parcours manuel seul
         r = self.deposer("note", "Offre de stage DevOps à Lyon, candidature avant vendredi")
         self.cr.tour()
         with mi.transaction(self.org) as c:  # deux propositions, dont une action externe
@@ -430,6 +433,93 @@ class ChefTest(Base):
             with self.assertRaises(mi.MissionError) as e:
                 mi.decider_proposition(self.org, r["objet_id"], index, decision, par="studio:humain")
             self.assertEqual(e.exception.code, code)
+
+    def test_le_chef_relie_decide_et_pose_le_livrable(self):
+        offre = self.deposer("note", "Offre DevOps chez Sopra, candidature avant vendredi", meta={"titre": "Offre Sopra"})
+        self.assertEqual(self.cr.tour()["etat"], "fait")  # contextualisation de l'offre
+        self.assertEqual(self.cr.tour()["etat"], "fait")  # sa première action L1, lancée seule
+        note = self.deposer("note", "Entretien téléphonique jeudi 10 h", meta={"titre": "Entretien"})
+        self.cr.tour()
+        voisins = self.capteur.vu["travail"]["elements_voisins"]
+        self.assertEqual(voisins[0]["ref"], "C1")
+        self.assertIn(offre["objet_id"], [v["id"] for v in voisins])
+        etat = board.objets(self.org, "accueil")
+        par_id = {o["id"]: o for o in etat["objets"]}
+        # 1) un lien créé par le chef, marqué comme tel
+        # (l'autre relation partant de la note est celle de sa propre action lancée : « proposé par Jarvis »)
+        auto = [l for l in etat["liens"] if l["source_id"] == note["objet_id"] and l["libelle"] != "proposé par Jarvis"]
+        self.assertEqual((len(auto), auto[0]["auteur"], auto[0]["style"]), (1, "jarvis", "inspire"))
+        # 2) la première action L1 de l'offre a été lancée seule : carte de mission, réalisée
+        p = self.meta(offre["objet_id"])["propositions"][0]
+        self.assertEqual((p["statut"], p["par"]), ("lancee", "jarvis:auto"))
+        carte = next(o for o in etat["objets"] if o["type"] == "mission" and o["mission_id"] == p["mission_id"])
+        self.assertEqual(carte["mission"]["statut"], "SUCCEEDED")
+        # 3) son livrable est une carte reliée à la mission, qui ne relance aucune analyse
+        livrable = next(o for o in etat["objets"] if o["meta"].get("livrable_de") == p["mission_id"])
+        self.assertIsNone(livrable["mission_id"])
+        self.assertIn("## Livrable", livrable["contenu"])
+        self.assertTrue(any(l["source_id"] == carte["id"] and l["cible_id"] == livrable["id"] and l["auteur"] == "jarvis"
+                            for l in etat["liens"]))
+        # 4) les outils de l'exécutant sont visibles avec l'agent
+        self.assertTrue(par_id[offre["objet_id"]]["mission"]["agents"][0].get("outils") is not None)
+        # pas de boucle : rien d'autre n'attend dans la file
+        self.assertEqual(self.cr.tour()["etat"], "fait")  # action L1 auto de la note « Entretien »
+        self.assertEqual(self.cr.tour()["etat"], "vide")
+
+    def test_l2_l3_jamais_lances_seuls(self):
+        r = self.deposer("note", "Postuler chez Capgemini")
+        with mock.patch.object(mi, "extraire_propositions", return_value=("x", [
+                {"titre": "Envoyer la candidature", "pourquoi": "", "niveau": "L3", "statut": "proposee", "auto": True},
+                {"titre": "Demander le CV à l'humain", "pourquoi": "", "niveau": "L1", "statut": "proposee", "auto": False}])):
+            self.cr.tour()
+        self.assertEqual([p["statut"] for p in self.meta(r["objet_id"])["propositions"]], ["proposee", "proposee"],
+                         "ni une L3 (même marquée auto), ni une L1 que le chef n'a pas jugée faisable seul")
+        self.assertEqual(self.cr.tour()["etat"], "vide")
+
+    def test_auto_reserve_a_une_seule_action_l1(self):
+        bloc = '## Résumé\nx\n```json\n' + json.dumps({"actions": [
+            {"titre": "Envoyer", "niveau": "L3", "auto": True}, {"titre": "Fiche", "niveau": "L1", "auto": True},
+            {"titre": "Pitch", "niveau": "L1", "auto": True}, {"titre": "Lettre", "niveau": "L1", "auto": "oui"}]}) + '\n```'
+        self.assertEqual([a["auto"] for a in mi.extraire_propositions(bloc)[1]], [False, True, False, False])
+
+    def test_lien_vers_une_reference_inventee_ignore(self):
+        voisins = [{"ref": "C1", "id": "BO-000000000001"}]
+        bloc = '## Résumé\nx\n```json\n{"liens":[{"ref":"C9","nature":"inspire"},{"ref":"c1","nature":"pirate"},' \
+               '{"ref":"C1","nature":"depend","pourquoi":"p"},{"ref":"C1","nature":"inspire"}]}\n```'
+        self.assertEqual(mi.extraire_liens(bloc, voisins), [{"cible": "BO-000000000001", "nature": "depend", "pourquoi": "p"}])
+
+    def test_cartes_posees_par_le_chef_ne_recouvrent_rien(self):
+        offre = self.deposer("note", "Offre", x=0, y=0, largeur=408, hauteur=320)
+        self.objet("note", "voisine à droite", x=528, y=0, largeur=408, hauteur=320)  # là où irait la mission
+        self.cr.tour()  # contextualisation → action L1 lancée seule → carte de mission posée
+        self.cr.tour()  # → livrable posé sous la mission
+        objs = [o for o in board.objets(self.org, "accueil")["objets"]]
+        self.assertEqual(len(objs), 4)
+        for i, a in enumerate(objs):
+            for b in objs[i + 1:]:
+                recouvre = not (a["x"] + a["largeur"] <= b["x"] or b["x"] + b["largeur"] <= a["x"]
+                                or a["y"] + a["hauteur"] <= b["y"] or b["y"] + b["hauteur"] <= a["y"])
+                self.assertFalse(recouvre, (a["contenu"][:20], b["contenu"][:20]))
+        self.assertTrue(offre["objet_id"])
+
+    def test_reglages_et_espaces(self):
+        self.assertEqual(mi.reglages_board(self.org), {"auto_analyse": True, "actions_auto": True})
+        self.assertEqual(mi.regler_board(self.org, actions_auto=False, par="t")["actions_auto"], False)
+        mi.board_ajouter(self.org, "repriceo", "note", "x", auteur="test")
+        noms = [e["nom"] for e in board.espaces(self.org)]
+        self.assertEqual(noms[0], "accueil")
+        self.assertIn("repriceo", noms)
+        self.assertEqual(board.nom_espace("  proj\x00et  "), "projet")
+        self.assertEqual(board.nom_espace(""), "accueil")
+
+    def test_outils_declares_bornes(self):
+        from jarvis import protocole_executant as proto
+        env = {"tache_id": "T", "tentative_id": "A", "bail_jeton": 1, "cle_idempotence": "k"}
+        ok = proto.resultat(env, "reussi", contenu="x", outils=[{"outil": "Read", "detail": "piece.png"}])
+        proto.valider_resultat(ok)
+        for mauvais in ([{"outil": "x" * 201}], [{"outil": "a"}] * 11, [{"cmd": "rm"}], "Read"):
+            with self.assertRaises(proto.EnveloppeInvalide):
+                proto.valider_resultat({**ok, "outils": mauvais})
 
     def test_extraction_des_propositions_bornee(self):
         actions = [{"titre": f"A{i}", "niveau": "L9" if i == 0 else "l1"} for i in range(8)] + ["x", {"titre": ""}]
@@ -544,6 +634,11 @@ class ApiV2Test(test_studio.StudioTest):
         self.assertEqual(self.req("POST", f"/api/v2/objets/{o['objet_id']}/propositions", {"index": "0"})[0], 400)
         self.assertEqual(self.req("POST", f"/api/v2/objets/{o['objet_id']}/propositions",
                                   {"index": 0, "decision": "lancer"})[0], 404, "aucune proposition encore")
+        code, b, _ = self.req("GET", "/api/v2/board?espace=projet-x")
+        self.assertEqual((code, b["espace"], b["reglages"]["actions_auto"]), (200, "projet-x", True))
+        self.assertEqual(self.req("POST", "/api/v2/reglages", {"actions_auto": False})[1]["actions_auto"], False)
+        self.assertEqual(self.req("POST", "/api/v2/reglages", {"actions_auto": "oui"})[0], 400)
+        self.assertIn("accueil", [e["nom"] for e in self.req("GET", "/api/v2/espaces")[1]["espaces"]])
 
     def test_apercu_refuse_proprement(self):
         self.connecter()

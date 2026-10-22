@@ -29,6 +29,20 @@ EXTENSIONS = {"image/png": ".png", "image/jpeg": ".jpg", "image/gif": ".gif", "i
               "application/pdf": ".pdf"}
 
 
+def outils_prepares(pieces: dict) -> list[dict]:
+    """Ce que l'exécutant a fait lui-même avant l'appel au modèle : affiché sur le Board, tel quel."""
+    if not pieces:
+        return []
+    sortie = []
+    if pieces.get("fichier"):
+        sortie.append({"outil": "copie isolée", "detail": pieces["fichier"]})
+    if pieces.get("page"):
+        sortie.append({"outil": "lecture web", "detail": f"{len(pieces['page'])} caractères lus"})
+    if pieces.get("note"):
+        sortie.append({"outil": "pièce indisponible", "detail": pieces["note"][:200]})
+    return sortie
+
+
 def preparer_pieces(env: dict, dossier: Path) -> dict:
     """Pièces d'une contextualisation, préparées par l'exécutant LOCAL (même machine que le Board) : copie du
     fichier seul dans `dossier`, texte de la page d'un lien (règles anti-SSRF). Ne lève jamais : une pièce
@@ -200,6 +214,7 @@ class Coureur:
                     with tempfile.TemporaryDirectory(prefix="jarvis-pieces-") as d:
                         pieces = preparer_pieces(env, Path(d))
                         sortie = adaptateur.executer({**env, "pieces": pieces} if pieces else env)
+                        sortie["outils"] = outils_prepares(pieces) + list(sortie.get("outils") or [])
                 except ValueError as exc:
                     sortie = {"issue": "echec", "contenu": "", "erreur": str(exc), "factice": False}
         finally:
@@ -207,7 +222,7 @@ class Coureur:
             fil.join(timeout=5)
         resultat = proto.resultat(env, sortie["issue"], contenu=sortie.get("contenu", ""),
                                   erreur=sortie.get("erreur", ""), fournisseur=env["fournisseur"],
-                                  factice=bool(sortie.get("factice")))
+                                  factice=bool(sortie.get("factice")), outils=sortie.get("outils"))
         try:
             proto.valider_resultat(resultat)
         except proto.EnveloppeInvalide as exc:  # réponse vide, trop longue… : un échec, pas un résultat

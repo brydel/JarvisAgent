@@ -212,7 +212,10 @@ class Handler(BaseHTTPRequestHandler):
                 apres = self.headers.get("Last-Event-ID") or (q.get("apres") or ["0"])[0]
                 self._flux(org, int(apres or 0))
             elif route == "/api/v2/board":
-                self._json(200, board.objets(org, (q.get("espace") or ["accueil"])[0][:board.ESPACE_MAX]))
+                self._json(200, {**board.objets(org, board.nom_espace((q.get("espace") or ["accueil"])[0])),
+                                 "reglages": missions.reglages_board(org)})
+            elif route == "/api/v2/espaces":
+                self._json(200, {"espaces": board.espaces(org)})
             elif m := re.match(r"^/api/v2/fichiers/(AS-[0-9a-f]{12})$", route):
                 self._fichier(*board.fichier(org, m.group(1)))
             elif m := re.match(r"^/api/v2/objets/(BO-[0-9a-f]{12})/commentaires$", route):
@@ -426,7 +429,7 @@ class Handler(BaseHTTPRequestHandler):
             self._erreur(404 if exc.code == "inconnue" else 403 if exc.code == "interdit" else 409 if exc.code in conflits else 400, str(exc))
 
     def _post_v2(self, org: str, route: str, corps: dict) -> None:
-        espace = str(corps.get("espace") or "accueil")[:board.ESPACE_MAX]
+        espace = board.nom_espace(corps.get("espace"))
         if m := re.fullmatch(r"/api/v2/atelier/agents/([a-z0-9_-]{1,64})/(verifier|proposer)", route):
             action = studio_product.verifier if m.group(2) == "verifier" else studio_product.proposer
             self._json(200 if m.group(2) == "verifier" else 201, action(org, m.group(1), corps))
@@ -458,6 +461,12 @@ class Handler(BaseHTTPRequestHandler):
                 self._erreur(400, "« champs » : objet attendu")
                 return
             self._json(200, board.mettre_a_jour(org, m.group(1), champs, version=corps.get("version"), par="studio"))
+        elif route == "/api/v2/reglages":
+            valeurs = {k: corps[k] for k in ("auto_analyse", "actions_auto") if isinstance(corps.get(k), bool)}
+            if not valeurs:
+                self._erreur(400, "« auto_analyse » ou « actions_auto » : booléen attendu")
+                return
+            self._json(200, missions.regler_board(org, **valeurs, par="studio:humain"))
         elif m := re.match(r"^/api/v2/objets/(BO-[0-9a-f]{12})/contextualiser$", route):
             self._json(201, {"mission_id": missions.lancer_contextualisation(org, m.group(1), auteur="studio:humain",
                                                                              relance=True)})

@@ -1,8 +1,9 @@
-import { memo, useState } from "react";
+import { memo, useEffect, useRef, useState } from "react";
+import type { EspaceBoard } from "../types";
 import { useReactFlow, useStore } from "@xyflow/react";
 import {
   ChevronDown, ClipboardPaste, Ellipsis, File, Grid3x3, Image as IconeImage, 
-  Link2, Maximize, Minus, Mic, Network, Plus, Sparkles, Star, Type, Upload, Video,
+  Check, FolderGit2, Link2, Maximize, Minus, Mic, Network, Plus, Sparkles, Star, Type, Upload, Video,
 } from "lucide-react";
 
 export { ProductNav as BarreHaut } from "../product/ProductNav";
@@ -19,8 +20,56 @@ export const FILTRES: { cle: Filtre; nom: string; types: string[] }[] = [
   { cle: "agents", nom: "Agents", types: ["agents"] },
 ];
 
-export const SousBarre = memo(function SousBarre({ projet, demo, compteurs, filtre, setFiltre, priorite, setPriorite, magnetisme, setMagnetisme, lancer }: {
-  projet: string; demo: boolean; compteurs: Record<Filtre, number>; filtre: Filtre; setFiltre: (f: Filtre) => void;
+/** Un Board par projet : les projets Jarvis connus + les Boards déjà créés ; « Nouveau Board » en crée un. */
+function MenuProjet({ projet, espaces, changer }: { projet: string; espaces: EspaceBoard[]; changer: (nom: string) => void }) {
+  const [ouvert, setOuvert] = useState(false);
+  const [nouveau, setNouveau] = useState<string | null>(null);
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!ouvert) return;
+    const fermer = (e: PointerEvent) => { if (!ref.current?.contains(e.target as Node)) setOuvert(false); };
+    const echap = (e: KeyboardEvent) => { if (e.key === "Escape") setOuvert(false); };
+    window.addEventListener("pointerdown", fermer);
+    window.addEventListener("keydown", echap);
+    return () => {
+      window.removeEventListener("pointerdown", fermer);
+      window.removeEventListener("keydown", echap);
+    };
+  }, [ouvert]);
+  return (
+    <div ref={ref} className="menu-projet">
+      <button type="button" className="bouton-projet" aria-haspopup="menu" aria-expanded={ouvert} aria-label={`Board : ${projet}. Changer de projet`}
+        onClick={() => { setOuvert((v) => !v); setNouveau(null); }}>
+        <Network size={20} color="var(--text-secondary)" /><span>{projet}</span><ChevronDown size={16} color="var(--text-secondary)" />
+      </button>
+      {ouvert && (
+        <div role="menu" className="menu-deroulant liste-projets">
+          {espaces.map((e) => (
+            <button key={e.nom} role="menuitemradio" aria-checked={e.nom === projet || (e.nom === "accueil" && projet === "Accueil")}
+              onClick={() => { setOuvert(false); changer(e.nom); }} title={e.description || undefined}>
+              {e.projet ? <FolderGit2 size={15} /> : <Network size={15} />}
+              <span className="nom-projet">{e.nom === "accueil" ? "Accueil" : e.nom}</span>
+              <span className="compte tab-num">{e.objets}</span>
+              {(e.nom === projet || (e.nom === "accueil" && projet === "Accueil")) && <Check size={14} />}
+            </button>
+          ))}
+          {nouveau === null ? (
+            <button role="menuitem" onClick={() => setNouveau("")}><Plus size={15} /> Nouveau Board</button>
+          ) : (
+            <form className="nouveau-projet" onSubmit={(e) => { e.preventDefault(); if (nouveau.trim()) { setOuvert(false); changer(nouveau.trim()); } }}>
+              <input className="champ" autoFocus maxLength={80} placeholder="Nom du projet" aria-label="Nom du nouveau Board"
+                value={nouveau} onChange={(e) => setNouveau(e.target.value)} />
+              <button type="submit" className="bouton primaire" disabled={!nouveau.trim()}>Créer</button>
+            </form>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+export const SousBarre = memo(function SousBarre({ projet, espaces = [], changerEspace, demo, compteurs, filtre, setFiltre, priorite, setPriorite, magnetisme, setMagnetisme, lancer }: {
+  projet: string; espaces?: EspaceBoard[]; changerEspace?: (nom: string) => void; demo: boolean; compteurs: Record<Filtre, number>; filtre: Filtre; setFiltre: (f: Filtre) => void;
   priorite: string; setPriorite: (p: string) => void; magnetisme: boolean; setMagnetisme: (v: boolean) => void; lancer: () => void;
 }) {
   const { zoomIn, zoomOut, fitView } = useReactFlow();
@@ -28,8 +77,9 @@ export const SousBarre = memo(function SousBarre({ projet, demo, compteurs, filt
   return (
     <div className="subbar">
       <div className="projet">
-        <Network size={20} color="var(--text-secondary)" />
-        <span>{projet}</span><ChevronDown size={16} color="var(--text-secondary)" />
+        {changerEspace && !demo ? <MenuProjet projet={projet} espaces={espaces} changer={changerEspace} /> : (
+          <><Network size={20} color="var(--text-secondary)" /><span>{projet}</span><ChevronDown size={16} color="var(--text-secondary)" /></>
+        )}
         {demo && <span className="bandeau-demo" role="note" title="Données fictives, rien n'est enregistré">DÉMO</span>}
         <span className="actions-projet"><Star size={18} /><Ellipsis size={18} style={{ marginLeft: 22 }} /></span>
       </div>

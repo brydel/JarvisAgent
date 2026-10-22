@@ -3,6 +3,7 @@ import { Handle, NodeResizer, Position, useStore } from "@xyflow/react";
 import { ArrowUpToLine, Copy, FileText, Image as IconeImage, Link2, Lock, LockOpen, MoreHorizontal, Music, PanelRight, Sparkles, Target, Trash2, Users, Video, Folder } from "lucide-react";
 import type { ObjetBoard, Priorite } from "../types";
 import { CONTEXTUALISABLES, TAILLES, useActions } from "./contexte";
+import { Avatar } from "../components/Avatar";
 
 interface Props {
   objet: ObjetBoard;
@@ -81,10 +82,12 @@ function BandeauJarvis({ objet }: { objet: ObjetBoard }) {
   const a = useActions();
   const e = etatJarvis(objet);
   if (!e) return null;
+  const outils = objet.mission?.agents[0]?.outils ?? [];
   return (
     <button type="button" className={`bandeau-jarvis nodrag ${e.etat}`} onClick={() => a.inspecter(objet.id)}
-      aria-label={`Jarvis : ${e.texte}. Ouvrir les détails`}>
-      <Sparkles size={14} aria-hidden /> <b>Jarvis</b> <span>{e.texte}</span>
+      aria-label={`Jarvis : ${e.texte}. Ouvrir les détails`}
+      title={outils.length ? `Outils : ${outils.map((o) => `${o.outil} ${o.detail}`).join(" · ")}` : undefined}>
+      <Avatar id="chef" role="chef" taille={20} /> <b>Jarvis</b> <span>{e.texte}</span>
     </button>
   );
 }

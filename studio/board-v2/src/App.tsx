@@ -6,6 +6,10 @@ import { ProductStudio } from "./product/ProductStudio";
 import type { Source } from "./api";
 
 // Le graphe et les cartes ne sont chargés que lors de l'ouverture du Board.
+/** Board du projet demandé (?espace=…) ; même règle que le serveur : texte imprimable, 80 caractères, « accueil ». */
+function espaceDeLUrl(p: URLSearchParams): string {
+  return Array.from(p.get("espace") ?? "").filter((c) => c >= " " && c !== "\u007f").join("").trim().slice(0, 80) || "accueil";
+}
 const Workspace = lazy(() => import("./product/BoardWorkspace"));
 class StudioBoundary extends Component<{ children: ReactNode }, { failed: boolean }> {
   state = { failed: false };
@@ -23,7 +27,7 @@ export function App() {
   const charge = demo && Number.isFinite(n) ? Math.max(0, Math.min(1000, n)) : 0;
   const [session, setSession] = useState<"attente" | "ok" | "refus">(demo ? "ok" : "attente");
   const verificationSession = useRef<Promise<boolean> | null>(null);
-  const source = useMemo(() => demo ? new SourceDemo() : new SourceReelle(), [demo]);
+  const source = useMemo(() => demo ? new SourceDemo() : new SourceReelle(espaceDeLUrl(params)), [demo, params]);
   useEffect(() => {
     let active = true;
     if (!demo) {

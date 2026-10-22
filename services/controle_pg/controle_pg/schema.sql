@@ -11,6 +11,7 @@ CREATE TABLE IF NOT EXISTS reglages_tenant (
     niveaux_auto TEXT NOT NULL, budget_inference_centimes INTEGER NOT NULL DEFAULT 0,
     consomme_centimes INTEGER NOT NULL DEFAULT 0, arret_urgence INTEGER NOT NULL DEFAULT 0,
     board_auto_analyse INTEGER NOT NULL DEFAULT 1);
+ALTER TABLE reglages_tenant ADD COLUMN IF NOT EXISTS board_actions_auto INTEGER NOT NULL DEFAULT 1;
 CREATE TABLE IF NOT EXISTS executants (
     id TEXT PRIMARY KEY, tenant_id TEXT NOT NULL REFERENCES organisations(id), nom TEXT NOT NULL,
     secret_empreinte TEXT NOT NULL, capacites TEXT NOT NULL, fournisseurs TEXT NOT NULL,
@@ -92,7 +93,9 @@ CREATE TABLE IF NOT EXISTS board_commentaires (
     id TEXT PRIMARY KEY, tenant_id TEXT NOT NULL, objet_id TEXT NOT NULL, auteur TEXT NOT NULL, texte TEXT NOT NULL,
     cree DOUBLE PRECISION NOT NULL);
 
-INSERT INTO meta VALUES ('schema_version', '2') ON CONFLICT (cle) DO UPDATE SET valeur = excluded.valeur;
+ALTER TABLE board_liens ADD COLUMN IF NOT EXISTS auteur TEXT NOT NULL DEFAULT 'humain';
+
+INSERT INTO meta VALUES ('schema_version', '3') ON CONFLICT (cle) DO UPDATE SET valeur = excluded.valeur;
 
 -- --- RLS : une politique par table, sur le tenant du contexte ---------------------------------------------------
 DO $$
