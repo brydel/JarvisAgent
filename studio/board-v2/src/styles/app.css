@@ -56,7 +56,7 @@ button { font: inherit; color: inherit; }
 .profil-avatar::after { content: ""; position: absolute; right: -1px; top: -1px; width: 9px; height: 9px; border-radius: 50%; background: var(--accent-cyan); box-shadow: 0 0 0 2px var(--bg-bar); }
 
 /* --- seconde rangée --------------------------------------------------------------------------------- */
-.subbar { display: flex; align-items: center; gap: 12px; padding: 0 20px 0 22px; background: var(--bg-app); position: relative; z-index: 5; }
+.subbar { display: flex; align-items: center; gap: 12px; padding: 0 20px 0 22px; background: var(--bg-app); position: relative; z-index: 40; }  /* ses menus passent au-dessus du canevas et de ses barres */
 .projet { display: flex; align-items: center; gap: 12px; font-size: 15px; font-weight: 600; min-width: 0; white-space: nowrap; flex: none; }
 .projet .actions-projet { display: flex; gap: 6px; margin-left: 14px; color: var(--text-secondary); }
 .filtres {

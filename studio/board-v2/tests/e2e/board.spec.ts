@@ -365,7 +365,12 @@ test.describe("board réel", () => {
     await ouvrir(page);
     await ajouterNote(page);
     await page.getByRole("button", { name: /Board : Accueil\. Changer de projet/ }).click();
-    await page.getByRole("menuitem", { name: "Nouveau Board" }).click();
+    // le menu passe AU-DESSUS de la barre d'outils du canevas (régression : il glissait dessous)
+    const item = page.getByRole("menuitem", { name: "Nouveau Board" });
+    const b = (await item.boundingBox())!;
+    expect(await page.evaluate(({ x, y }) => document.elementFromPoint(x, y)?.closest("[role=menuitem]")?.textContent?.trim(),
+      { x: b.x + 12, y: b.y + b.height / 2 })).toBe("Nouveau Board");
+    await item.click();
     await page.getByRole("textbox", { name: "Nom du nouveau Board" }).fill("Projet test e2e");
     await page.getByRole("button", { name: "Créer" }).click();
     await page.waitForURL(/espace=Projet\+test\+e2e|espace=Projet%20test%20e2e/);
