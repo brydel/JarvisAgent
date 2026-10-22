@@ -873,6 +873,35 @@ def missions_check() -> None:
         missions.recuperer()
 
 
+def executant_loop(stop: threading.Event) -> None:
+    """Exécutant local de missions dans le démon : ce que tu déposes sur le Board est analysé sans commande à
+    lancer. Même verrou que `jarvis mission executer` : jamais deux exécutants pour la même identité."""
+    from . import adaptateurs, coureur, missions
+    cr, verrou, attendu = None, None, False
+    while not stop.is_set():
+        try:
+            ident = coureur.identite()
+            if not config.settings().get("missions", {}).get("executant_demon", True) or ident is None \
+                    or not missions.backend().existe():
+                stop.wait(60)
+                continue
+            if verrou is None:
+                verrou = coureur.prendre_verrou(ident["id"])
+                if verrou is None:
+                    if not attendu:
+                        store.feed_add("systeme", "exécutant de missions déjà lancé ailleurs : le démon attend")
+                        attendu = True
+                    stop.wait(30)
+                    continue
+                cr = coureur.Coureur(coureur.TransportLocal(ident["id"], ident["secret"]), adaptateurs.par_defaut())
+            r = cr.tour()
+            if r["etat"] != "fait":
+                stop.wait(5)
+        except Exception as exc:  # noqa: BLE001 — une mission en échec ne doit pas arrêter l'exécutant
+            store.feed_add("erreur", f"exécutant de missions : {exc}")
+            stop.wait(30)
+
+
 def watch_loop(stop: threading.Event) -> None:
     first = True
     while not stop.is_set():
@@ -1133,6 +1162,7 @@ def run() -> None:
         threading.Thread(target=watch_loop, args=(stop,), name="surveillance", daemon=True),
         threading.Thread(target=telegram_loop, args=(stop,), name="telegram", daemon=True),
         threading.Thread(target=sante_loop, args=(stop,), name="sante", daemon=True),
+        threading.Thread(target=executant_loop, args=(stop,), name="executant", daemon=True),
     ]
     web_cfg = config.settings()["web"]
     if web_cfg.get("actif", True):

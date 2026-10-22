@@ -512,3 +512,31 @@ button { font: inherit; color: inherit; }
 .dialogue-pied { display: flex; align-items: center; justify-content: flex-end; gap: 10px; padding: 14px 20px 18px; }
 .dialogue-pied .raccourci { margin-right: auto; font-size: 11.5px; color: var(--text-muted); }
 .dialogue-pied .bouton { height: 36px; padding: 0 14px; }
+
+/* chef Jarvis : bandeau des cartes et section du panneau */
+.bandeau-jarvis { position: absolute; left: 10px; bottom: 10px; z-index: 3; display: inline-flex; align-items: center; gap: 6px; max-width: calc(100% - 20px);
+  height: 28px; padding: 0 10px; border-radius: 999px; border: 1px solid rgba(124, 92, 255, 0.45); background: rgba(18, 22, 34, 0.92);
+  color: var(--text-secondary); font-size: 12.5px; cursor: pointer; backdrop-filter: blur(6px); white-space: nowrap; overflow: hidden; }
+.bandeau-jarvis b { color: var(--text-primary); font-weight: 600; }
+.bandeau-jarvis span { overflow: hidden; text-overflow: ellipsis; }
+.bandeau-jarvis svg { color: #A48BFF; flex: none; }
+.bandeau-jarvis.pret { border-color: rgba(124, 92, 255, 0.8); color: #D9D0FF; }
+.bandeau-jarvis.echec { border-color: rgba(235, 79, 134, 0.6); }
+.bandeau-jarvis.attente { border-style: dashed; }
+@media (prefers-reduced-motion: no-preference) { .bandeau-jarvis.analyse svg { animation: pulse-jarvis 1.4s ease-in-out infinite; } .tourne { animation: tourne 1s linear infinite; } }
+@keyframes pulse-jarvis { 50% { opacity: 0.35; } }
+@keyframes tourne { to { transform: rotate(360deg); } }
+.bandeau-jarvis:focus-visible { outline: 2px solid var(--brand-indigo-soft); outline-offset: 2px; }
+.section-jarvis { background: linear-gradient(180deg, rgba(124, 92, 255, 0.07), transparent 70%); }
+.section-jarvis h4 svg { color: #A48BFF; }
+.resume-jarvis { margin: 8px 0 4px; font-size: 13.5px; line-height: 1.5; color: var(--text-primary); }
+.section-jarvis .sous-titre { margin: 12px 0 6px; font-size: 12px; font-weight: 600; letter-spacing: 0.02em; color: var(--text-secondary); text-transform: uppercase; }
+.propositions { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.propositions li { display: grid; gap: 8px; padding: 10px; border-radius: 10px; border: 1px solid var(--border-card); background: var(--surface-inset); }
+.propositions li.ecartee { opacity: 0.55; }
+.prop-texte { display: grid; grid-template-columns: auto 1fr; gap: 2px 8px; align-items: baseline; font-size: 13px; }
+.prop-texte .pourquoi { grid-column: 2; color: var(--text-secondary); font-size: 12.5px; }
+.prop-texte .niveau { font-size: 10.5px; font-weight: 700; padding: 1px 6px; border-radius: 5px; background: rgba(63, 185, 132, 0.15); color: var(--success); }
+.prop-texte .niveau.L2, .prop-texte .niveau.L3 { background: rgba(232, 190, 63, 0.15); color: var(--p2); }
+.prop-actions { display: flex; gap: 6px; justify-content: flex-end; }
+.prop-actions .bouton { height: 28px; padding: 0 10px; font-size: 12.5px; gap: 5px; }

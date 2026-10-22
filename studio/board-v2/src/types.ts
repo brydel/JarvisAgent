@@ -67,11 +67,24 @@ export interface MetaObjet {
   favicon?: Asset | null;
   apercu_erreur?: string;
   historique?: { ts: number; extrait: string }[];
+  /** écrits par le moteur seul (contextualisation par le chef) */
+  jarvis_resume?: string;
+  propositions?: Proposition[];
+  jarvis_mission?: string;
   /** démo : URL locale d'un fichier de démonstration */
   demo_src?: string;
   demo_vignette?: string;
   demo_pages?: string[];
   [cle: string]: unknown;
+}
+
+/** Action proposée par le chef : rien n'est exécuté sans « Lancer », et une action L2/L3 n'est que préparée. */
+export interface Proposition {
+  titre: string;
+  pourquoi: string;
+  niveau: "L1" | "L2" | "L3";
+  statut: "proposee" | "lancee" | "ecartee";
+  mission_id?: string;
 }
 
 export interface ObjetBoard {

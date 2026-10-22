@@ -696,7 +696,8 @@ def battement(executant_id: str, secret: str, tache_id: str, tentative_id: str, 
         return {"continuer": False, "raison": str(exc)}
 
 
-SECTIONS_EXIGEES = {"analyse_document": ("## Résumé", "## Points clés")}
+SECTIONS_EXIGEES = {"analyse_document": ("## Résumé", "## Points clés"), "contextualiser": ("## Résumé", "## Actions proposées"),
+                    "preparer": ("## Livrable",)}
 MARQUES_SUSPECTES = ("<invoke", "<parameter", "</invoke>")  # imitation d'appel d'outil dans un texte
 
 
@@ -760,6 +761,8 @@ def _appliquer_resultat(c: sqlite3.Connection, executant_id: str, secret: str, r
         if not ok:  # l'artefact refusé reste consultable ; un nouvel essai est planifié si le budget d'essais le permet
             return {**_echec(c, t, now, f"revue refusée : {raison}"), "issue": "reussi"}
         _transition(c, t, SUCCEEDED, now=now, raison=f"revue : {raison}")
+        if t["type"] == "contextualiser":
+            _enregistrer_propositions(c, t, r["contenu"], now)
         return {"acquitte": True, "doublon": False, "issue": "reussi", "statut": SUCCEEDED}
     if r["issue"] == "fournisseur_indisponible":
         c.execute("UPDATE connexions SET indisponible_jusqua=?, raison=? WHERE tenant_id=? AND fournisseur=?",
@@ -832,6 +835,8 @@ def _recuperer_tenant(c, tenant: str, now: float, bilan: dict) -> None:
 TYPES_BOARD = ("note", "texte", "lien", "capture", "image", "pdf", "document", "audio", "video", "mission",
                "agents", "dossier")
 ANALYSABLES = ("note", "texte", "lien")
+# Board V2 : tout élément déposé est contextualisé par le chef (mission L1, autorisée d'office par la politique)
+CONTEXTUALISABLES = ("note", "texte", "lien", "image", "capture", "pdf", "document", "audio", "video")
 SANS_CONTENU = ("mission", "agents", "dossier", "image", "audio", "video", "pdf", "document", "capture")
 PRIORITES = ("", "P1", "P2", "P3")
 
@@ -839,7 +844,7 @@ PRIORITES = ("", "P1", "P2", "P3")
 def board_ajouter(tenant_id: str, espace: str, type_: str, contenu: str, *, auteur: str, x: float = 0, y: float = 0,
                   largeur: float = 0, hauteur: float = 0, priorite: str = "", meta: dict | None = None,
                   asset_id: str | None = None, mission_id: str | None = None, analyser: bool | None = None,
-                  now: float | None = None) -> dict:
+                  contextualiser: bool = False, now: float | None = None) -> dict:
     """Ajoute un objet au Board. Si le tenant l'autorise, déclenche une mission d'analyse (L1, sans effet externe).
     Le contenu est une DONNÉE : il est transmis à la tâche comme document à analyser, jamais comme consigne.
     `analyser` : None = règle par type (note, texte, lien) ; False = jamais (ex. lien collé dans le Board V2)."""
@@ -871,6 +876,10 @@ def board_ajouter(tenant_id: str, espace: str, type_: str, contenu: str, *, aute
         _evenement(c, tenant_id, "board_objet", now=now, objet_id=oid, type=type_, espace=espace)
         auto = type_ in ANALYSABLES if analyser is None else analyser and type_ in ANALYSABLES
         declenche = bool(reglages["board_auto_analyse"]) and auto and not mission_id
+        contexte = bool(reglages["board_auto_analyse"]) and contextualiser and type_ in CONTEXTUALISABLES and not mission_id
+    if contexte:
+        m = lancer_contextualisation(tenant_id, oid, auteur=auteur, now=now)
+        return {"objet_id": oid, "mission_id": m}
     mission = None
     if declenche:
         mission = creer_mission(
@@ -882,6 +891,146 @@ def board_ajouter(tenant_id: str, espace: str, type_: str, contenu: str, *, aute
             c.execute("UPDATE board_objets SET mission_id=? WHERE id=? AND tenant_id=?",
                       (mission["mission_id"], oid, tenant_id))
     return {"objet_id": oid, "mission_id": mission["mission_id"] if mission else None}
+
+
+def lancer_contextualisation(tenant_id: str, objet_id: str, *, auteur: str, relance: bool = False,
+                             now: float | None = None) -> str | None:
+    """Mission L1 « contextualiser » pour un objet du Board : le chef le résume, le relie aux missions et cartes
+    existantes, et propose des actions (jamais exécutées sans toi). Renvoie l'identifiant de mission."""
+    now = now or time.time()
+    c = _connecter(tenant_id)
+    try:
+        o = c.execute("SELECT * FROM board_objets WHERE id=? AND tenant_id=? AND supprime=0", (objet_id, tenant_id)).fetchone()
+        if o is None:
+            raise MissionError("inconnue", f"objet inconnu : {objet_id}")
+        if o["type"] not in CONTEXTUALISABLES:
+            raise MissionError("board", f"type non contextualisable : {o['type']}")
+        if not relance and not _reglages(c, tenant_id)["board_auto_analyse"]:
+            return None  # analyse automatique coupée pour ce tenant : seul le bouton « Analyser avec Jarvis » la lance
+        meta = json.loads(o["meta"] or "{}")
+        missions_cours = [r["objectif"] for r in c.execute(
+            "SELECT objectif FROM missions WHERE tenant_id=? AND statut='OPEN' AND source NOT IN ('board', 'board-contexte') "
+            "ORDER BY cree DESC LIMIT 10", (tenant_id,))]
+        # extrait marqué comme tel : sinon le modèle prend une coupure pour une information manquante
+        voisins = [json.loads(r["meta"] or "{}").get("titre") or r["contenu"][:160] + ("…" if len(r["contenu"]) > 160 else "")
+                   for r in c.execute(
+            "SELECT meta, contenu FROM board_objets WHERE tenant_id=? AND espace=? AND supprime=0 AND id<>? ORDER BY maj DESC LIMIT 15",
+            (tenant_id, o["espace"], objet_id))]
+    finally:
+        c.close()
+    titre = meta.get("titre") or (o["contenu"].split("\n")[0][:80] if o["contenu"] else o["type"])
+    url = meta.get("url") or (o["contenu"] if o["type"] == "lien" else "")
+    travail = {"objet_id": objet_id, "sorte": o["type"], "titre": titre, "document": o["contenu"][:20_000],
+               "url": url, "asset_id": o["asset_id"], "missions_en_cours": missions_cours,
+               "elements_voisins": [v for v in voisins if v][:15]}
+    cle = f"board-contexte:{objet_id}" + (f":{int(now * 1000)}" if relance else "")
+    m = creer_mission(tenant_id, f"Contextualiser « {titre[:120]} »",
+                      [{"type": "contextualiser", "niveau": "L1", "capacites": ["analyse"], "travail": travail}],
+                      source="board-contexte", demandeur=f"board:{auteur}", cle_idempotence=cle, now=now)
+    with transaction(tenant_id) as c:
+        c.execute("UPDATE board_objets SET mission_id=? WHERE id=? AND tenant_id=?", (m["mission_id"], objet_id, tenant_id))
+    return m["mission_id"]
+
+
+NIVEAUX_PROPOSABLES = ("L1", "L2", "L3")
+
+
+def extraire_propositions(contenu: str) -> tuple[str, list[dict]]:
+    """(résumé, actions) d'un livrable de contextualisation. Le bloc JSON vient d'un modèle : il est validé, borné,
+    nettoyé ; ce n'est qu'une liste de PROPOSITIONS, jamais des ordres."""
+    import re as _re
+    resume = ""
+    m = _re.search(r"## Résumé\s*\n(.*?)(\n## |\n```|\Z)", contenu, _re.S)
+    if m:
+        resume = " ".join(m.group(1).split())[:400]
+    actions: list[dict] = []
+    for bloc in _re.findall(r"```json\s*(\{.*?\})\s*```", contenu, _re.S)[-1:]:
+        try:
+            data = json.loads(bloc)
+        except json.JSONDecodeError:
+            continue
+        for a in (data.get("actions") or [])[:5] if isinstance(data, dict) else []:
+            if not isinstance(a, dict) or not str(a.get("titre") or "").strip():
+                continue
+            niveau = str(a.get("niveau") or "L1").upper()
+            actions.append({"titre": str(a["titre"]).strip()[:160], "pourquoi": str(a.get("pourquoi") or "").strip()[:400],
+                            "niveau": niveau if niveau in NIVEAUX_PROPOSABLES else "L3", "statut": "proposee"})
+    return resume, actions
+
+
+def decider_proposition(tenant_id: str, objet_id: str, index: int, decision: str, *, par: str,
+                        now: float | None = None) -> dict:
+    """L'humain lance ou écarte une action proposée par le chef. « Lancer » crée une mission L1 de PRÉPARATION
+    (brouillon, plan, texte) : une action L2/L3 (écrire chez toi, envoyer, postuler…) n'est jamais exécutée par
+    Jarvis ici, il en prépare le livrable et l'étape externe reste la tienne. La carte de mission est posée à
+    droite de l'élément et reliée à lui."""
+    if decision not in ("lancer", "ecarter"):
+        raise MissionError("board", "décision : « lancer » ou « ecarter »")
+    now = now or time.time()
+    c = _connecter(tenant_id)
+    try:
+        o = c.execute("SELECT * FROM board_objets WHERE id=? AND tenant_id=? AND supprime=0", (objet_id, tenant_id)).fetchone()
+    finally:
+        c.close()
+    if o is None:
+        raise MissionError("inconnue", f"objet inconnu : {objet_id}")
+    meta = json.loads(o["meta"] or "{}")
+    props = meta.get("propositions") or []
+    if not isinstance(index, int) or not 0 <= index < len(props):
+        raise MissionError("inconnue", "proposition inconnue")
+    p = props[index]
+    if p.get("statut") != "proposee":
+        raise MissionError("conflit", f"proposition déjà {p.get('statut')}")
+    sortie: dict = {"objet_id": objet_id}
+    if decision == "lancer":
+        externe = p["niveau"] != "L1"
+        document = (f"Action à préparer : {p['titre']}\nPourquoi : {p.get('pourquoi', '')}\n"
+                    + ("Cette action touche l'extérieur ou tes fichiers : prépare seulement le livrable, l'humain "
+                       "fera lui-même l'étape externe.\n" if externe else "")
+                    + f"\nÉlément du Board ({o['type']}) : {meta.get('titre', '')}\n{o['contenu'][:15_000]}\n"
+                    f"\nSynthèse du chef : {meta.get('jarvis_resume', '')}")
+        m = creer_mission(tenant_id, f"Préparer : {p['titre']}"[:500],
+                          [{"type": "preparer", "niveau": "L1", "capacites": ["analyse"], "travail": {"document": document}}],
+                          source="board-proposition", demandeur=par, cle_idempotence=f"proposition:{objet_id}:{index}", now=now)
+        carte = board_ajouter(tenant_id, o["espace"], "mission", "", auteur="jarvis",
+                              x=o["x"] + (o["largeur"] or 400) + 120, y=o["y"], largeur=452, hauteur=362,
+                              priorite=o["priorite"] or "", mission_id=m["mission_id"],
+                              meta={"description": p.get("pourquoi", "")[:400], "proposition_de": objet_id}, now=now)
+        from . import board as _board  # board importe ce module : import tardif
+        _board.lier(tenant_id, o["espace"], objet_id, carte["objet_id"], libelle="proposé par Jarvis", style="alimente",
+                    par="jarvis")
+        p.update(statut="lancee", mission_id=m["mission_id"])
+        sortie.update(mission_id=m["mission_id"], carte_id=carte["objet_id"])
+    else:
+        p["statut"] = "ecartee"
+    with transaction(tenant_id) as c:
+        actuelle = c.execute("SELECT meta FROM board_objets WHERE id=? AND tenant_id=?", (objet_id, tenant_id)).fetchone()
+        m2 = json.loads(actuelle["meta"] or "{}")
+        if len(m2.get("propositions") or []) > index:
+            m2["propositions"][index] = p
+        c.execute("UPDATE board_objets SET meta=?, version=version+1, maj=? WHERE id=? AND tenant_id=?",
+                  (json.dumps(m2, ensure_ascii=False), now, objet_id, tenant_id))
+        _evenement(c, tenant_id, "board_proposition", now=now, objet_id=objet_id, index=index, decision=decision, par=par)
+    return sortie
+
+
+def _enregistrer_propositions(c, t, contenu: str, now: float) -> None:
+    travail = json.loads(t["travail"])
+    oid = travail.get("objet_id")
+    o = c.execute("SELECT meta FROM board_objets WHERE id=? AND tenant_id=?", (oid, t["tenant_id"])).fetchone() if oid else None
+    if o is None:
+        return
+    resume, actions = extraire_propositions(contenu)
+    meta = json.loads(o["meta"] or "{}")
+    meta.update({"jarvis_resume": resume, "propositions": actions, "jarvis_mission": t["mission_id"]})
+    c.execute("UPDATE board_objets SET meta=?, version=version+1, maj=? WHERE id=? AND tenant_id=?",
+              (json.dumps(meta, ensure_ascii=False)[:20_000], now, oid, t["tenant_id"]))
+    _evenement(c, t["tenant_id"], "board_propositions", mission_id=t["mission_id"], now=now, objet_id=oid, n=len(actions))
+    try:  # le chef et Telegram lisent le fil d'activité
+        from . import store
+        store.feed_add("chef", f"Board : « {travail.get('titre', oid)} » contextualisé — {len(actions)} action(s) proposée(s)")
+    except Exception:  # noqa: BLE001 — le fil est un plus, jamais une cause d'échec
+        pass
 
 
 def board(tenant_id: str, espace: str) -> list[dict]:

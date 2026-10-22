@@ -1,11 +1,13 @@
 import { memo, useEffect, useState } from "react";
 import { AnimatePresence, motion } from "motion/react";
-import { Calendar, Check, CircleDashed, FileText, Image as IconeImage, Link2, Loader, MoreHorizontal, Music, Plus, ShieldCheck, Star, Target, Video } from "lucide-react";
+import { Calendar, Check, CircleDashed, FileText, Image as IconeImage, Link2, Loader, MoreHorizontal, Music, Play, Plus, ShieldCheck, Sparkles, Star, Target, Video, X } from "lucide-react";
 import type { Approbation, Evenement, ObjetBoard, Priorite } from "../types";
 import type { Inspection, Source } from "../api";
 import { ilya, libelleTache, taille } from "../lib/format";
 import { Avatar } from "./Avatar";
 import { statutAgent } from "../nodes/CartesVivantes";
+import { etatJarvis } from "../nodes/CardShell";
+import { CONTEXTUALISABLES } from "../nodes/contexte";
 
 type Onglet = "details" | "activite" | "commentaires";
 const NIVEAUX: Record<string, string> = { P1: "Élevée", P2: "Moyenne", P3: "Basse" };
@@ -21,6 +23,8 @@ export function decrireEvenement(e: Evenement | Inspection["chronologie"][number
     case "board_lien": return "Relation créée";
     case "board_fichier": return `Fichier ${d.famille ?? ""} téléversé`;
     case "board_commentaire": return "Commentaire ajouté";
+    case "board_propositions": return `Jarvis a contextualisé l'élément (${d.n ?? 0} action(s) proposée(s))`;
+    case "board_proposition": return `Proposition ${d.decision === "lancer" ? "lancée" : "écartée"}`;
     case "mission_creee": return `Mission créée (${d.source ?? ""})`;
     case "mission_etat": return `Mission ${String(d.vers ?? "").toLowerCase()}`;
     case "tache_etat": return `Tâche : ${d.de} → ${d.vers}${d.raison ? ` — ${d.raison}` : ""}`;
@@ -47,9 +51,11 @@ interface Props {
   priorite: (id: string, p: Priorite) => void;
   modifierMeta: (o: ObjetBoard, meta: ObjetBoard["meta"]) => void;
   decider: (id: string, accord: boolean) => Promise<void>;
+  contextualiser: (id: string) => void;
+  deciderProposition: (o: ObjetBoard, index: number, decision: "lancer" | "ecarter") => Promise<void>;
 }
 
-export const Panneau = memo(function Panneau({ source, objet, objets, evenements, approbations, tick, priorite, modifierMeta, decider }: Props) {
+export const Panneau = memo(function Panneau({ source, objet, objets, evenements, approbations, tick, priorite, modifierMeta, decider, contextualiser, deciderProposition }: Props) {
   const [onglet, setOnglet] = useState<Onglet>("details");
   const [insp, setInsp] = useState<Inspection | null>(null);
   const [comms, setComms] = useState<{ id: string; auteur: string; texte: string; cree: number }[]>([]);
@@ -96,8 +102,11 @@ export const Panneau = memo(function Panneau({ source, objet, objets, evenements
           <motion.div key={`${onglet}-${objet?.id ?? "aucun"}`} initial={{ opacity: 0, x: 8 }} animate={{ opacity: 1, x: 0 }}
             exit={{ opacity: 0 }} transition={{ duration: 0.18, ease: [0.2, 0, 0, 1] }}>
             {onglet === "details" && (objet
-              ? <Details objet={objet} insp={insp} approbations={approbations} demo={source.demo} activite={activite}
-                  priorite={priorite} modifierMeta={modifierMeta} decider={decider} voirTout={() => setOnglet("activite")} />
+              ? <>
+                  <SectionJarvis objet={objet} contextualiser={contextualiser} deciderProposition={deciderProposition} />
+                  <Details objet={objet} insp={insp} approbations={approbations} demo={source.demo} activite={activite}
+                    priorite={priorite} modifierMeta={modifierMeta} decider={decider} voirTout={() => setOnglet("activite")} />
+                </>
               : <Apercu objets={objets} approbations={approbations} activite={activite} />)}
             {onglet === "activite" && (
               <div className="section">
@@ -131,6 +140,50 @@ export const Panneau = memo(function Panneau({ source, objet, objets, evenements
     </aside>
   );
 });
+
+/** Lecture du chef : résumé et actions proposées. « Lancer » prépare (mission L1) ; l'humain garde l'étape externe. */
+function SectionJarvis({ objet, contextualiser, deciderProposition }: {
+  objet: ObjetBoard; contextualiser: (id: string) => void;
+  deciderProposition: (o: ObjetBoard, index: number, decision: "lancer" | "ecarter") => Promise<void>;
+}) {
+  const [occupe, setOccupe] = useState<number | null>(null);
+  if (!CONTEXTUALISABLES.has(objet.type)) return null;
+  const e = etatJarvis(objet);
+  const props = objet.meta.propositions ?? [];
+  return (
+    <section className="section section-jarvis" aria-label="Actions proposées par Jarvis">
+      <div className="tete"><h4><Sparkles size={17} /> Jarvis</h4>
+        {e?.etat !== "analyse" && (
+          <button type="button" className="lien-texte" onClick={() => contextualiser(objet.id)}>{e ? "Relancer l'analyse" : "Analyser avec Jarvis"}</button>
+        )}</div>
+      {!e && <p className="vide">Pas encore analysé.</p>}
+      {e && e.etat !== "pret" && <p className={`vide etat-${e.etat}`}>{e.etat === "analyse" ? <Loader size={14} className="tourne" /> : null} {e.texte}</p>}
+      {objet.meta.jarvis_resume && <p className="resume-jarvis">{objet.meta.jarvis_resume}</p>}
+      {props.length > 0 && <h5 className="sous-titre">Actions proposées par Jarvis</h5>}
+      <ul className="propositions">
+        {props.map((p, i) => (
+          <li key={i} className={p.statut}>
+            <div className="prop-texte">
+              <span className={`niveau ${p.niveau}`} title={p.niveau === "L1" ? "Sans effet externe" : "Jarvis prépare seulement : l'étape externe reste la tienne"}>{p.niveau}</span>
+              <b>{p.titre}</b>
+              {p.pourquoi && <span className="pourquoi">{p.pourquoi}</span>}
+            </div>
+            {p.statut === "proposee" ? (
+              <div className="prop-actions">
+                <button type="button" className="bouton primaire" disabled={occupe !== null}
+                  aria-label={`${p.niveau === "L1" ? "Lancer" : "Préparer"} « ${p.titre} »`}
+                  onClick={async () => { setOccupe(i); await deciderProposition(objet, i, "lancer"); setOccupe(null); }}>
+                  <Play size={13} /> {p.niveau === "L1" ? "Lancer" : "Préparer"}</button>
+                <button type="button" className="bouton" aria-label={`Écarter « ${p.titre} »`} disabled={occupe !== null}
+                  onClick={async () => { setOccupe(i); await deciderProposition(objet, i, "ecarter"); setOccupe(null); }}><X size={13} /> Écarter</button>
+              </div>
+            ) : <span className="meta-carte">{p.statut === "lancee" ? "Lancée" : "Écartée"}</span>}
+          </li>
+        ))}
+      </ul>
+    </section>
+  );
+}
 
 function ListeActivite({ activite, max }: { activite: { cle: string; texte: string; ts: number; agent?: string }[]; max?: number }) {
   return (
@@ -218,7 +271,9 @@ function Details({ objet, insp, approbations, demo, activite, priorite, modifier
           </div>
         )}
         <div className="p-description">Description
-          <p>{String(objet.meta.description ?? insp?.description ?? m?.objectif ?? (objet.contenu?.slice(0, 280) || "—"))}</p>
+          <p>{String(objet.meta.description ?? insp?.description
+            // un élément analysé garde sa propre description : l'objectif de la mission d'analyse n'en est pas une
+            ?? (objet.type === "mission" ? m?.objectif : objet.contenu?.slice(0, 280) || objet.asset?.nom) ?? "—")}</p>
         </div>
         <div className="tags">
           {tags.map((t, i) => <span key={t} className={`tag c${i % 3}`}>#{t}</span>)}

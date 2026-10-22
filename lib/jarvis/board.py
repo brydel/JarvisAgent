@@ -31,6 +31,7 @@ GEOMETRIE_MAX = 100_000.0
 TAILLE_MIN, TAILLE_MAX = 40.0, 4000.0
 CHAMPS_MAJ = ("x", "y", "largeur", "hauteur", "z", "priorite", "meta", "contenu", "verrouille", "parent_id")
 STYLES_LIEN = ("defaut", "inspire", "alimente", "utilise", "depend")
+CLES_CHEF = ("jarvis_resume", "propositions", "jarvis_mission")  # écrites par le moteur seul
 
 
 # --- Reconnaissance du type par les octets ---------------------------------------------------------------
@@ -283,11 +284,21 @@ def mettre_a_jour(tenant_id: str, objet_id: str, champs: dict, *, version: int |
                     "SELECT 1 FROM board_objets WHERE id=? AND tenant_id=? AND type='dossier' AND supprime=0",
                     (propres["parent_id"], tenant_id)).fetchone():
                 raise MissionError("board", "dossier parent inconnu")
+        if "meta" in propres:  # résumé et propositions appartiennent au chef : un client (même périmé) ne les efface pas
+            ancienne = json.loads(o["meta"] or "{}")
+            nouvelle = json.loads(propres["meta"])
+            nouvelle.update({k: ancienne[k] for k in CLES_CHEF if k in ancienne})
+            propres["meta"] = json.dumps(nouvelle, ensure_ascii=False)
         sets = ", ".join(f"{k}=?" for k in propres)
         c.execute(f"UPDATE board_objets SET {sets}, version=version+1, maj=? WHERE id=? AND tenant_id=?",
                   (*propres.values(), now, objet_id, tenant_id))
         _evenement(c, tenant_id, "board_maj", now=now, objet_id=objet_id, champs=sorted(propres), par=par)
-        return {"version": o["version"] + 1}
+        a_contextualiser = ("contenu" in propres and o["type"] in ("note", "texte") and not o["mission_id"]
+                            and propres["contenu"].strip() not in ("", "Nouvelle note"))
+    if a_contextualiser:  # première vraie écriture d'une note créée vide : le chef la lit
+        from . import missions
+        missions.lancer_contextualisation(tenant_id, objet_id, auteur=par, now=now)
+    return {"version": o["version"] + 1}
 
 
 def mettre_a_jour_lot(tenant_id: str, modifications: list[dict], *, par: str) -> list[dict]:

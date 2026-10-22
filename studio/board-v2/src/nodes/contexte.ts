@@ -12,7 +12,11 @@ export interface ActionsBoard {
   agrandir(src: string, titre: string): void;
   sortirDuDossier(id: string): void;
   enfants(dossierId: string): ObjetBoard[];
+  contextualiser(id: string): void;
 }
+
+/** Types qu'un exécutant sait lire (texte, page, image, PDF) ou décrire (métadonnées audio / vidéo). */
+export const CONTEXTUALISABLES = new Set(["note", "texte", "lien", "image", "capture", "pdf", "document", "audio", "video"]);
 
 export const ContexteActions = createContext<ActionsBoard | null>(null);
 

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import http.client
 import json
+import os
 import shutil
 import socket
 import sqlite3
@@ -21,7 +22,7 @@ import test_jarvis  # noqa: F401 — environnement isolé
 import test_missions
 import test_studio
 
-from jarvis import apercus, board, config, missions as mi, studio_api  # noqa: E402
+from jarvis import adaptateurs as ad, apercus, board, config, coureur, missions as mi, studio_api  # noqa: E402
 
 
 def png(l: int, h: int) -> bytes:
@@ -314,6 +315,142 @@ class ApercusTest(Base):
             apercus.apercu(self.base + "/binaire", autoriser_prives=True)
 
 
+class Capteur(ad.Factice):
+    """Factice qui garde l'enveloppe reçue (pièces préparées par l'exécutant comprises)."""
+
+    def executer(self, env):
+        self.vu = {**env, "pieces": dict(env.get("pieces") or {})}
+        d = (env.get("pieces") or {}).get("dossier")
+        self.vu["fichiers"] = sorted(os.listdir(d)) if d and os.path.isdir(d) else []
+        return super().executer(env)
+
+
+class ChefTest(Base):
+    """Contextualisation automatique de tout élément du Board et propositions d'actions du chef."""
+
+    def setUp(self):
+        super().setUp()
+        mi.declarer_connexion(self.org, "factice", "factice")
+        rid, secret = mi.enroler_executant(self.org, "poste", capacites=["analyse"], fournisseurs=["factice"])
+        self.capteur = Capteur()
+        self.cr = coureur.Coureur(coureur.TransportLocal(rid, secret), {"factice": self.capteur})
+
+    def deposer(self, type_, contenu="", **kw):
+        return mi.board_ajouter(self.org, "accueil", type_, contenu, auteur="test", contextualiser=True, **kw)
+
+    def meta(self, oid):
+        return next(o for o in board.objets(self.org, "accueil")["objets"] if o["id"] == oid)["meta"]
+
+    def test_image_deposee_est_lue_puis_actions_proposees(self):
+        a = self.fichier(png(40, 30), "offre.png")
+        mi.creer_mission(self.org, "Trouver un stage en IT", [{"type": "analyse_document", "niveau": "L1",
+                         "capacites": ["analyse"], "travail": {"document": "x"}}], source="studio")
+        r = self.deposer("image", asset_id=a["id"], meta={"titre": "offre"})
+        self.assertTrue(r["mission_id"], "une image est contextualisée sans geste manuel")
+        self.assertEqual(self.cr.tour()["etat"], "fait")  # la mission « Trouver un stage » d'abord
+        self.assertEqual(self.cr.tour()["etat"], "fait")
+        vu = self.capteur.vu
+        self.assertEqual((vu["travail"]["type"], vu["travail"]["sorte"], vu["niveau"]), ("contextualiser", "image", "L1"))
+        self.assertIn("Trouver un stage en IT", vu["travail"]["missions_en_cours"])
+        self.assertEqual((vu["pieces"]["fichier"], vu["pieces"]["image"], vu["fichiers"]), ("piece.png", True, ["piece.png"]),
+                         "le fichier est copié SEUL dans un dossier temporaire")
+        self.assertFalse(os.path.exists(vu["pieces"]["dossier"]), "dossier des pièces effacé après l'exécution")
+        m = self.meta(r["objet_id"])
+        self.assertEqual(m["propositions"][0]["statut"], "proposee")
+        self.assertIn("image", m["jarvis_resume"])
+        self.assertEqual(m["jarvis_mission"], r["mission_id"])
+
+    def test_lien_inaccessible_devient_une_note_pour_le_modele(self):
+        r = self.deposer("lien", "http://127.0.0.1:9/offre")
+        self.cr.tour()
+        p = self.capteur.vu["pieces"]
+        self.assertFalse(p["page"])
+        self.assertIn("Page non lisible", p["note"])
+        self.assertIn("propositions", self.meta(r["objet_id"]))
+
+    def test_audio_decrit_par_ses_metadonnees(self):
+        a = self.fichier(wav(), "memo.wav")
+        self.deposer("audio", asset_id=a["id"])
+        self.cr.tour()
+        p = self.capteur.vu["pieces"]
+        self.assertIsNone(p["fichier"])
+        self.assertIn("memo.wav", p["note"])
+
+    def test_types_non_contextualises_et_reglage_coupe(self):
+        self.assertIsNone(self.deposer("dossier")["mission_id"])
+        self.assertIsNone(mi.board_ajouter(self.org, "accueil", "note", "copie", auteur="test", analyser=False)["mission_id"])
+        with mi.transaction(self.org) as c:
+            c.execute("UPDATE reglages_tenant SET board_auto_analyse=0 WHERE tenant_id=?", (self.org,))
+        self.assertIsNone(self.deposer("note", "réglage coupé")["mission_id"])
+        oid = self.objet("note", "relance humaine")
+        self.assertTrue(mi.lancer_contextualisation(self.org, oid, auteur="humain", relance=True),
+                        "le bouton « Analyser avec Jarvis » reste possible")
+
+    def test_note_ecrite_apres_creation_est_contextualisee(self):
+        oid = self.objet("note", "Nouvelle note")
+        board.mettre_a_jour(self.org, oid, {"contenu": "Nouvelle note"}, par="studio")
+        self.assertIsNone(board.objets(self.org, "accueil")["objets"][0]["mission_id"])
+        board.mettre_a_jour(self.org, oid, {"contenu": "Appeler le recruteur de Capgemini lundi"}, par="studio")
+        o = next(o for o in board.objets(self.org, "accueil")["objets"] if o["id"] == oid)
+        self.assertTrue(o["mission_id"])
+        board.mettre_a_jour(self.org, oid, {"contenu": "Appeler le recruteur mardi"}, par="studio")
+        self.assertEqual(next(x for x in board.objets(self.org, "accueil")["objets"] if x["id"] == oid)["mission_id"],
+                         o["mission_id"], "une seule contextualisation automatique par élément")
+
+    def test_client_perime_n_efface_pas_les_propositions(self):
+        r = self.deposer("note", "Préparer l'entretien")
+        self.cr.tour()
+        board.mettre_a_jour(self.org, r["objet_id"], {"meta": {"titre": "Entretien", "propositions": []}}, par="studio")
+        m = self.meta(r["objet_id"])
+        self.assertEqual((m["titre"], len(m["propositions"])), ("Entretien", 1))
+
+    def test_lancer_et_ecarter_une_proposition(self):
+        r = self.deposer("note", "Offre de stage DevOps à Lyon, candidature avant vendredi")
+        self.cr.tour()
+        with mi.transaction(self.org) as c:  # deux propositions, dont une action externe
+            m = json.loads(c.execute("SELECT meta FROM board_objets WHERE id=?", (r["objet_id"],)).fetchone()["meta"])
+            m["propositions"].append({"titre": "Envoyer la candidature", "pourquoi": "date limite", "niveau": "L3",
+                                      "statut": "proposee"})
+            c.execute("UPDATE board_objets SET meta=? WHERE id=?", (json.dumps(m), r["objet_id"]))
+        s = mi.decider_proposition(self.org, r["objet_id"], 1, "lancer", par="studio:humain")
+        insp = mi.inspecter(self.org, s["mission_id"])
+        t = insp["taches"][0]
+        self.assertEqual((t["type"], t["niveau"], t["statut"]), ("preparer", "L1", "QUEUED"),
+                         "une action L3 n'est que PRÉPARÉE, en L1 : rien d'externe")
+        self.assertIn("prépare seulement le livrable", t["travail"]["document"])
+        etat = board.objets(self.org, "accueil")
+        carte = next(o for o in etat["objets"] if o["id"] == s["carte_id"])
+        self.assertEqual((carte["type"], carte["mission_id"]), ("mission", s["mission_id"]))
+        self.assertTrue(any(l["source_id"] == r["objet_id"] and l["cible_id"] == carte["id"] for l in etat["liens"]))
+        self.assertEqual(self.cr.tour()["etat"], "fait")
+        self.assertEqual(mi.inspecter(self.org, s["mission_id"])["taches"][0]["statut"], "SUCCEEDED")
+        mi.decider_proposition(self.org, r["objet_id"], 0, "ecarter", par="studio:humain")
+        self.assertEqual([p["statut"] for p in self.meta(r["objet_id"])["propositions"]], ["ecartee", "lancee"])
+        for index, decision, code in ((1, "lancer", "conflit"), (9, "lancer", "inconnue"), (0, "executer", "board")):
+            with self.assertRaises(mi.MissionError) as e:
+                mi.decider_proposition(self.org, r["objet_id"], index, decision, par="studio:humain")
+            self.assertEqual(e.exception.code, code)
+
+    def test_extraction_des_propositions_bornee(self):
+        actions = [{"titre": f"A{i}", "niveau": "L9" if i == 0 else "l1"} for i in range(8)] + ["x", {"titre": ""}]
+        resume, props = mi.extraire_propositions("## Résumé\nCourt.\n## Actions proposées\n```json\n"
+                                                 + json.dumps({"actions": actions}) + "\n```")
+        self.assertEqual(resume, "Court.")
+        self.assertEqual(len(props), 5)
+        self.assertEqual((props[0]["niveau"], props[1]["niveau"]), ("L3", "L1"), "niveau inconnu → le plus prudent")
+        self.assertEqual(mi.extraire_propositions("## Résumé\nRien\n```json\n{cassé\n```"), ("Rien", []))
+
+    def test_revue_exige_les_sections_du_chef(self):
+        self.assertFalse(mi._verifier_artefact("contextualiser", "## Résumé\nUn texte assez long pour la revue.")[0])
+        self.assertTrue(mi._verifier_artefact("contextualiser", "## Résumé\nx\n## Actions proposées\n- y")[0])
+
+    def test_un_seul_executant_par_identite(self):
+        v = coureur.prendre_verrou("EX-test")
+        self.addCleanup(v.close)
+        self.assertIsNotNone(v)
+        self.assertIsNone(coureur.prendre_verrou("EX-test"), "démon et terminal ne tournent jamais ensemble")
+
+
 class ApiV2Test(test_studio.StudioTest):
     """Mêmes serveur et session que les tests du Studio ; routes /api/v2 et page /v2."""
 
@@ -393,6 +530,20 @@ class ApiV2Test(test_studio.StudioTest):
         for invalide in ({"objectif": ""}, {"objectif": "x", "fournisseur": "gpt"}, {"objectif": "x", "priorite": "P9"},
                          {"objectif": "x" * 501}, {"objectif": "x", "contexte": "y" * 20_001}):
             self.assertEqual(self.req("POST", "/api/v2/missions", invalide)[0], 400, invalide)
+
+    def test_depot_contextualise_et_decision_par_l_api(self):
+        self.connecter()
+        code, o, _ = self.req("POST", "/api/v2/objets", {"type": "note", "contenu": "Relancer Marc pour le devis", "x": 0, "y": 0})
+        self.assertEqual(code, 201)
+        self.assertTrue(o["mission_id"], "un élément déposé dans le Board V2 est contextualisé par défaut")
+        self.assertIsNone(self.req("POST", "/api/v2/objets", {"type": "note", "contenu": "copie", "x": 0, "y": 0,
+                                                              "analyser": False})[1]["mission_id"])
+        code, r, _ = self.req("POST", f"/api/v2/objets/{o['objet_id']}/contextualiser", {})
+        self.assertEqual(code, 201)
+        self.assertNotEqual(r["mission_id"], o["mission_id"], "relance humaine = nouvelle mission")
+        self.assertEqual(self.req("POST", f"/api/v2/objets/{o['objet_id']}/propositions", {"index": "0"})[0], 400)
+        self.assertEqual(self.req("POST", f"/api/v2/objets/{o['objet_id']}/propositions",
+                                  {"index": 0, "decision": "lancer"})[0], 404, "aucune proposition encore")
 
     def test_apercu_refuse_proprement(self):
         self.connecter()

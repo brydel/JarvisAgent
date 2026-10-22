@@ -1870,6 +1870,10 @@ def cmd_mission(a) -> int:
                 ident = json.loads(_identite_coureur().read_text())
             except (OSError, json.JSONDecodeError):
                 return _err("aucun exécutant enrôlé : jarvis mission enroler --fournisseurs claude")
+            verrou = coureur.prendre_verrou(ident["id"])
+            if verrou is None:
+                return _err("cet exécutant tourne déjà (dans le démon Jarvis ou un autre terminal) : "
+                            "les missions avancent seules, rien à lancer")
             disponibles = {**adaptateurs.par_defaut(), "factice": adaptateurs.Factice()}
             cr = coureur.Coureur(coureur.TransportLocal(ident["id"], ident["secret"]), disponibles)
             for i in range(a.fois):
