@@ -49,6 +49,13 @@ le comportement quotidien (plafonds de jetons, essais bornés, bail du démon…
 que tu n'utilises pas `jarvis mission`. Procédure : `docs/autonomy/exploitation.md` §1 avec cette branche ;
 retour arrière : §3 avec `claude/autonomie-lot1`.
 
+## Board V2 — fait (branche `feat/jarvis-board-v2`)
+
+Éditeur spatial multimédia (React + React Flow, ADR-0007) servi sous `/v2/`, relié aux vraies missions, événements
+SSE et approbations ; schéma v2 (géométrie, priorité, relations, fichiers, commentaires) sur SQLite et PostgreSQL ;
+aperçus de liens sans SSRF. Preuves : `reports/board-v2/RAPPORT.md` (captures avant/après, comparaison à la maquette,
+tests, performances). Le Studio V1 reste servi sur `/`.
+
 ## Prochaine tâche concrète (M2, suite)
 
 Connexion du Studio par compte (au lieu du jeton) et choix de l'organisation, au-dessus de `controle_pg.comptes` ;

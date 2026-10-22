@@ -46,3 +46,8 @@ secondaire ; titre mission 18 px gras ; chiffres tabulaires pour durées, taille
 3. Logo Codex/OpenAI : absent de `simple-icons` (retiré à la demande d'OpenAI) ; aucun logo inventé — badge texte.
 4. Attribution React Flow visible en bas à droite (licence MIT ; la retirer exige l'abonnement Pro).
 5. Images de démonstration : découpées de la maquette fournie par le fondateur (aucune image tierce ajoutée).
+
+## Mesure (22 octobre 2026)
+
+Écart à la maquette : 12,0 % de pixels différents (avant : 87,3 %), écart de couleur moyen 16,5 / 255. Détail par
+zone, cycles et écarts restants : `reports/board-v2/RAPPORT.md`.

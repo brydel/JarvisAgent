@@ -1,0 +1,20 @@
+{
+ "capture": "before.png",
+ "pixels_differents_pct": 87.3,
+ "ecart_couleur_moyen": {
+  "barre_haut": 223.1,
+  "seconde_rangee": 207.3,
+  "outils": 202,
+  "panneau": 204.7,
+  "image": 156.3,
+  "lien": 142.1,
+  "pdf": 152.5,
+  "note": 194.3,
+  "mission": 197.7,
+  "agents": 195.7,
+  "audio": 200.9,
+  "video": 189.9,
+  "dossier": 182.9,
+  "global": 196.9
+ }
+}

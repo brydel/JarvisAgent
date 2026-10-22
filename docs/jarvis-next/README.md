@@ -41,4 +41,5 @@ Branche : `claude/jarvis-next-m1`, empilée sur `claude/vague-3-leadership` (pil
 | [MIGRATION_ROADMAP.md](MIGRATION_ROADMAP.md) | M0 → M7, critères de sortie, compatibilité | PROPOSED |
 | [RISK_REGISTER.md](RISK_REGISTER.md) | risques suivis | PROPOSED |
 | [OPEN_DECISIONS.md](OPEN_DECISIONS.md) | ce que le fondateur doit trancher | en attente |
-| [adr/](adr/) | décisions d'architecture avec alternatives rejetées (0001 à 0006) | PROPOSED |
+| [adr/](adr/) | décisions d'architecture avec alternatives rejetées (0001 à 0007) | PROPOSED |
+| [../../design/board-v2/](../../design/board-v2/) | Board V2 : jetons, contrat visuel, inventaire ; preuves dans `reports/board-v2/` | VERIFIED |

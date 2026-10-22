@@ -1852,8 +1852,11 @@ def cmd_mission(a) -> int:
             except OSError as exc:
                 return _err(f"port {a.port} indisponible ({exc}) : jarvis mission studio --port 7719")
             url = studio_api.lien(a.port, valeur)
-            print(f"Jarvis Studio : {url}\n(ce lien contient ton jeton d'accès : ne le partage pas). Ctrl+C pour arrêter.")
-            web._ouvrir(url)
+            url_v2 = f"http://localhost:{a.port}/v2/connexion#{valeur}"
+            v2 = (studio_api.DOSSIER_V2 / "index.html").exists()
+            print(f"Jarvis Studio : {url}" + (f"\nBoard V2     : {url_v2}" if v2 else "")
+                  + "\n(ces liens contiennent ton jeton d'accès : ne les partage pas). Ctrl+C pour arrêter.")
+            web._ouvrir(url_v2 if v2 else url)
             try:
                 httpd.serve_forever()
             except KeyboardInterrupt:

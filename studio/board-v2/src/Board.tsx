@@ -626,12 +626,13 @@ export function Board({ source, charge }: Props) {
 /** Mode charge (démo, ?charge=N) : N cartes de types mixtes pour mesurer les performances. Jamais en mode réel. */
 function genererCharge(n: number): ObjetBoard[] {
   const types: ObjetBoard["type"][] = ["note", "image", "lien", "pdf", "audio", "video"];
+  const cotes = Math.max(4, Math.ceil(Math.sqrt(n)));
   return Array.from({ length: n }, (_, i) => {
     const type = types[i % types.length]!;
     const [l, h] = TAILLES[type]?.defaut ?? [400, 300];
     return {
       id: `BO-charge${i}`, type, espace: "accueil", contenu: type === "note" ? `Note de charge ${i}\n- élément\n- autre` : "",
-      x: 2000 + (i % 20) * 520, y: (Math.floor(i / 20)) * 420, largeur: l, hauteur: h, z: 1, priorite: (["P1", "P2", "P3", ""] as const)[i % 4]!,
+      x: 2000 + (i % cotes) * 520, y: (Math.floor(i / cotes)) * 420, largeur: l, hauteur: h, z: 1, priorite: (["P1", "P2", "P3", ""] as const)[i % 4]!,
       meta: { titre: `Carte ${i}`, url: type === "lien" ? "https://exemple.test" : undefined }, asset_id: null, asset: null, mission_id: null,
       parent_id: null, verrouille: 0, version: 1, cree: 0, maj: 0,
     };

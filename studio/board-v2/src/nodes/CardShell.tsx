@@ -1,6 +1,6 @@
 import { memo, useEffect, useRef, useState, type ReactNode } from "react";
-import { Handle, NodeResizer, Position } from "@xyflow/react";
-import { ArrowUpToLine, Copy, Lock, LockOpen, MoreHorizontal, PanelRight, Trash2 } from "lucide-react";
+import { Handle, NodeResizer, Position, useStore } from "@xyflow/react";
+import { ArrowUpToLine, Copy, FileText, Image as IconeImage, Link2, Lock, LockOpen, MoreHorizontal, Music, PanelRight, Target, Trash2, Users, Video, Folder } from "lucide-react";
 import type { ObjetBoard, Priorite } from "../types";
 import { TAILLES, useActions } from "./contexte";
 
@@ -15,10 +15,30 @@ interface Props {
 }
 
 const COTES = [Position.Top, Position.Right, Position.Bottom, Position.Left];
+/** Sous ce zoom, les cartes passent en vignette légère (niveau de détail) : texte illisible de toute façon. */
+export const ZOOM_DETAIL = 0.45;
+const choisirResume = (s: { transform: [number, number, number] }) => s.transform[2] < ZOOM_DETAIL;
+const ICONES: Record<string, typeof FileText> = { image: IconeImage, capture: IconeImage, lien: Link2, audio: Music, video: Video,
+  mission: Target, agents: Users, dossier: Folder };
 
 export const CardShell = memo(function CardShell({ objet, selected, classe, children, entete = true, ratio }: Props) {
   const t = TAILLES[objet.type] ?? TAILLES.note!;
   const verrou = Boolean(objet.verrouille);
+  // booléen : la carte ne se re-rend qu'au franchissement du seuil, pas à chaque image du zoom
+  const resume = useStore(choisirResume);
+  if (resume) {
+    const Icone = ICONES[objet.type] ?? FileText;
+    return (
+      <>
+        {COTES.map((p) => <Handle key={p} id={p} type="source" position={p} />)}
+        <article className={`carte carte-resume ${classe}`} aria-label={objet.meta.titre || objet.type}>
+          {objet.priorite && <span className={`badge-p ${objet.priorite}`}>{objet.priorite}</span>}
+          <Icone size={64} strokeWidth={1.5} />
+          <span className="titre-resume">{objet.meta.titre || objet.mission?.objectif || objet.asset?.nom || objet.contenu.slice(0, 60) || objet.type}</span>
+        </article>
+      </>
+    );
+  }
   return (
     <>
       <NodeResizer isVisible={selected && !verrou} minWidth={t.min[0]} minHeight={t.min[1]} maxWidth={2400} maxHeight={2400}
