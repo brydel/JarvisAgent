@@ -34,6 +34,15 @@ ${C_CYAN}Pilotage${C_OFF}
   jarvis etat · jarvis usine            État complet · les ateliers : qui travaille sur quoi
   jarvis plan liste|voir|ok|non         Plans proposés par le chef
   jarvis fil [n]                        Derniers événements
+  jarvis os diagnostic                  Capacités réellement observées (sans appel de modèle)
+  jarvis os schemas                     Contrats communs agents, tâches et sessions
+  jarvis os mandat --help               Mandats personnels : périmètre, budget et révocation
+  jarvis os communaute --help            Réseau libre des agents : usine, modèles et idées
+  jarvis os connexions --help            Connexions MCP et découverte des outils
+  jarvis os outils --help                Appels sous mandat et reçus d'opérations
+  jarvis os runtime --help               Missions outillées, progression et revue
+  jarvis os modele --help                Modèle API, référence de clé et diagnostic
+  jarvis os oauth --help                 Connexion propriétaire Google et courriel
 
 ${C_CYAN}Agents${C_OFF}
   jarvis task [--projet P] <ISSUE> <claude|codex|auto> [desc] [--role R] [--taille S|M|L]
@@ -612,7 +621,7 @@ main() {
     start)        cmd_start "$@" ;;
     chef)         cmd_chef "$@" ;;
     task|t)       cmd_task "$@" ;;
-    cockpit|etat|plan|fil|projet|telegram|regler|capacite|demander|note|journal|daemon|voir|jetons|veille|\
+    os|cockpit|etat|plan|fil|projet|telegram|regler|capacite|demander|note|journal|daemon|voir|jetons|veille|\
     fermer|reprendre|sante|reparer-git|role|modele|tache|verdict|bilan|usine|studio|livrer|livrables|web|\
     admission|pause|profil|lourd|audit|diagnostic|politique|budget|fournisseurs|proposition|\
     budget-jetons|cout|memoire|secrets|eval|rejouer|traces|proxy|rollback|execution|skill|stockage|executant|\

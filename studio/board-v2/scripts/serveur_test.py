@@ -2,6 +2,7 @@
 
 Le jeton de session est écrit dans <état>/jeton-test (lu par les tests). Rien ne touche ton installation.
 Variables : JARVIS_TEST_PORT (7720), JARVIS_TEST_EXECUTANT=1 pour faire tourner un exécutant factice (missions).
+JARVIS_TEST_RUNTIME=1 remplace seulement le fournisseur de modèle par un scénario explicitement factice.
 """
 import os
 import sys
@@ -18,6 +19,36 @@ os.environ.pop("JARVIS_MISSIONS_PG", None)
 sys.path.insert(0, str(Path(__file__).resolve().parents[3] / "lib"))
 
 from jarvis import adaptateurs, coureur, missions, studio_api  # noqa: E402
+
+if os.environ.get("JARVIS_TEST_RUNTIME") == "1":
+    from jarvis import pilotage
+
+    # Ce branchement n'existe que dans le serveur de tests : contrôleur, passerelle et stockage restent réels.
+    os.environ["JARVIS_TEST_OPENAI_KEY"] = "cle-factice-e2e-sans-service"
+
+    class ModeleScenario:
+        provider = "openai_responses"
+        destination = "api.openai.com"
+        factice = True
+
+        def __init__(self, configuration):
+            self.model = configuration["model"]
+
+        def __call__(self, contexte, *, operation_id, annulation=None):
+            if annulation is not None:
+                annulation.verifier()
+            deja_publie = any(m.get("role") == "tool" for m in contexte["messages"])
+            return {
+                "type": "final" if deja_publie else "outils",
+                "appels": [] if deja_publie else [{"id": "publication-e2e", "outil": "communaute.publier", "arguments": {
+                    "contenu": "Publication réelle du scénario de test, par la passerelle de l'agent.",
+                    "titre": "Coopération du scénario de test", "salon": "atelier"}}],
+                "contenu": "Le scénario de test a proposé sa publication. Vérifie sa présence dans le réseau." if deja_publie else "",
+                "usage": {"input_tokens": 8, "output_tokens": 12}, "factice": True,
+                "provider": self.provider, "model": self.model, "response_id": "e2e:" + operation_id,
+            }
+
+    pilotage._fabrique_modele = ModeleScenario
 
 port = int(os.environ.get("JARVIS_TEST_PORT", "7720"))
 org = missions.tenant_local()

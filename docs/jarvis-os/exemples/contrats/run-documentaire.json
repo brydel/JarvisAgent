@@ -1,0 +1,10 @@
+{
+  "version": 1,
+  "id": "RUN-synthese",
+  "agent_id": "AG-documentaire",
+  "task_id": "TK-synthese",
+  "status": "planned",
+  "source": "board",
+  "session_ref": null,
+  "evidence": []
+}

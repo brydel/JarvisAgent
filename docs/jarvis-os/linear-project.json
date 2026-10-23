@@ -1,0 +1,1058 @@
+{
+  "schema_version": 1,
+  "prepared_at": "2026-10-23",
+  "status": "implementation_in_progress_locally_not_created_in_linear",
+  "name": "Jarvis OS personnel — autonomie de bout en bout",
+  "summary": "Un assistant personnel outillé, durable et observable qui réalise un projet complet dans un mandat initial.",
+  "objective": "Recherche, planification, agents spécialisés, production, vérification, staging et communication depuis le Board.",
+  "scope": "personnel_uniquement",
+  "team_id": null,
+  "project_id": null,
+  "project_url": null,
+  "authorization": "Projet et tickets autorisés par le propriétaire dans la conversation.",
+  "blocker": "Connexion Linear non disponible et équipe cible non identifiée dans cette session.",
+  "phases": [
+    {
+      "key": "F0",
+      "name": "Contrats et mandat personnel"
+    },
+    {
+      "key": "F1",
+      "name": "Effets et reprises fiables"
+    },
+    {
+      "key": "F2",
+      "name": "Connexions externes fonctionnelles"
+    },
+    {
+      "key": "F3",
+      "name": "Runtime, prompts et mémoire"
+    },
+    {
+      "key": "F4",
+      "name": "Workflow projet durable"
+    },
+    {
+      "key": "F5",
+      "name": "Interface de commande visuelle"
+    },
+    {
+      "key": "F6",
+      "name": "Pilote et exploitation"
+    }
+  ],
+  "session_roles": [
+    {
+      "key": "architecte-agentique",
+      "name": "Architecte agentique",
+      "specialty": "Contrats communs, séparation des responsabilités et migration mesurable.",
+      "state": "foundation_session_completed_not_deployed",
+      "last_development_session": "f0_contracts"
+    },
+    {
+      "key": "politique-autonomie",
+      "name": "Ingénieur politique d’autonomie",
+      "specialty": "Mandats personnels persistés, autorisations effectives et révocation sans demandes répétées.",
+      "state": "foundation_session_completed_not_deployed",
+      "last_development_session": "f0_mandates"
+    },
+    {
+      "key": "sre-execution",
+      "name": "SRE des exécutants",
+      "specialty": "Disponibilité, capacités, processus, reprise, exploitation et restauration.",
+      "state": "foundation_session_completed_not_deployed",
+      "last_development_session": "f0_capabilities"
+    },
+    {
+      "key": "fiabilite-distribuee",
+      "name": "Ingénieur fiabilité distribuée",
+      "specialty": "Transactions, outbox/inbox, effets incertains, idempotence et concurrence.",
+      "state": "development_session_completed_not_deployed",
+      "last_development_session": "f1_durabilite"
+    },
+    {
+      "key": "runtime-outils",
+      "name": "Ingénieur runtime agentique",
+      "specialty": "Sessions effectives, outils typés, streaming d’événements, annulation et budgets.",
+      "state": "development_session_completed_not_deployed",
+      "last_development_session": "f1_annulation, passerelle_outils, communaute_backend"
+    },
+    {
+      "key": "integrations-mcp-oauth",
+      "name": "Ingénieur MCP et OAuth",
+      "specialty": "Connexions, secrets côté service, découverte, scopes, tests réels et renouvellement.",
+      "state": "development_session_completed_not_deployed",
+      "last_development_session": "passerelle_outils"
+    },
+    {
+      "key": "recherche-navigateur",
+      "name": "Ingénieur recherche et navigateur",
+      "specialty": "Recherche sourcée, navigation isolée, preuves et reprise d’étapes web.",
+      "state": "planned_not_spawned"
+    },
+    {
+      "key": "courriel-fiable",
+      "name": "Ingénieur courriel et effets externes",
+      "specialty": "Graph/Gmail API, brouillons, envois délégués et réconciliation fournisseur.",
+      "state": "planned_not_spawned"
+    },
+    {
+      "key": "workflow-temporal",
+      "name": "Ingénieur workflows Temporal",
+      "specialty": "DAG durable, signaux, timers, replay, versions et migration à propriétaire unique.",
+      "state": "development_session_completed_not_deployed",
+      "last_development_session": "workflow_temporal"
+    },
+    {
+      "key": "memoire-contextes",
+      "name": "Ingénieur mémoire et contexte",
+      "specialty": "Index hybride, provenance, invalidation, isolation et contexte utile.",
+      "state": "planned_not_spawned"
+    },
+    {
+      "key": "prompts-evaluations",
+      "name": "Ingénieur prompts et évaluations",
+      "specialty": "Prompts compilés, tests métier, comparaison de modèles, canaris et coûts.",
+      "state": "planned_not_spawned"
+    },
+    {
+      "key": "frontend-integrations",
+      "name": "Ingénieur frontend intégrations",
+      "specialty": "Parcours OAuth/MCP réels, états de connexion et commandes persistées.",
+      "state": "development_session_completed_not_deployed",
+      "last_development_session": "communaute_frontend"
+    },
+    {
+      "key": "ux-observabilite",
+      "name": "Designer et ingénieur observabilité",
+      "specialty": "Graphe lisible des runs, outils, preuves, dépendances et causes d’attente.",
+      "state": "development_session_completed_not_deployed",
+      "last_development_session": "communaute_frontend"
+    },
+    {
+      "key": "qa-independante",
+      "name": "QA indépendante des agents",
+      "specialty": "Vérification métier, défauts adversariaux, pannes et preuves reproductibles.",
+      "state": "foundation_session_completed_not_deployed",
+      "last_development_session": "review_f0_policy"
+    }
+  ],
+  "completed_audits": [
+    "audit_orchestration",
+    "audit_roles",
+    "audit_integrations"
+  ],
+  "issues": [
+    {
+      "key": "JOS-001",
+      "phase": "F0",
+      "title": "Unifier AgentSpec, TaskSpec, RunSpec et les capacités effectives",
+      "priority": 2,
+      "status": "in_progress_local_not_synced",
+      "agent_role": "architecte-agentique",
+      "reviewer_role": "runtime-outils",
+      "depends_on": [],
+      "required": true,
+      "objective": "Définir des contrats versionnés utilisés par Board, chef, workmux et moteur de missions.",
+      "acceptance": [
+        "Schémas et exemples exécutables pour une tâche documentaire et un projet outillé.",
+        "Même rôle, outils, budget et preuves attendues dans les deux voies actuelles.",
+        "Aucun attribut de capacité ne vaut preuve de disponibilité sans diagnostic fonctionnel."
+      ],
+      "labels": [
+        "jarvis-os-personnel",
+        "F0",
+        "agent:architecte-agentique"
+      ],
+      "linear_issue_id": null,
+      "linear_url": null,
+      "assignee_user_id": null,
+      "implementation_note": "Contrats v1, exemples, validation stricte et intégration missions/prompts/activité livrés ; convergence complète des voies encore en cours."
+    },
+    {
+      "key": "JOS-002",
+      "phase": "F0",
+      "title": "Définir le mandat personnel et harmoniser les politiques d’autonomie",
+      "priority": 2,
+      "status": "in_progress_local_not_synced",
+      "agent_role": "politique-autonomie",
+      "reviewer_role": "qa-independante",
+      "depends_on": [],
+      "required": true,
+      "objective": "Remplacer les contradictions entre prompts, constantes L3/L4 et volonté d’autonomie par une délégation explicite du propriétaire.",
+      "acceptance": [
+        "Mandat versionné : projets, dépôts, domaines, destinataires, actions, environnements, budgets et durée.",
+        "Les actions couvertes avancent sans reconfirmation ; les exceptions sont motivées et visibles.",
+        "Un agent ne peut pas étendre ses droits ; délégation et révocation sont vérifiées côté service."
+      ],
+      "labels": [
+        "jarvis-os-personnel",
+        "F0",
+        "agent:politique-autonomie"
+      ],
+      "linear_issue_id": null,
+      "linear_url": null,
+      "assignee_user_id": null,
+      "implementation_note": "Mandats persistants appliqués aux inférences et outils ; création/révocation depuis le Board. Isolation système et harmonisation des anciennes voies restent à réaliser."
+    },
+    {
+      "key": "JOS-003",
+      "phase": "F0",
+      "title": "Diagnostiquer réellement modèles, outils, réseau et exécutants",
+      "priority": 2,
+      "status": "in_progress_local_not_synced",
+      "agent_role": "sre-execution",
+      "reviewer_role": "qa-independante",
+      "depends_on": [],
+      "required": true,
+      "objective": "Établir une base observée des capacités de l’installation et du compte, sans confondre configuration et fonctionnement.",
+      "acceptance": [
+        "Tester séparément voie CLI, voie Board, réseau, authentification et disponibilité des modèles.",
+        "États absent/configuré/authentifié/vérifié/dégradé présentés avec dernière preuve.",
+        "Aucune clé imprimée ; catalogue de modèles validé sur le compte, sans alias supposé disponible."
+      ],
+      "labels": [
+        "jarvis-os-personnel",
+        "F0",
+        "agent:sre-execution"
+      ],
+      "linear_issue_id": null,
+      "linear_url": null,
+      "assignee_user_id": null,
+      "implementation_note": "Diagnostic local, métadonnées MCP et sonde réseau explicite livrés ; authentification, catalogue du compte et inférence réelle restent non vérifiés."
+    },
+    {
+      "key": "JOS-004",
+      "phase": "F1",
+      "title": "Rendre les effets post-commit et messages durables par outbox/inbox",
+      "priority": 1,
+      "status": "in_progress_local_not_synced",
+      "agent_role": "fiabilite-distribuee",
+      "reviewer_role": "workflow-temporal",
+      "depends_on": [
+        "JOS-001"
+      ],
+      "required": true,
+      "objective": "Remplacer les callbacks post-commit volatils et la file vidée avant remise par intentions durables et acquittements.",
+      "acceptance": [
+        "État métier et intention d’effet écrits dans la même transaction.",
+        "Après crash avant/après remise, l’effet reste rapprochable sans message perdu.",
+        "Reprises bornées, déduplication, inspection des échecs et relance explicite disponibles."
+      ],
+      "labels": [
+        "jarvis-os-personnel",
+        "F1",
+        "agent:fiabilite-distribuee"
+      ],
+      "linear_issue_id": null,
+      "linear_url": null,
+      "assignee_user_id": null,
+      "implementation_note": "Outbox/inbox, remises durables et instantanés livrés ; chemin initial objet vers analyse encore historique ; PostgreSQL non vérifié sur serveur réel."
+    },
+    {
+      "key": "JOS-005",
+      "phase": "F1",
+      "title": "Rendre atomique l’acceptation d’une proposition du Board",
+      "priority": 1,
+      "status": "in_progress_local_not_synced",
+      "agent_role": "fiabilite-distribuee",
+      "reviewer_role": "qa-independante",
+      "depends_on": [
+        "JOS-001"
+      ],
+      "required": true,
+      "objective": "Garantir une décision et une seule mission/carte/relation malgré clics concurrents ou redémarrage.",
+      "acceptance": [
+        "Dix décisions concurrentes créent au plus une mission et une carte pour la même proposition.",
+        "Crash à chaque frontière puis reprise sans carte orpheline ni statut contradictoire.",
+        "Tests sur les backends effectivement supportés ; migration réversible."
+      ],
+      "labels": [
+        "jarvis-os-personnel",
+        "F1",
+        "agent:fiabilite-distribuee"
+      ],
+      "linear_issue_id": null,
+      "linear_url": null,
+      "assignee_user_id": null,
+      "implementation_note": "Décision, mission, tâche, carte et lien atomiques, concurrence et crash vérifiés sur SQLite ; génération courante protégée."
+    },
+    {
+      "key": "JOS-006",
+      "phase": "F1",
+      "title": "Propager annulation et perte de bail aux processus et outils",
+      "priority": 1,
+      "status": "in_progress_local_not_synced",
+      "agent_role": "runtime-outils",
+      "reviewer_role": "sre-execution",
+      "depends_on": [
+        "JOS-001",
+        "JOS-003"
+      ],
+      "required": true,
+      "objective": "Arrêter le travail réel dès que sa tentative perd l’autorité, au lieu de poser seulement un indicateur local.",
+      "acceptance": [
+        "Contrat de cancellation des adaptateurs, des appels réseau et du groupe de processus.",
+        "Perte de bail : aucun nouvel appel d’outil, arrêt local dans le délai documenté.",
+        "Effet déjà parti identifié comme à réconcilier ; résultat ancien refusé."
+      ],
+      "labels": [
+        "jarvis-os-personnel",
+        "F1",
+        "agent:runtime-outils"
+      ],
+      "linear_issue_id": null,
+      "linear_url": null,
+      "assignee_user_id": null,
+      "implementation_note": "Annulation propagée aux modèles, transports HTTPS et processus MCP, avec jonction à l’arrêt du Studio ; anciennes sessions workmux hors mécanisme."
+    },
+    {
+      "key": "JOS-007",
+      "phase": "F1",
+      "title": "Journaliser opérations externes, reçus et résultats inconnus",
+      "priority": 1,
+      "status": "in_progress_local_not_synced",
+      "agent_role": "fiabilite-distribuee",
+      "reviewer_role": "courriel-fiable",
+      "depends_on": [
+        "JOS-002",
+        "JOS-004",
+        "JOS-006"
+      ],
+      "required": true,
+      "objective": "Donner une identité stable aux effets externes et gérer le cas exécuté mais réponse perdue.",
+      "acceptance": [
+        "operation_id, empreinte, mandat, tentative et reçu persistés.",
+        "État unknown distinct de failed ; timeout d’écriture sans retry aveugle.",
+        "Crash après effet puis rapprochement fournisseur sans double action observée."
+      ],
+      "labels": [
+        "jarvis-os-personnel",
+        "F1",
+        "agent:fiabilite-distribuee"
+      ],
+      "linear_issue_id": null,
+      "linear_url": null,
+      "assignee_user_id": null,
+      "implementation_note": "Journal des appels et résultats inconnus intégré au runtime ; rapprochement Gmail disponible sans rejouer l’envoi. Preuve fournisseur réelle et résolution générale restent à valider."
+    },
+    {
+      "key": "JOS-008",
+      "phase": "F2",
+      "title": "Créer le service de connexions, coffre et cycle OAuth",
+      "priority": 2,
+      "status": "in_progress_local_not_synced",
+      "agent_role": "integrations-mcp-oauth",
+      "reviewer_role": "politique-autonomie",
+      "depends_on": [
+        "JOS-002",
+        "JOS-003"
+      ],
+      "required": true,
+      "objective": "Gérer authentification, scopes, renouvellement et références de secrets hors du contexte LLM.",
+      "acceptance": [
+        "Le navigateur et les prompts ne reçoivent pas les secrets des fournisseurs.",
+        "Connexion, expiration, renouvellement, révocation et diagnostic testés.",
+        "L’exécutant ne peut pas modifier directement la politique ni le coffre."
+      ],
+      "labels": [
+        "jarvis-os-personnel",
+        "F2",
+        "agent:integrations-mcp-oauth"
+      ],
+      "linear_issue_id": null,
+      "linear_url": null,
+      "assignee_user_id": null,
+      "implementation_note": "OAuth Google PKCE, scopes, renouvellement et révocation livrés et testés par HTTP contrôlé ; coffre local 0600, isolation système et connexion réelle restent à réaliser."
+    },
+    {
+      "key": "JOS-009",
+      "phase": "F2",
+      "title": "Connecter des serveurs MCP HTTP et stdio avec découverte réelle",
+      "priority": 2,
+      "status": "in_progress_local_not_synced",
+      "agent_role": "integrations-mcp-oauth",
+      "reviewer_role": "qa-independante",
+      "depends_on": [
+        "JOS-008"
+      ],
+      "required": true,
+      "objective": "Supporter ajout d’un serveur, authentification adaptée, découverte des outils et affectation par scope.",
+      "acceptance": [
+        "Un serveur HTTP OAuth et un serveur stdio contrôlé testés réellement.",
+        "Schémas d’outils versionnés ; outils sélectionnables par rôle et projet.",
+        "Révocation bloque le prochain appel ; aucun wildcard de serveur ne crée de mandat implicite."
+      ],
+      "labels": [
+        "jarvis-os-personnel",
+        "F2",
+        "agent:integrations-mcp-oauth"
+      ],
+      "linear_issue_id": null,
+      "linear_url": null,
+      "assignee_user_id": null,
+      "implementation_note": "MCP HTTP et stdio intégrés et testés avec processus réels, découverte, sélection, révocation et arrêt. Serveurs tiers et OAuth MCP générique restent à vérifier."
+    },
+    {
+      "key": "JOS-010",
+      "phase": "F2",
+      "title": "Exécuter API et MCP via une passerelle d’outils typés",
+      "priority": 2,
+      "status": "in_progress_local_not_synced",
+      "agent_role": "runtime-outils",
+      "reviewer_role": "fiabilite-distribuee",
+      "depends_on": [
+        "JOS-001",
+        "JOS-002",
+        "JOS-007",
+        "JOS-008"
+      ],
+      "required": true,
+      "objective": "Le modèle propose, la passerelle valide le mandat puis exécute avec quotas, timeout et reçu.",
+      "acceptance": [
+        "Mêmes règles pour un outil natif et un outil MCP.",
+        "Appel sans droit ou invalide refusé avant effet ; résultats typés et expurgés.",
+        "Tous les appels écrivent des événements corrélés et un résultat réconciliable."
+      ],
+      "labels": [
+        "jarvis-os-personnel",
+        "F2",
+        "agent:runtime-outils"
+      ],
+      "linear_issue_id": null,
+      "linear_url": null,
+      "assignee_user_id": null,
+      "implementation_note": "Passerelle web/MCP/Gmail/réseau interne reliée à la boucle cognitive ; mandats, validation et reçus contrôlés. Comptes externes réels restent non vérifiés."
+    },
+    {
+      "key": "JOS-011",
+      "phase": "F2",
+      "title": "Livrer recherche web sourcée et navigateur isolé",
+      "priority": 2,
+      "status": "planned_not_started",
+      "agent_role": "recherche-navigateur",
+      "reviewer_role": "qa-independante",
+      "depends_on": [
+        "JOS-009",
+        "JOS-010"
+      ],
+      "required": true,
+      "objective": "Permettre recherche, lecture, navigation, téléchargement et vérification web dans le mandat.",
+      "acceptance": [
+        "Une question exigeant recherche livre des sources consultées et datées.",
+        "Navigation Playwright réelle avec preuves, limites réseau et contexte isolé.",
+        "Coupure/reprise et contenu hostile testés ; aucune action externe hors mandat."
+      ],
+      "labels": [
+        "jarvis-os-personnel",
+        "F2",
+        "agent:recherche-navigateur"
+      ],
+      "linear_issue_id": null,
+      "linear_url": null,
+      "assignee_user_id": null
+    },
+    {
+      "key": "JOS-012",
+      "phase": "F2",
+      "title": "Livrer le premier connecteur email fiable et autonome",
+      "priority": 2,
+      "status": "in_progress_local_not_synced",
+      "agent_role": "courriel-fiable",
+      "reviewer_role": "fiabilite-distribuee",
+      "depends_on": [
+        "JOS-007",
+        "JOS-008",
+        "JOS-010"
+      ],
+      "required": true,
+      "objective": "Choisir Graph ou Gmail selon le compte connecté, puis lire, préparer et envoyer dans les destinataires délégués.",
+      "acceptance": [
+        "Parcours réel OAuth → lecture → brouillon → envoi à l’adresse de test mandatée → reçu.",
+        "Après timeout post-envoi, rapprochement avant réémission ; état inconnu conservé si non résoluble.",
+        "Révocation, pièces jointes et quotas testés sans exposer de secret."
+      ],
+      "labels": [
+        "jarvis-os-personnel",
+        "F2",
+        "agent:courriel-fiable"
+      ],
+      "linear_issue_id": null,
+      "linear_url": null,
+      "assignee_user_id": null,
+      "implementation_note": "Gmail : lecture, recherche, brouillon, envoi et rapprochement Message-ID livrés avec OAuth PKCE. Tests contrôlés ; aucun compte réel ni envoi réel validé."
+    },
+    {
+      "key": "JOS-013",
+      "phase": "F2",
+      "title": "Connecter GitHub, Linear et le staging au même plan de contrôle",
+      "priority": 2,
+      "status": "planned_not_started",
+      "agent_role": "integrations-mcp-oauth",
+      "reviewer_role": "sre-execution",
+      "depends_on": [
+        "JOS-009",
+        "JOS-010"
+      ],
+      "required": true,
+      "objective": "Créer et suivre issues, branches, PR, vérifications et déploiements de projet avec des reçus.",
+      "acceptance": [
+        "Linear/GitHub réellement connectés ; IDs distants et permissions vérifiés.",
+        "Staging choisi dans le mandat, déploiement et retour arrière testables.",
+        "Même statut effectif dans Board, CLI et Telegram ; erreurs d’accès explicites."
+      ],
+      "labels": [
+        "jarvis-os-personnel",
+        "F2",
+        "agent:integrations-mcp-oauth"
+      ],
+      "linear_issue_id": null,
+      "linear_url": null,
+      "assignee_user_id": null
+    },
+    {
+      "key": "JOS-014",
+      "phase": "F3",
+      "title": "Unifier le runtime des agents outillés et les sessions du Board",
+      "priority": 2,
+      "status": "in_progress_local_not_synced",
+      "agent_role": "runtime-outils",
+      "reviewer_role": "architecte-agentique",
+      "depends_on": [
+        "JOS-001",
+        "JOS-002",
+        "JOS-003",
+        "JOS-010"
+      ],
+      "required": true,
+      "objective": "Une mission du Board doit exécuter le même contrat d’agent outillé que les autres voies.",
+      "acceptance": [
+        "Profils documentaire et outillé explicites ; ne pas supprimer globalement toutes les restrictions.",
+        "Boucle modèle → outil → observation → vérification avec budget, contexte et annulation.",
+        "Run/session réel lié à chaque avatar ; événements d’activité pendant l’exécution."
+      ],
+      "labels": [
+        "jarvis-os-personnel",
+        "F3",
+        "agent:runtime-outils"
+      ],
+      "linear_issue_id": null,
+      "linear_url": null,
+      "assignee_user_id": null,
+      "implementation_note": "Boucle durable typée et adaptateur OpenAI Responses, checkpoints, budgets, pause/annulation et revue distincte livrés ; modèle lié à chaque run. Migration des missions historiques et projets dépendants restent à réaliser."
+    },
+    {
+      "key": "JOS-015",
+      "phase": "F3",
+      "title": "Compiler les prompts du chef et des spécialistes depuis les contrats",
+      "priority": 2,
+      "status": "in_progress_local_not_synced",
+      "agent_role": "prompts-evaluations",
+      "reviewer_role": "qa-independante",
+      "depends_on": [
+        "JOS-001",
+        "JOS-002",
+        "JOS-014"
+      ],
+      "required": true,
+      "objective": "Adapter le chef à l’usage personnel et injecter le rôle, le mandat et les outils effectivement disponibles.",
+      "acceptance": [
+        "Aucune contradiction entre prompt, politique et capacités du runtime.",
+        "Brief ciblé par spécialiste, stratégie d’escalade, preuves attendues et boucle de correction bornée.",
+        "Versions/canaris existants réutilisés ; tests métier avant promotion."
+      ],
+      "labels": [
+        "jarvis-os-personnel",
+        "F3",
+        "agent:prompts-evaluations"
+      ],
+      "linear_issue_id": null,
+      "linear_url": null,
+      "assignee_user_id": null,
+      "implementation_note": "Instructions du nouveau runtime compilées depuis contrats et catalogue contrôlés ; prompts du chef et spécialistes historiques restent à unifier et évaluer."
+    },
+    {
+      "key": "JOS-016",
+      "phase": "F3",
+      "title": "Livrer une mémoire de projet sourcée et un contexte sélectionné",
+      "priority": 2,
+      "status": "planned_not_started",
+      "agent_role": "memoire-contextes",
+      "reviewer_role": "qa-independante",
+      "depends_on": [
+        "JOS-001",
+        "JOS-008"
+      ],
+      "required": true,
+      "objective": "Récupérer faits, décisions et artefacts utiles sans copier toutes les conversations.",
+      "acceptance": [
+        "Recherche lexicale/sémantique comparée sur un corpus de projet avec sources.",
+        "Permissions, fraîcheur, invalidation et distinction fait/hypothèse/décision appliquées.",
+        "Chaque épisode de session renvoie aux preuves ; pas de faits inventés à partir d’un résumé."
+      ],
+      "labels": [
+        "jarvis-os-personnel",
+        "F3",
+        "agent:memoire-contextes"
+      ],
+      "linear_issue_id": null,
+      "linear_url": null,
+      "assignee_user_id": null
+    },
+    {
+      "key": "JOS-017",
+      "phase": "F3",
+      "title": "Rendre le dispatch spécialisé efficace et piloté par dépendances",
+      "priority": 2,
+      "status": "planned_not_started",
+      "agent_role": "architecte-agentique",
+      "reviewer_role": "sre-execution",
+      "depends_on": [
+        "JOS-014",
+        "JOS-015"
+      ],
+      "required": true,
+      "objective": "Faire gérer files, limites et rappels par du code, et réserver le modèle à la planification utile.",
+      "acceptance": [
+        "Parallélisme selon DAG, budgets et conflits de fichiers/ressources.",
+        "Pas d’agents permanents inutiles ni de réveil LLM sans événement utile.",
+        "Mesurer qualité, temps, consommation et interventions face à la baseline."
+      ],
+      "labels": [
+        "jarvis-os-personnel",
+        "F3",
+        "agent:architecte-agentique"
+      ],
+      "linear_issue_id": null,
+      "linear_url": null,
+      "assignee_user_id": null
+    },
+    {
+      "key": "JOS-018",
+      "phase": "F3",
+      "title": "Lier la réussite aux preuves métier et à une contre-revue indépendante",
+      "priority": 2,
+      "status": "in_progress_local_not_synced",
+      "agent_role": "qa-independante",
+      "reviewer_role": "prompts-evaluations",
+      "depends_on": [
+        "JOS-014",
+        "JOS-015",
+        "JOS-016"
+      ],
+      "required": true,
+      "objective": "Remplacer l’acceptation de forme Markdown comme preuve suffisante de livraison.",
+      "acceptance": [
+        "Verdict lié au SHA/empreinte et au livrable effectivement vérifié.",
+        "Tests logiciels, critères métier, reçu externe et vérification navigateur selon la tâche.",
+        "Un auteur ne valide pas seul sa propre livraison ; faux succès détectés dans le corpus."
+      ],
+      "labels": [
+        "jarvis-os-personnel",
+        "F3",
+        "agent:qa-independante"
+      ],
+      "linear_issue_id": null,
+      "linear_url": null,
+      "assignee_user_id": null,
+      "implementation_note": "Le nouveau runtime exige une revue distincte et des références avant réussite ; référentiels métier et revue agentique automatique restent à réaliser."
+    },
+    {
+      "key": "JOS-019",
+      "phase": "F4",
+      "title": "Prouver Temporal sur un workflow de projet interrompu",
+      "priority": 2,
+      "status": "in_progress_local_not_synced",
+      "agent_role": "workflow-temporal",
+      "reviewer_role": "fiabilite-distribuee",
+      "depends_on": [
+        "JOS-001",
+        "JOS-003"
+      ],
+      "required": true,
+      "objective": "Prototype séparé pour DAG, activité, signal externe, timer, replay et changement de version.",
+      "acceptance": [
+        "Tuer puis relancer un worker conserve la progression et l’attente externe.",
+        "Aucun appel modèle/outil dans le code déterministe du workflow.",
+        "Rejouer un historique enregistré avec une nouvelle version du code et démontrer la continuation des anciens workflows.",
+        "Rapport mesuré : exploitation, historique, reprise et décision d’adoption."
+      ],
+      "labels": [
+        "jarvis-os-personnel",
+        "F4",
+        "agent:workflow-temporal"
+      ],
+      "linear_issue_id": null,
+      "linear_url": null,
+      "assignee_user_id": null,
+      "implementation_note": "Prototype SDK séparé et 17 tests livrés ; serveur officiel bloqué par le réseau cloud, reprise réelle et replay non validés."
+    },
+    {
+      "key": "JOS-020",
+      "phase": "F4",
+      "title": "Migrer les missions par moteur sans double ordonnanceur",
+      "priority": 2,
+      "status": "planned_not_started",
+      "agent_role": "workflow-temporal",
+      "reviewer_role": "architecte-agentique",
+      "depends_on": [
+        "JOS-004",
+        "JOS-006",
+        "JOS-007",
+        "JOS-019"
+      ],
+      "required": true,
+      "objective": "Temporal devient propriétaire des reprises pour les missions migrées et seulement celles-ci.",
+      "acceptance": [
+        "execution_engine local/handoff_pending/temporal et workflow_id persistés ; outbox de transfert et démarrage idempotent, sans transaction DB/Temporal supposée.",
+        "missions.recuperer ne replanifie pas un workflow Temporal.",
+        "Tests crash : workflow créé/accusé perdu ; intention DB conservée/workflow absent ; anciennes tentatives drainées avant transfert.",
+        "Reprise, rollback de migration, versionnement et correspondance des événements testés."
+      ],
+      "labels": [
+        "jarvis-os-personnel",
+        "F4",
+        "agent:workflow-temporal"
+      ],
+      "linear_issue_id": null,
+      "linear_url": null,
+      "assignee_user_id": null
+    },
+    {
+      "key": "JOS-021",
+      "phase": "F4",
+      "title": "Construire le workflow projet recherche → livraison → suivi",
+      "priority": 2,
+      "status": "planned_not_started",
+      "agent_role": "workflow-temporal",
+      "reviewer_role": "qa-independante",
+      "depends_on": [
+        "JOS-011",
+        "JOS-012",
+        "JOS-013",
+        "JOS-014",
+        "JOS-017",
+        "JOS-018",
+        "JOS-020"
+      ],
+      "required": true,
+      "objective": "Orchestrer dépendances, production parallèle, revue, corrections, staging, vérification et communication.",
+      "acceptance": [
+        "Étapes et critères explicites, résultats réutilisés sans recommencer tout le projet.",
+        "Attentes de services et événements externes avec timers, backoff et compensation.",
+        "Budget et mandat traversent la délégation ; résultat durable visible dans le Board."
+      ],
+      "labels": [
+        "jarvis-os-personnel",
+        "F4",
+        "agent:workflow-temporal"
+      ],
+      "linear_issue_id": null,
+      "linear_url": null,
+      "assignee_user_id": null
+    },
+    {
+      "key": "JOS-022",
+      "phase": "F5",
+      "title": "Livrer une page Intégrations fonctionnelle pour MCP et API",
+      "priority": 2,
+      "status": "in_progress_local_not_synced",
+      "agent_role": "frontend-integrations",
+      "reviewer_role": "ux-observabilite",
+      "depends_on": [
+        "JOS-008",
+        "JOS-009",
+        "JOS-010"
+      ],
+      "required": true,
+      "objective": "Connecter les outils depuis l’interface et les affecter réellement au chef, aux rôles et aux projets.",
+      "acceptance": [
+        "Ajouter, authentifier, découvrir, tester, affecter et révoquer fonctionnent sur de vrais connecteurs.",
+        "États de connexion explicites et secrets absents du navigateur.",
+        "Une affectation modifie les capacités effectives du prochain run et laisse un événement."
+      ],
+      "labels": [
+        "jarvis-os-personnel",
+        "F5",
+        "agent:frontend-integrations"
+      ],
+      "linear_issue_id": null,
+      "linear_url": null,
+      "assignee_user_id": null,
+      "implementation_note": "Interface MCP HTTP/stdio, modèle API, mandats et OAuth Gmail livrée et testée dans Chromium ; connexion réelle aux comptes du propriétaire reste à valider."
+    },
+    {
+      "key": "JOS-023",
+      "phase": "F5",
+      "title": "Représenter chef, sessions et appels d’outils dans un graphe opérationnel",
+      "priority": 2,
+      "status": "in_progress_local_not_synced",
+      "agent_role": "ux-observabilite",
+      "reviewer_role": "frontend-integrations",
+      "depends_on": [
+        "JOS-014",
+        "JOS-020",
+        "JOS-022"
+      ],
+      "required": true,
+      "objective": "Rendre visibles délégations, dépendances, connexions, activité et preuves à partir des sources réelles.",
+      "acceptance": [
+        "Les avatars référencent des rôles et les sessions des runs distincts.",
+        "Clic sur un outil : mandat, état, tentative, reçu et preuve.",
+        "Reconnexion de flux, données périmées et affichage mobile testés."
+      ],
+      "labels": [
+        "jarvis-os-personnel",
+        "F5",
+        "agent:ux-observabilite"
+      ],
+      "linear_issue_id": null,
+      "linear_url": null,
+      "assignee_user_id": null,
+      "implementation_note": "Missions outillées visibles avec états, tours, traces publiques et contrôles ; graphe unifié chef/sessions/outils reste à construire."
+    },
+    {
+      "key": "JOS-024",
+      "phase": "F5",
+      "title": "Créer un projet autonome et son mandat depuis le Board",
+      "priority": 2,
+      "status": "in_progress_local_not_synced",
+      "agent_role": "frontend-integrations",
+      "reviewer_role": "politique-autonomie",
+      "depends_on": [
+        "JOS-002",
+        "JOS-021",
+        "JOS-022",
+        "JOS-023"
+      ],
+      "required": true,
+      "objective": "Donner une intention, choisir connexions/périmètre, examiner le plan puis lancer le cycle complet.",
+      "acceptance": [
+        "Préflight distingue les prérequis manquants des préférences facultatives.",
+        "Un mandat initial couvre les actions habituelles, avec budgets et révocation lisibles.",
+        "Pause/reprise/annulation agissent sur le workflow réel et affichent les effets incertains."
+      ],
+      "labels": [
+        "jarvis-os-personnel",
+        "F5",
+        "agent:frontend-integrations"
+      ],
+      "linear_issue_id": null,
+      "linear_url": null,
+      "assignee_user_id": null,
+      "implementation_note": "Création de mandat et mission outillée depuis le Board livrée ; compilation et ordonnanceur de projet complet restent à construire."
+    },
+    {
+      "key": "JOS-025",
+      "phase": "F6",
+      "title": "Exécuter le premier projet personnel réel de bout en bout",
+      "priority": 2,
+      "status": "planned_not_started",
+      "agent_role": "qa-independante",
+      "reviewer_role": "architecte-agentique",
+      "depends_on": [
+        "JOS-011",
+        "JOS-012",
+        "JOS-013",
+        "JOS-016",
+        "JOS-018",
+        "JOS-021",
+        "JOS-024"
+      ],
+      "required": true,
+      "objective": "Petit produit interne : besoin → sources → Linear → code → tests → revue → staging → email récapitulatif.",
+      "acceptance": [
+        "Connexions et données de test réellement autorisées, pas uniquement fournisseur factice.",
+        "Aucune intervention après mandat initial dans le scénario nominal.",
+        "Livraison vérifiée avec SHA, tests, URL/identifiant de staging et reçu email."
+      ],
+      "labels": [
+        "jarvis-os-personnel",
+        "F6",
+        "agent:qa-independante"
+      ],
+      "linear_issue_id": null,
+      "linear_url": null,
+      "assignee_user_id": null
+    },
+    {
+      "key": "JOS-026",
+      "phase": "F6",
+      "title": "Tester pannes, révocations, concurrence et effets inconnus",
+      "priority": 2,
+      "status": "in_progress_local_not_synced",
+      "agent_role": "fiabilite-distribuee",
+      "reviewer_role": "qa-independante",
+      "depends_on": [
+        "JOS-007",
+        "JOS-020",
+        "JOS-025"
+      ],
+      "required": true,
+      "objective": "Prouver la récupération du pilote à chaque frontière d’effet externe.",
+      "acceptance": [
+        "Crash avant/après envoi, retrait OAuth, coupure réseau, double événement et perte de bail couverts.",
+        "Aucun double effet observé ; unknown ne devient pas une réussite inventée.",
+        "Temps de récupération et cas nécessitant une exception documentés."
+      ],
+      "labels": [
+        "jarvis-os-personnel",
+        "F6",
+        "agent:fiabilite-distribuee"
+      ],
+      "linear_issue_id": null,
+      "linear_url": null,
+      "assignee_user_id": null,
+      "implementation_note": "Tests de crash, concurrence, OAuth, transport et arrêt MCP intégrés ; pannes de projet complet, serveur Temporal et restauration restent à éprouver."
+    },
+    {
+      "key": "JOS-027",
+      "phase": "F6",
+      "title": "Évaluer modèles, prompts et autonomie avec des scores métier",
+      "priority": 2,
+      "status": "planned_not_started",
+      "agent_role": "prompts-evaluations",
+      "reviewer_role": "qa-independante",
+      "depends_on": [
+        "JOS-015",
+        "JOS-018",
+        "JOS-025"
+      ],
+      "required": true,
+      "objective": "Choisir les modèles et versions selon résultats mesurés et non leur seul niveau déclaré.",
+      "acceptance": [
+        "Dix essais du pilote, score de succès vérifié, interventions, coûts et durée.",
+        "Objectif proposé : au moins neuf succès autonomes sur dix ; échecs conservés.",
+        "Modèle OpenAI réellement disponible testé sur planification et revue ; canari/retour arrière avant promotion."
+      ],
+      "labels": [
+        "jarvis-os-personnel",
+        "F6",
+        "agent:prompts-evaluations"
+      ],
+      "linear_issue_id": null,
+      "linear_url": null,
+      "assignee_user_id": null
+    },
+    {
+      "key": "JOS-028",
+      "phase": "F6",
+      "title": "Exploiter Jarvis personnel avec sauvegarde, reprise et mises à jour",
+      "priority": 2,
+      "status": "planned_not_started",
+      "agent_role": "sre-execution",
+      "reviewer_role": "fiabilite-distribuee",
+      "depends_on": [
+        "JOS-026",
+        "JOS-027"
+      ],
+      "required": true,
+      "objective": "Rendre le système utilisable au quotidien même après arrêt de la machine et changement de version.",
+      "acceptance": [
+        "Workers et services redémarrables ; dépendances et versions documentées.",
+        "Sauvegarde/restauration vérifiée de workflow, contrats, connexions et preuves.",
+        "Tableau de santé, coûts, alertes utiles et retour à une version stable testés."
+      ],
+      "labels": [
+        "jarvis-os-personnel",
+        "F6",
+        "agent:sre-execution"
+      ],
+      "linear_issue_id": null,
+      "linear_url": null,
+      "assignee_user_id": null
+    },
+    {
+      "key": "JOS-029",
+      "phase": "F3",
+      "title": "Comparer LangGraph et une boucle cognitive typée simple",
+      "priority": 3,
+      "status": "planned_not_started",
+      "agent_role": "runtime-outils",
+      "reviewer_role": "prompts-evaluations",
+      "depends_on": [
+        "JOS-014"
+      ],
+      "required": false,
+      "objective": "Décider sur preuves si LangGraph améliore suffisamment le runtime, sans imposer LangChain au cœur.",
+      "acceptance": [
+        "Même scénario, outils, modèle et budget pour les deux implémentations.",
+        "Comparer qualité, reprise, complexité, coût et délai ; documenter go/no-go.",
+        "Si retenu, périmètre de checkpoints borné et absence de double retry avec Temporal."
+      ],
+      "labels": [
+        "jarvis-os-personnel",
+        "F3",
+        "agent:runtime-outils"
+      ],
+      "linear_issue_id": null,
+      "linear_url": null,
+      "assignee_user_id": null
+    },
+    {
+      "key": "JOS-030",
+      "phase": "F3",
+      "title": "Ouvrir le réseau libre des agents à toute l’usine",
+      "priority": 2,
+      "status": "implemented_locally_not_synced",
+      "agent_role": "runtime-outils",
+      "reviewer_role": "qa-independante",
+      "depends_on": [
+        "JOS-001"
+      ],
+      "required": true,
+      "objective": "Permettre aux agents de discuter librement des modèles, de l’usine et de tout sujet, avec projets et tâches facultatifs.",
+      "acceptance": [
+        "Salon général global et salons libres, publications et réponses persistantes, aucun filtre sémantique ni preuve obligatoire pour parler.",
+        "Identité contrôlée côté HTTP/CLI, pagination, idempotence et limites techniques de stockage.",
+        "Réseau visible dans le Board ; prompts et notifications permettent aux sessions réelles de participer sans opinions inventées.",
+        "Promotion distincte en leçon après relecture ; aucune conversation ne change implicitement droits ou logiciel."
+      ],
+      "implementation_note": "Réseau global libre, CLI/API/interface et prompts livrés ; outils de publication/réponse utilisables par le nouveau runtime sous mandat usine. Parcours Chromium avec fournisseur factice explicite validé ; aucun modèle distant présenté actif.",
+      "labels": [
+        "jarvis-os-personnel",
+        "F3",
+        "agent:runtime-outils"
+      ],
+      "linear_issue_id": null,
+      "linear_url": null,
+      "assignee_user_id": null
+    }
+  ],
+  "implementation": {
+    "updated_at": "2026-10-23",
+    "stage": "F0_F1_integrations_and_cognitive_runtime_implemented_locally",
+    "branch": "fix/board-agents-live",
+    "linear_synced": false,
+    "documentation": "docs/jarvis-os/LIVRAISON_RUNTIME.md",
+    "validation": {
+      "python_executed": 700,
+      "python_passed": 598,
+      "python_skipped": 102,
+      "chromium_passed": 18,
+      "temporal_sdk_passed": 17,
+      "authenticated_os_api_smoke": "passed_7_routes_401_without_session",
+      "real_https_gateway_smoke": "passed_pypi_org",
+      "model_inference": "not_verified_no_openai_key",
+      "temporal_server": "not_verified_network_403",
+      "independent_review": "completed_after_corrections_shutdown_and_unknown_write",
+      "gmail_account": "not_verified_no_google_account",
+      "runtime_controlled_provider": "passed_persistent_runtime_gateway_forum_review",
+      "mcp_stdio": "passed_real_processes_gateway_shutdown",
+      "oauth_http": "passed_controlled_provider_pkce",
+      "shellcheck": "15_preexisting_0_new"
+    },
+    "remaining": [
+      "Configurer les références de clés OpenAI et du client OAuth Google, publier les domaines réseau et vérifier une inférence puis un compte réel.",
+      "Isoler les exécutants et le coffre avec des identités système distinctes ; le MCP stdio conserve les droits Linux du propriétaire.",
+      "Valider le serveur Temporal, la reprise et le replay réels puis construire le workflow projet et la migration à propriétaire unique.",
+      "Unifier les missions historiques, le dispatch spécialisé, la mémoire sourcée et la revue agentique automatique.",
+      "Connecter Linear/Git/staging et prouver un projet complet, PostgreSQL réel et la restauration."
+    ],
+    "running_services": [
+      "daemon",
+      "cockpit",
+      "studio_port_7718"
+    ]
+  }
+}

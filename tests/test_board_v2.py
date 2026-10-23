@@ -711,6 +711,32 @@ class SynchroTest(Base):
 
 
 class ApiV2Test(test_studio.StudioTest):
+    def test_socle_os_exige_session_et_distingue_diagnostic_et_mandats(self):
+        for route in ("schemas", "capacites", "mandats"):
+            self.assertEqual(self.req("GET", "/api/v2/os/" + route)[0], 401)
+        self.connecter()
+        code, data, _ = self.req("GET", "/api/v2/os/schemas")
+        self.assertEqual(code, 200)
+        self.assertEqual(data["agent"]["title"], "AgentSpec")
+        with mock.patch("jarvis.capacites.collecter", return_value={"version": 1, "capacites": []}) as collecte:
+            self.assertEqual(self.req("GET", "/api/v2/os/capacites")[0], 200)
+            collecte.assert_called_once_with()  # aucune sonde réseau implicite côté navigateur
+        from jarvis import mandats
+        with mock.patch.object(mandats, "lister", side_effect=mandats.MandatError("registre corrompu")):
+            self.assertEqual(self.req("GET", "/api/v2/os/mandats")[0], 503)
+
+    def test_activite_exige_session_et_expose_une_vue_sans_secret(self):
+        self.assertEqual(self.req("GET", "/api/v2/activite")[0], 401)
+        self.connecter()
+        with mock.patch("jarvis.agents.status_all", return_value=([], "")):
+            code, data, _ = self.req("GET", "/api/v2/activite?espace=alpha")
+        self.assertEqual(code, 200)
+        self.assertEqual(data["espace"], "alpha")
+        self.assertEqual(data["sessions"], [])
+        self.assertIn("taches", data)
+        with mock.patch("jarvis.agents.status_all", return_value=([], "")):
+            self.assertEqual(self.req("GET", "/api/v2/activite/" + "0" * 24 + "/apercu")[0], 404)
+
     """Mêmes serveur et session que les tests du Studio ; routes /api/v2 et page /v2."""
 
     def brut(self, methode, chemin, corps: bytes, entetes: dict):

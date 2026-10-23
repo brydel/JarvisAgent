@@ -36,11 +36,11 @@ import sqlite3
 import sys
 import time
 from pathlib import Path
-from typing import Iterator
+from typing import Callable, Iterator
 
-from . import config, protocole_executant as proto
+from . import config, outbox, protocole_executant as proto
 
-SCHEMA_VERSION = 3  # 2 : Board V2 (géométrie, priorité, relations, fichiers, commentaires) ; 3 : chef (auteur des liens, actions auto)
+SCHEMA_VERSION = 4  # 4 : intentions outbox et reçus inbox durables (ajouts seulement)
 FICHIER = "missions.db"
 
 TENANT_LOCAL = "ORG-personnel"
@@ -179,6 +179,8 @@ CREATE TABLE IF NOT EXISTS board_commentaires (
     id TEXT PRIMARY KEY, tenant_id TEXT NOT NULL, objet_id TEXT NOT NULL, auteur TEXT NOT NULL, texte TEXT NOT NULL,
     cree REAL NOT NULL);
 """
+
+_SCHEMA += outbox.SCHEMA_SQLITE
 
 # Colonnes du Board V2 ajoutées aux bases existantes (version 2 du schéma) : aucune donnée n'est réécrite.
 COLONNES_BOARD_V2 = (
@@ -519,17 +521,24 @@ def creer_mission(tenant_id: str, objectif: str, taches: list[dict], *, source: 
         raise MissionError("spec", f"1 à {TACHES_PAR_MISSION_MAX} tâches par mission")
     specs = [_valider_spec(t) for t in taches]
     with transaction(tenant_id) as c:
-        _reglages(c, tenant_id)
-        if cle_idempotence:
-            existante = c.execute("SELECT id FROM missions WHERE tenant_id=? AND cle_idempotence=?",
-                                  (tenant_id, cle_idempotence)).fetchone()
-            if existante:
-                return {"mission_id": existante["id"], "doublon": True}
-        mid = _id("MI")
-        c.execute("INSERT INTO missions VALUES (?,?,?,?,?,?,?,?,?,?)",
-                  (mid, tenant_id, objectif[:2000], source, demandeur, "OPEN", _id("C"), cle_idempotence, now, now))
-        _evenement(c, tenant_id, "mission_creee", mission_id=mid, now=now, source=source, objectif=objectif[:200])
-        ids = [_inserer_tache(c, tenant_id, mid, s, demandeur, now) for s in specs]
+        return _creer_mission(c, tenant_id, objectif, specs, source=source, demandeur=demandeur,
+                              cle_idempotence=cle_idempotence, now=now)
+
+
+def _creer_mission(c, tenant_id: str, objectif: str, specs: list[dict], *, source: str, demandeur: str,
+                   cle_idempotence: str | None, now: float) -> dict:
+    """Variante interne : rejoint la transaction appelante, sans frontière de commit intermédiaire."""
+    _reglages(c, tenant_id)
+    if cle_idempotence:
+        existante = c.execute("SELECT id FROM missions WHERE tenant_id=? AND cle_idempotence=?",
+                              (tenant_id, cle_idempotence)).fetchone()
+        if existante:
+            return {"mission_id": existante["id"], "doublon": True}
+    mid = _id("MI")
+    c.execute("INSERT INTO missions VALUES (?,?,?,?,?,?,?,?,?,?)",
+              (mid, tenant_id, objectif[:2000], source, demandeur, "OPEN", _id("C"), cle_idempotence, now, now))
+    _evenement(c, tenant_id, "mission_creee", mission_id=mid, now=now, source=source, objectif=objectif[:200])
+    ids = [_inserer_tache(c, tenant_id, mid, spec, demandeur, now) for spec in specs]
     return {"mission_id": mid, "taches": ids, "doublon": False}
 
 
@@ -674,15 +683,20 @@ def reclamer(executant_id: str, secret: str, *, now: float | None = None) -> dic
             c.execute("INSERT INTO tentatives (id, tenant_id, tache_id, executant_id, bail_jeton, fournisseur, "
                       "cle_idempotence, debut) VALUES (?,?,?,?,?,?,?,?)",
                       (aid, tenant, t["id"], executant_id, jeton, fournisseur, cle, now))
-            m = c.execute("SELECT correlation_id FROM missions WHERE id=?", (t["mission_id"],)).fetchone()
-            return {
+            m = c.execute("SELECT correlation_id, objectif, source FROM missions WHERE id=?", (t["mission_id"],)).fetchone()
+            enveloppe = {
                 "version": proto.VERSION, "tenant_id": tenant, "mission_id": t["mission_id"], "tache_id": t["id"],
                 "tentative_id": aid, "correlation_id": m["correlation_id"], "capacites": json.loads(t["capacites"]),
                 "niveau": t["niveau"], "fournisseur": fournisseur,
                 "travail": {"type": t["type"], **json.loads(t["travail"])}, "delai_s": t["delai_s"],
                 "limites": {"bail_s": BAIL_S}, "bail_jeton": jeton, "bail_expire": expire,
                 "cle_idempotence": cle, "decision_politique": t["raison"] or "file",
+                "objectif": m["objectif"], "mission_source": m["source"],
+                "essais_max": t["essais_max"],
             }
+            from . import specifications
+            enveloppe["contrats"] = specifications.pour_mission(enveloppe)
+            return enveloppe
     return None
 
 
@@ -759,20 +773,31 @@ def rendre_resultat(executant_id: str, secret: str, resultat: dict, *, now: floa
             _evenement(c, e["tenant_id"], "resultat_perime", tache_id=r["tache_id"], now=now,
                        tentative_id=r["tentative_id"], executant_id=executant_id, raison=str(exc))
         raise
-    for effet in sortie.pop("_apres", []):
-        try:
-            effet()
-        except Exception as exc:  # noqa: BLE001 — l'effet est un plus : le résultat, lui, est déjà enregistré
-            _journal_effet(exc)
+    # Les intentions ont été validées avec le résultat. Ici seules les projections locales bornées
+    # sont rapprochées ; Telegram/tmux sont remis par le passage du démon, jamais sous transaction.
+    _traiter_effets_locaux()
     return sortie
 
 
-def _journal_effet(exc: Exception) -> None:
+def _traiter_effets_locaux() -> None:
     try:
-        from . import store
-        store.feed_add("erreur", f"chef : action automatique non lancée ({exc})")
-    except Exception:  # noqa: BLE001
+        traiter_outbox(limite=50, sortes=outbox.SORTES_LOCALES)
+    except Exception:  # noqa: BLE001 — le commit métier est fait, la prochaine passe reprend l'intention
         pass
+
+
+def traiter_outbox(*, tenant_id: str | None = None, limite: int = 20, now: float | None = None,
+                   sortes: tuple[str, ...] | None = None, interrompu: Callable[[], bool] | None = None) -> dict:
+    return outbox.traiter(tenant_id=tenant_id, limite=limite, now=now, sortes=sortes, interrompu=interrompu)
+
+
+def etat_outbox(tenant_id: str, *, limite: int = 100) -> dict:
+    return outbox.etat(tenant_id, limite=limite)
+
+
+def relancer_effet(tenant_id: str, effet_id: str, *, par: str, confirmer_inconnu: bool = False,
+                   now: float | None = None) -> dict:
+    return outbox.relancer(tenant_id, effet_id, par=par, confirmer_inconnu=confirmer_inconnu, now=now)
 
 
 def _appliquer_resultat(c: sqlite3.Connection, executant_id: str, secret: str, r: dict, now: float) -> dict:
@@ -808,14 +833,16 @@ def _appliquer_resultat(c: sqlite3.Connection, executant_id: str, secret: str, r
         if not ok:  # l'artefact refusé reste consultable ; un nouvel essai est planifié si le budget d'essais le permet
             return {**_echec(c, t, now, f"revue refusée : {raison}"), "issue": "reussi"}
         _transition(c, t, SUCCEEDED, now=now, raison=f"revue : {raison}")
-        apres = []
         if t["type"] == "contextualiser":
-            apres = _enregistrer_propositions(c, t, r["contenu"], now)
+            _enregistrer_propositions(c, t, r["contenu"], now)
         else:
             livrable = _poser_livrable(c, t, r["contenu"], now)
             if livrable:
-                apres = [lambda: _synchro("apres_livrable", t["tenant_id"], livrable)]
-        return {"acquitte": True, "doublon": False, "issue": "reussi", "statut": SUCCEEDED, "_apres": apres}
+                carte = c.execute("SELECT * FROM board_objets WHERE tenant_id=? AND id=?", (t["tenant_id"], livrable)).fetchone()
+                outbox.enregistrer(c, t["tenant_id"], "synchro.livrable",
+                                   {"objet_id": livrable, "snapshot": _instantane_notification(carte)},
+                                   cle=f"livrable:{livrable}", now=now)
+        return {"acquitte": True, "doublon": False, "issue": "reussi", "statut": SUCCEEDED}
     if r["issue"] == "fournisseur_indisponible":
         c.execute("UPDATE connexions SET indisponible_jusqua=?, raison=? WHERE tenant_id=? AND fournisseur=?",
                   (now + INDISPONIBILITE_S, r.get("erreur", "")[:200], t["tenant_id"], tent["fournisseur"]))
@@ -1053,81 +1080,126 @@ def extraire_propositions(contenu: str) -> tuple[str, list[dict]]:
 
 
 def decider_proposition(tenant_id: str, objet_id: str, index: int, decision: str, *, par: str,
-                        now: float | None = None) -> dict:
-    """L'humain lance ou écarte une action proposée par le chef. « Lancer » crée une mission L1 de PRÉPARATION
-    (brouillon, plan, texte) : une action L2/L3 (écrire chez toi, envoyer, postuler…) n'est jamais exécutée par
-    Jarvis ici, il en prépare le livrable et l'étape externe reste la tienne. La carte de mission est posée à
-    droite de l'élément et reliée à lui."""
+                        now: float | None = None, operation_id: str | None = None,
+                        generation: str | None = None) -> dict:
+    """Décision, mission, tâche, carte, lien et intention de notification dans UN commit.
+
+    Une proposition L2/L3 reste une préparation documentaire L1. `operation_id` sert aux reprises internes :
+    un reçu inbox est écrit avec les effets métier ; une génération ancienne n'agit pas sur une nouvelle analyse.
+    """
     if decision not in ("lancer", "ecarter"):
         raise MissionError("board", "décision : « lancer » ou « ecarter »")
-    now = now or time.time()
-    c = _connecter(tenant_id)
-    try:
-        o = c.execute("SELECT * FROM board_objets WHERE id=? AND tenant_id=? AND supprime=0", (objet_id, tenant_id)).fetchone()
-    finally:
-        c.close()
-    if o is None:
-        raise MissionError("inconnue", f"objet inconnu : {objet_id}")
-    meta = json.loads(o["meta"] or "{}")
-    props = meta.get("propositions") or []
-    if not isinstance(index, int) or not 0 <= index < len(props):
+    if type(index) is not int:
         raise MissionError("inconnue", "proposition inconnue")
-    p = props[index]
-    if p.get("statut") != "proposee":
-        raise MissionError("conflit", f"proposition déjà {p.get('statut')}")
-    sortie: dict = {"objet_id": objet_id}
-    if decision == "lancer":
-        externe = p["niveau"] != "L1"
-        document = (f"Action à préparer : {p['titre']}\nPourquoi : {p.get('pourquoi', '')}\n"
-                    + ("Cette action touche l'extérieur ou tes fichiers : prépare seulement le livrable, l'humain "
-                       "fera lui-même l'étape externe.\n" if externe else "")
-                    + f"\nÉlément du Board ({o['type']}) : {meta.get('titre', '')}\n{o['contenu'][:15_000]}\n"
-                    f"\nSynthèse du chef : {meta.get('jarvis_resume', '')}")
-        m = creer_mission(tenant_id, f"Préparer : {p['titre']}"[:500],
-                          [{"type": "preparer", "niveau": "L1", "capacites": ["analyse"], "travail": {"document": document},
-                            "delai_s": DELAI_PREPARATION_S}],
-                          source="board-proposition", demandeur=par, cle_idempotence=f"proposition:{meta.get('jarvis_mission', objet_id)}:{index}", now=now)
-        c = _connecter(tenant_id)
-        try:
-            x, y = place_libre(c, tenant_id, o["espace"], o["x"] + (o["largeur"] or 400) + 120, o["y"], 452, 362)
-        finally:
-            c.close()
-        carte = board_ajouter(tenant_id, o["espace"], "mission", "", auteur="jarvis", x=x, y=y, largeur=452, hauteur=362,
-                              priorite=o["priorite"] or "", mission_id=m["mission_id"],
-                              meta={"description": p.get("pourquoi", "")[:400], "proposition_de": objet_id}, now=now)
-        from . import board as _board  # board importe ce module : import tardif
-        _board.lier(tenant_id, o["espace"], objet_id, carte["objet_id"], libelle="proposé par Jarvis", style="alimente",
-                    par="jarvis")
-        p.update(statut="lancee", mission_id=m["mission_id"], par=par)
-        sortie.update(mission_id=m["mission_id"], carte_id=carte["objet_id"])
-    else:
-        p["statut"] = "ecartee"
+    now = time.time() if now is None else now
     with transaction(tenant_id) as c:
-        actuelle = c.execute("SELECT meta FROM board_objets WHERE id=? AND tenant_id=?", (objet_id, tenant_id)).fetchone()
-        m2 = json.loads(actuelle["meta"] or "{}")
-        if len(m2.get("propositions") or []) > index:
-            m2["propositions"][index] = p
-        c.execute("UPDATE board_objets SET meta=?, version=version+1, maj=? WHERE id=? AND tenant_id=?",
-                  (json.dumps(m2, ensure_ascii=False), now, objet_id, tenant_id))
-        _evenement(c, tenant_id, "board_proposition", now=now, objet_id=objet_id, index=index, decision=decision, par=par)
-    _synchro("apres_decision", tenant_id, objet_id, index, decision, par)
+        verrou = " FOR UPDATE" if backend().nom == "postgres" else ""
+        o = c.execute("SELECT * FROM board_objets WHERE id=? AND tenant_id=? AND supprime=0" + verrou,
+                      (objet_id, tenant_id)).fetchone()
+        if o is None:
+            raise MissionError("inconnue", f"objet inconnu : {objet_id}")
+        meta = json.loads(o["meta"] or "{}")
+        if generation is not None and (meta.get("jarvis_mission", objet_id) != generation
+                                       or o["mission_id"] != generation):
+            raise MissionError("obsolete", "la proposition appartient à une analyse remplacée")
+        if par == "jarvis:auto":
+            regles = _reglages(c, tenant_id)
+            if not regles["board_actions_auto"]:
+                raise MissionError("obsolete", "le lancement automatique a été désactivé depuis l'analyse")
+            if regles["arret_urgence"]:
+                raise MissionError("suspendu", "arrêt d'urgence actif : action automatique conservée en attente")
+
+        def appliquer():
+            props = meta.get("propositions") or []
+            if not isinstance(props, list) or not 0 <= index < len(props) or not isinstance(props[index], dict):
+                raise MissionError("inconnue", "proposition inconnue")
+            p = props[index]
+            if p.get("statut") != "proposee":
+                raise MissionError("conflit", f"proposition déjà {p.get('statut')}")
+            sortie = {"objet_id": objet_id}
+            if decision == "lancer":
+                externe = p["niveau"] != "L1"
+                document = (f"Action à préparer : {p['titre']}\nPourquoi : {p.get('pourquoi', '')}\n"
+                            + ("Cette action touche l'extérieur ou tes fichiers : prépare seulement le livrable, l'humain "
+                               "fera lui-même l'étape externe.\n" if externe else "")
+                            + f"\nÉlément du Board ({o['type']}) : {meta.get('titre', '')}\n{o['contenu'][:15_000]}\n"
+                              f"\nSynthèse du chef : {meta.get('jarvis_resume', '')}")
+                spec = _valider_spec({"type": "preparer", "niveau": "L1", "capacites": ["analyse"],
+                                      "travail": {"document": document}, "delai_s": DELAI_PREPARATION_S})
+                cle = f"proposition:{objet_id}:{meta.get('jarvis_mission', objet_id)}:{index}"
+                m = _creer_mission(c, tenant_id, f"Préparer : {p['titre']}"[:500], [spec],
+                                   source="board-proposition", demandeur=par, cle_idempotence=cle, now=now)
+                x, y = place_libre(c, tenant_id, o["espace"], o["x"] + (o["largeur"] or 400) + 120, o["y"], 452, 362)
+                oid, lid = _id("BO"), _id("BL")
+                z = (c.execute("SELECT COALESCE(MAX(z), 0) AS z FROM board_objets WHERE tenant_id=? AND espace=?",
+                               (tenant_id, o["espace"])).fetchone()["z"] or 0) + 1
+                carte_meta = {"description": str(p.get("pourquoi", ""))[:400], "proposition_de": objet_id}
+                c.execute("INSERT INTO board_objets (id, tenant_id, espace, type, contenu, x, y, auteur, cree, largeur, "
+                          "hauteur, z, priorite, meta, mission_id, maj) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                          (oid, tenant_id, o["espace"], "mission", "", x, y, "jarvis", now, 452, 362, z,
+                           o["priorite"] or "", json.dumps(carte_meta, ensure_ascii=False), m["mission_id"], now))
+                _evenement(c, tenant_id, "board_objet", now=now, objet_id=oid, type="mission", espace=o["espace"])
+                c.execute("INSERT INTO board_liens (id, tenant_id, espace, source_id, cible_id, libelle, style, cree, maj, auteur) "
+                          "VALUES (?,?,?,?,?,?,?,?,?,?)", (lid, tenant_id, o["espace"], objet_id, oid,
+                                                          "proposé par Jarvis", "alimente", now, now, "jarvis"))
+                _evenement(c, tenant_id, "board_lien", now=now, lien_id=lid, source_id=objet_id, cible_id=oid, par="jarvis")
+                p.update(statut="lancee", mission_id=m["mission_id"], carte_id=oid, par=par)
+                sortie.update(mission_id=m["mission_id"], carte_id=oid)
+            else:
+                p.update(statut="ecartee", par=par)
+            c.execute("UPDATE board_objets SET meta=?, version=version+1, maj=? WHERE id=? AND tenant_id=?",
+                      (json.dumps(meta, ensure_ascii=False), now, objet_id, tenant_id))
+            _evenement(c, tenant_id, "board_proposition", now=now, objet_id=objet_id, index=index, decision=decision, par=par)
+            outbox.enregistrer(c, tenant_id, "synchro.decision",
+                               {"objet_id": objet_id, "index": index, "decision": decision, "par": par,
+                                "snapshot": _instantane_notification(o, meta)},
+                               cle=f"decision:{objet_id}:{meta.get('jarvis_mission', objet_id)}:{index}", now=now)
+            return sortie
+
+        if operation_id:
+            sortie = outbox.appliquer_une_fois(c, tenant_id, "board.decision", operation_id,
+                                               {"objet_id": objet_id, "index": index, "decision": decision,
+                                                "generation": generation, "par": par}, appliquer, now=now)
+        else:
+            sortie = appliquer()
+    # Ne pas réentrer le répartiteur depuis un effet déjà en cours.
+    if outbox.CONTEXTE.get() is None:
+        _traiter_effets_locaux()
     return sortie
 
 
-def _enregistrer_propositions(c, t, contenu: str, now: float) -> list:
-    """Résumé, propositions et liens du chef sur l'objet (dans la transaction du résultat). Renvoie les effets à
-    produire APRÈS la validation (lancement automatique d'une action L1), qui ouvrent leurs propres transactions."""
+def _instantane_notification(o, meta: dict | None = None) -> dict:
+    """Charge immuable et bornée : une notification historique ne relit pas les propositions du présent."""
+    meta = meta if meta is not None else json.loads(o["meta"] or "{}")
+    champs = ("titre", "pourquoi", "niveau", "statut", "par", "mission_id", "carte_id")
+    props = [{k: str(p[k])[:500] for k in champs if k in p} for p in (meta.get("propositions") or [])[:5]
+             if isinstance(p, dict)]
+    titre = str(meta.get("titre") or (o["contenu"] or o["type"]).split("\n")[0])[:160]
+    return {"id": o["id"], "espace": o["espace"], "type": o["type"], "auteur": o["auteur"],
+            "contenu": o["contenu"][:1500], "supprime": bool(o["supprime"]),
+            "meta": {"titre": titre, "jarvis_resume": str(meta.get("jarvis_resume") or "")[:400],
+                     "jarvis_mission": meta.get("jarvis_mission"), "propositions": props}}
+
+
+def _enregistrer_propositions(c, t, contenu: str, now: float) -> None:
+    """Résumé, propositions, liens et intentions durables dans la transaction du résultat."""
     travail = json.loads(t["travail"])
     oid = travail.get("objet_id")
-    o = c.execute("SELECT meta, espace FROM board_objets WHERE id=? AND tenant_id=? AND supprime=0",
+    verrou = " FOR UPDATE" if backend().nom == "postgres" else ""
+    o = c.execute("SELECT * FROM board_objets WHERE id=? AND tenant_id=? AND supprime=0" + verrou,
                   (oid, t["tenant_id"])).fetchone() if oid else None
     if o is None:
-        return []
+        return
+    if o["mission_id"] != t["mission_id"]:
+        # L'artefact appartient toujours à sa mission, mais la carte est désormais suivie par une autre analyse.
+        _evenement(c, t["tenant_id"], "board_projection_perimee", mission_id=t["mission_id"], now=now,
+                   objet_id=oid, mission_courante=o["mission_id"])
+        return
     resume, actions = extraire_propositions(contenu)
     meta = json.loads(o["meta"] or "{}")
     meta.update({"jarvis_resume": resume, "propositions": actions, "jarvis_mission": t["mission_id"]})
     c.execute("UPDATE board_objets SET meta=?, version=version+1, maj=? WHERE id=? AND tenant_id=?",
-              (json.dumps(meta, ensure_ascii=False)[:20_000], now, oid, t["tenant_id"]))
+              (json.dumps(meta, ensure_ascii=False), now, oid, t["tenant_id"]))
     liens = 0
     for l in extraire_liens(contenu, travail.get("elements_voisins") or []):
         existe = c.execute("SELECT 1 FROM board_objets WHERE id=? AND tenant_id=? AND espace=? AND supprime=0",
@@ -1145,27 +1217,22 @@ def _enregistrer_propositions(c, t, contenu: str, now: float) -> list:
         liens += 1
     _evenement(c, t["tenant_id"], "board_propositions", mission_id=t["mission_id"], now=now, objet_id=oid,
                n=len(actions), liens=liens)
-    try:  # le chef et Telegram lisent le fil d'activité
-        from . import store
-        store.feed_add("chef", f"Board : « {travail.get('titre', oid)} » contextualisé — {len(actions)} action(s) proposée(s)"
-                       + (f", {liens} lien(s) créé(s)" if liens else ""))
-    except Exception:  # noqa: BLE001 — le fil est un plus, jamais une cause d'échec
-        pass
-    # le chef ne lance que l'action qu'il a lui-même jugée réalisable seul (rien si aucune)
-    index = next((i for i, a in enumerate(actions) if a.get("auto") and a["niveau"] == "L1"), None)
     tenant = t["tenant_id"]
-    effets = []
+    outbox.enregistrer(c, tenant, "feed",
+                       {"type": "chef", "texte": f"Board : « {travail.get('titre', oid)} » contextualisé — {len(actions)} action(s) proposée(s)"
+                        + (f", {liens} lien(s) créé(s)" if liens else "")},
+                       cle=f"contexte-feed:{t['mission_id']}:{oid}", now=now)
+    # Une action L1 maximum, liée à la génération : une ancienne intention n'agit pas sur une analyse remplacée.
+    index = next((i for i, a in enumerate(actions) if a.get("auto") and a["niveau"] == "L1"), None)
+    auto_operation = None
     if index is not None and _reglages(c, tenant)["board_actions_auto"]:
-        # décision autonome, bornée : UNE action L1 (sans effet externe) par élément ; L2/L3 attendent toujours l'humain
-        effets.append(lambda: decider_proposition(tenant, oid, index, "lancer", par="jarvis:auto"))
-    # puis Telegram, le chef et la mémoire collective apprennent l'analyse (avec l'action déjà lancée)
-    effets.append(lambda: _synchro("apres_contextualisation", tenant, oid, liens=liens))
-    return effets
-
-
-def _synchro(nom: str, *args, **kw) -> None:
-    from . import synchro  # import tardif : synchro lit le moteur
-    synchro._effet(nom, getattr(synchro, nom), *args, **kw)
+        auto_operation = outbox.enregistrer(c, tenant, "board.auto",
+                                           {"objet_id": oid, "index": index, "generation": t["mission_id"]},
+                                           cle=f"contexte-auto:{t['mission_id']}:{oid}:{index}", now=now)
+    outbox.enregistrer(c, tenant, "synchro.contextualisation",
+                       {"objet_id": oid, "liens": liens, "snapshot": _instantane_notification(o, meta),
+                        "auto_operation": auto_operation, "auto_index": index},
+                       cle=f"contexte-synchro:{t['mission_id']}:{oid}", now=now)
 
 
 MARGE_CARTES = 60

@@ -745,6 +745,13 @@ def cmd_prompt_construire(a) -> int:
         except OSError as exc:
             return _err(f"consignes illisibles : {exc}")
         out += ["", "## Consignes du chef d'orchestre", "", texte.rstrip()]
+    from . import specifications
+    spec = specifications.pour_prompt(role=role["nom"], projet=a.projet, issue=issue, branche=a.branche)
+    out += ["", "## Contrat commun de la session", "",
+            "Ce contrat décrit le profil et les livrables. Il n'accorde aucun outil ni mandat supplémentaire.",
+            "```json", json.dumps(spec, ensure_ascii=False, sort_keys=True), "```"]
+    from . import communaute_runtime
+    out += ["", communaute_runtime.contexte(a.projet)]
     print("\n".join(out))
     return 0
 
@@ -1148,6 +1155,11 @@ def cmd_chef_preparer(a) -> int:
                 "Bash(jarvis livrables)", "Bash(jarvis livrables *)",
                 # Veille concurrentielle : recherche web (lecture seule).
                 "WebSearch", "WebFetch",
+                "Bash(jarvis os diagnostic)", "Bash(jarvis os schemas)", "Bash(jarvis os preflight *)",
+                "Bash(jarvis os communaute *)", "Bash(jarvis os outils *)",
+                "Bash(jarvis os runtime *)", "Bash(jarvis os modele voir)", "Bash(jarvis os modele verifier)",
+                "Bash(jarvis os oauth liste)",
+                "Bash(jarvis os connexions liste)", "Bash(jarvis os connexions decouvrir *)",
                 "Bash(workmux status)", "Bash(workmux status *)", "Bash(workmux capture *)",
                 "Bash(workmux send *)", "Bash(workmux wait *)",
                 "Bash(gh pr view *)", "Bash(gh pr diff *)", "Bash(gh pr checks *)", "Bash(gh pr list *)",
@@ -1155,6 +1167,10 @@ def cmd_chef_preparer(a) -> int:
             ],
             "deny": deny_paths + secrets + [
                 # Décisions et réglages réservés à l'humain.
+                "Bash(jarvis os mandat creer*)", "Bash(jarvis os mandat revoquer*)",
+                "Bash(jarvis os connexions creer*)", "Bash(jarvis os connexions revoquer*)",
+                "Bash(jarvis os modele configurer*)", "Bash(jarvis os oauth configurer*)",
+                "Bash(jarvis os oauth commencer*)", "Bash(jarvis os oauth revoquer*)",
                 "Bash(jarvis plan ok *)", "Bash(jarvis plan non *)", "Bash(jarvis plan verifier *)",
                 "Bash(jarvis plan relacher *)", "Bash(jarvis regler *)", "Bash(jarvis telegram *)",
                 "Bash(jarvis reglage-lire *)", "Bash(jarvis preparer-worktree *)", "Bash(jarvis chef-preparer *)",
@@ -1857,13 +1873,27 @@ def cmd_mission(a) -> int:
             print(f"Jarvis Studio : {url}" + (f"\nBoard V2     : {url_v2}" if v2 else "")
                   + "\n(ces liens contiennent ton jeton d'accès : ne les partage pas). Ctrl+C pour arrêter.")
             web._ouvrir(url_v2 if v2 else url)
+            import signal
+            import threading
+            precedents = {}
+            def interrompre_studio(*_):
+                raise KeyboardInterrupt
+            if threading.current_thread() is threading.main_thread():
+                for sig in (signal.SIGTERM, signal.SIGHUP):
+                    precedents[sig] = signal.signal(sig, interrompre_studio)
             try:
                 httpd.serve_forever()
             except KeyboardInterrupt:
                 pass
             finally:
+                for sig in precedents:
+                    signal.signal(sig, signal.SIG_IGN)
                 httpd.arret.set()
-                httpd.server_close()
+                try:
+                    httpd.server_close()
+                finally:
+                    for sig, ancien in precedents.items():
+                        signal.signal(sig, ancien)
             return 0
         if a.action == "executer":
             try:
@@ -1962,6 +1992,13 @@ def cmd_board(a) -> int:
 def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(prog="jarvis", description="Poste de pilotage des agents IA")
     sub = p.add_subparsers(dest="cmd", required=True)
+
+    s = sub.add_parser("os", help="contrats, diagnostic de capacités et mandats personnels")
+    s.add_argument("arguments", nargs=argparse.REMAINDER)
+    def os_commande(a):
+        from . import os_cli
+        return os_cli.main(a.arguments)
+    s.set_defaults(fn=os_commande)
 
     s = sub.add_parser("etat", help="état des agents, plans et projets")
     s.add_argument("--json", action="store_true")

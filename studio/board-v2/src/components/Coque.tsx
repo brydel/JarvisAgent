@@ -1,4 +1,4 @@
-import { memo, useEffect, useRef, useState } from "react";
+import { memo, useEffect, useRef, useState, type ReactNode } from "react";
 import type { EspaceBoard } from "../types";
 import { useReactFlow, useStore } from "@xyflow/react";
 import {
@@ -68,9 +68,9 @@ function MenuProjet({ projet, espaces, changer }: { projet: string; espaces: Esp
   );
 }
 
-export const SousBarre = memo(function SousBarre({ projet, espaces = [], changerEspace, demo, compteurs, filtre, setFiltre, priorite, setPriorite, magnetisme, setMagnetisme, lancer }: {
+export const SousBarre = memo(function SousBarre({ projet, espaces = [], changerEspace, demo, compteurs, filtre, setFiltre, priorite, setPriorite, magnetisme, setMagnetisme, lancer, communaute }: {
   projet: string; espaces?: EspaceBoard[]; changerEspace?: (nom: string) => void; demo: boolean; compteurs: Record<Filtre, number>; filtre: Filtre; setFiltre: (f: Filtre) => void;
-  priorite: string; setPriorite: (p: string) => void; magnetisme: boolean; setMagnetisme: (v: boolean) => void; lancer: () => void;
+  priorite: string; setPriorite: (p: string) => void; magnetisme: boolean; setMagnetisme: (v: boolean) => void; lancer: () => void; communaute?: ReactNode;
 }) {
   const { zoomIn, zoomOut, fitView } = useReactFlow();
   const zoom = useStore((s) => s.transform[2]);
@@ -104,6 +104,7 @@ export const SousBarre = memo(function SousBarre({ projet, espaces = [], changer
       <button type="button" className="bouton-carre" aria-pressed={magnetisme} aria-label="Magnétisme de la grille"
         title="Magnétisme de la grille" onClick={() => setMagnetisme(!magnetisme)}><Grid3x3 size={18} /></button>
       <button type="button" className="bouton-principal" onClick={lancer}><Sparkles size={18} /> Lancer une mission</button>
+      {communaute}
     </div>
   );
 });

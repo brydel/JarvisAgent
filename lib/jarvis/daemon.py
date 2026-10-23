@@ -876,6 +876,20 @@ def missions_check() -> None:
         missions.recuperer()
 
 
+def echanges_loop(stop: threading.Event) -> None:
+    """Effets durables et échanges hors du fil critique de surveillance et de son renouvellement de bail."""
+    from . import communaute_runtime, missions
+    while not stop.is_set():
+        try:
+            if missions.backend().existe():
+                missions.traiter_outbox(limite=3, interrompu=stop.is_set)
+            if not stop.is_set():
+                communaute_runtime.notifier()
+        except Exception as exc:  # noqa: BLE001 — la file reste persistée pendant une indisponibilité
+            store.feed_add("erreur", f"échanges persistants : {type(exc).__name__}")
+        stop.wait(5)
+
+
 def executant_loop(stop: threading.Event) -> None:
     """Exécutant local de missions dans le démon : ce que tu déposes sur le Board est analysé sans commande à
     lancer. Même verrou que `jarvis mission executer` : jamais deux exécutants pour la même identité."""
@@ -903,12 +917,19 @@ def executant_loop(stop: threading.Event) -> None:
         return
     # plusieurs voies : une longue rédaction ne retient plus les analyses déposées après elle
     voies = max(1, min(4, int(config.settings().get("missions", {}).get("paralleles", VOIES_EXECUTANT))))
-    fils = [threading.Thread(target=_voie_executant, args=(stop, ident, i), name=f"executant-{i}", daemon=True)
+    fils = [threading.Thread(target=_voie_executant, args=(stop, ident, i), name=f"executant-{i}", daemon=False)
             for i in range(voies)]
-    for f in fils:
-        f.start()
-    stop.wait()
-    verrou.close()
+    try:
+        for f in fils:
+            f.start()
+        stop.wait()
+    finally:
+        stop.set()
+        # Le verrou d'identité reste détenu tant que les processus possédés ne sont pas nettoyés.
+        for f in fils:
+            if f.ident is not None:
+                f.join()
+        verrou.close()
 
 
 VOIES_EXECUTANT = 2  # exécutions de missions simultanées (Claude / Codex par abonnement) ; réglage missions.paralleles
@@ -916,7 +937,8 @@ VOIES_EXECUTANT = 2  # exécutions de missions simultanées (Claude / Codex par 
 
 def _voie_executant(stop: threading.Event, ident: dict, voie: int) -> None:
     from . import adaptateurs, coureur
-    cr = coureur.Coureur(coureur.TransportLocal(ident["id"], ident["secret"]), adaptateurs.par_defaut(), voie=voie)
+    cr = coureur.Coureur(coureur.TransportLocal(ident["id"], ident["secret"]), adaptateurs.par_defaut(), voie=voie,
+                         stop=stop)
     while not stop.is_set():
         try:
             if cr.tour()["etat"] != "fait":
@@ -936,6 +958,8 @@ def watch_loop(stop: threading.Event) -> None:
                      prevision_check, blocage_check, jetons_check, chef_check, modeles_check, veille_check,
                      veille_modeles_check, menage_check, battement_check, bilan_check, skills_check, executant_check,
                      canari_check, optimisation_check, missions_check):
+            if stop.is_set():
+                break
             try:
                 step()
             except Exception as exc:  # noqa: BLE001 — le démon ne doit jamais mourir sur une erreur ponctuelle
@@ -1225,6 +1249,7 @@ def run() -> None:
         threading.Thread(target=telegram_loop, args=(stop,), name="telegram", daemon=True),
         threading.Thread(target=sante_loop, args=(stop,), name="sante", daemon=True),
         threading.Thread(target=executant_loop, args=(stop,), name="executant", daemon=True),
+        threading.Thread(target=echanges_loop, args=(stop,), name="echanges", daemon=True),
     ]
     web_cfg = config.settings()["web"]
     if web_cfg.get("actif", True):
@@ -1256,6 +1281,14 @@ def run() -> None:
         stop.set()
         store.feed_add("systeme", "démon Jarvis arrêté")
     finally:
+        stop.set()
+        # SIGTERM répété ne doit pas interrompre le nettoyage des groupes de processus.
+        signal.signal(signal.SIGTERM, signal.SIG_IGN)
+        signal.signal(signal.SIGHUP, signal.SIG_IGN)
+        signal.signal(signal.SIGINT, signal.SIG_IGN)
+        for t in threads:
+            if t.name in ("executant", "echanges"):
+                t.join()
         try:
             bail.liberer(_BAIL["titulaire"])
         except Exception:  # noqa: BLE001

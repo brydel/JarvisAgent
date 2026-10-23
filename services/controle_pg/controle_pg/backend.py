@@ -11,7 +11,7 @@ from __future__ import annotations
 import psycopg
 from psycopg.rows import dict_row
 
-TABLES = ("board_commentaires", "board_assets", "board_liens", "evenements", "board_objets", "artefacts", "approbations", "tentatives", "taches", "missions",
+TABLES = ("effets_inbox", "effets_outbox", "board_commentaires", "board_assets", "board_liens", "evenements", "board_objets", "artefacts", "approbations", "tentatives", "taches", "missions",
           "connexions", "executants", "reglages_tenant", "adhesions", "comptes", "organisations")
 
 

@@ -1,0 +1,24 @@
+.app.avec-activite:has(> .product-nav) { grid-template-rows: 60px var(--subbar-h) auto minmax(0, 1fr); }
+.activite-directe { flex: 0 0 auto; border-bottom: 1px solid #30364d; background: #121727; color: #eef0ff; }
+.activite-titre { display: flex; align-items: center; gap: 10px; padding: 10px 20px; width: 100%; border: 0; color: inherit; background: transparent; text-align: left; cursor: pointer; }
+.activite-titre span { flex: 1; font-size: 12px; color: #bac2da; }
+.activite-contenu { display: grid; grid-template-columns: 1fr 1fr; height: 220px; border-top: 1px solid #30364d; }
+.activite-liste, .activite-apercu { overflow: auto; padding: 10px 20px; min-width: 0; font-size: 12px; }
+.activite-apercu { border-left: 1px solid #30364d; }
+.activite-meta, .activite-apercu > p { color: #bac2da; }
+.activite-session { width: 100%; display: flex; gap: 8px; padding: 9px; border: 1px solid #30364d; border-radius: 6px; background: transparent; color: inherit; text-align: left; margin: 6px 0; cursor: pointer; }
+.activite-session[aria-pressed=true] { border-color: #8792ff; background: #202b4b; }
+.activite-session span, .activite-tache { display: flex; flex-direction: column; gap: 4px; overflow-wrap: anywhere; }
+.activite-tache { padding: 9px; border-bottom: 1px solid #30364d; }
+.activite-tache button { align-self: start; background: transparent; border: 0; color: #abb5ff; cursor: pointer; }
+.activite-directe [role=alert], .activite-tache > strong { color: #ffbc93; }
+.activite-apercu pre { white-space: pre-wrap; overflow-wrap: anywhere; font: 11px/1.5 monospace; }
+@media (max-width: 900px) {
+  .app.avec-activite:has(> .product-nav) { grid-template-rows: auto auto auto minmax(0, 1fr); }
+  .app.avec-activite .travail { grid-template-rows: minmax(160px, 1fr) minmax(0, 0.7fr); }
+  .app.avec-activite .panneau { max-height: none; overflow: hidden; }
+  .activite-titre { padding: 8px; flex-wrap: wrap; gap: 6px; }
+  .activite-titre span { flex-basis: 60%; }
+  .activite-contenu { grid-template-columns: 1fr; height: min(200px, 23vh); overflow: auto; }
+  .activite-liste, .activite-apercu { overflow: visible; padding: 8px 12px; }
+}

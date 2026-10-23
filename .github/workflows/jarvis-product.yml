@@ -2,9 +2,9 @@ name: Jarvis product quality
 
 on:
   push:
-    branches: [codex/jarvis-product-studio]
+    branches: [codex/jarvis-product-studio, fix/board-agents-live]
   pull_request:
-    paths: ['studio/**', 'lib/jarvis/**', 'services/model_bridge/**', 'tests/**', '.github/workflows/jarvis-product.yml']
+    paths: ['studio/**', 'lib/jarvis/**', 'services/model_bridge/**', 'services/workflows_temporal/**', 'tests/**', '.github/workflows/jarvis-product.yml']
   workflow_dispatch:
 
 permissions:
@@ -42,6 +42,25 @@ jobs:
         run: |
           python -m unittest discover -s tests -p 'test_missions.py' -v
           python -m unittest discover -s tests -p 'test_board_v2.py' -v
+          python -m unittest discover -s tests -p 'test_activite.py' -v
+          python -m unittest discover -s tests -p 'test_contrats.py' -v
+          python -m unittest discover -s tests -p 'test_mandats.py' -v
+          python -m unittest discover -s tests -p 'test_capacites.py' -v
+          python -m unittest discover -s tests -p 'test_os_runtime.py' -v
+          python -m unittest discover -s tests -p 'test_durabilite.py' -v
+          python -m unittest discover -s tests -p 'test_annulation_execution.py' -v
+          python -m unittest discover -s tests -p 'test_communaute.py' -v
+          python -m unittest discover -s tests -p 'test_communaute_runtime.py' -v
+          python -m unittest discover -s tests -p 'test_outils.py' -v
+          python -m unittest discover -s tests -p 'test_agent_runtime.py' -v
+          python -m unittest discover -s tests -p 'test_pilotage.py' -v
+          python -m unittest discover -s tests -p 'test_modeles_runtime.py' -v
+          python -m unittest discover -s tests -p 'test_transport_runtime.py' -v
+          python -m unittest discover -s tests -p 'test_mcp_stdio.py' -v
+          python -m unittest discover -s tests -p 'test_stdio_integration.py' -v
+          python -m unittest discover -s tests -p 'test_oauth.py' -v
+          python -m unittest discover -s tests -p 'test_oauth_api.py' -v
+          python -m unittest discover -s tests -p 'test_courriel.py' -v
           python -m unittest discover -s tests -p 'test_studio*.py' -v
           python -m unittest discover -s services/model_bridge/tests -v
       - name: Verifier le navigateur fourni par l'image GitHub
@@ -50,7 +69,7 @@ jobs:
         working-directory: studio/board-v2
         env:
           JARVIS_TEST_BROWSER_CHANNEL: chrome
-        run: npx playwright test product.spec.ts
+        run: npx playwright test product.spec.ts activite.spec.ts communaute.spec.ts integrations.spec.ts runtime.spec.ts
       - name: Conserver les preuves visuelles et les resultats
         if: always()
         uses: actions/upload-artifact@v4
@@ -62,3 +81,20 @@ jobs:
             reports/board-v2/playwright-sorties
           if-no-files-found: warn
           retention-days: 7
+
+  temporal-prototype:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Installer le SDK du service séparé
+        run: python -m pip install -r services/workflows_temporal/requirements.txt
+      - name: Vérifier contrat, contrôleur HTTP et sandbox du SDK
+        env:
+          PYTHONPATH: services/workflows_temporal
+        run: python -m unittest discover -s services/workflows_temporal/tests -v

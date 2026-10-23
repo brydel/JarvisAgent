@@ -13,6 +13,7 @@ export default defineConfig({
   use: {
     baseURL: "http://localhost:7721",
     channel: process.env.JARVIS_TEST_BROWSER_CHANNEL === "chrome" ? "chrome" : undefined,
+    launchOptions: { executablePath: process.env.JARVIS_TEST_BROWSER_EXECUTABLE || undefined },
     viewport: { width: 1672, height: 941 },
     deviceScaleFactor: 1,
     colorScheme: "dark",
@@ -25,6 +26,6 @@ export default defineConfig({
     url: "http://localhost:7721/v2/",
     reuseExistingServer: false,
     timeout: 30_000,
-    env: { JARVIS_TEST_PORT: "7721", JARVIS_TEST_EXECUTANT: "1", JARVIS_TEST_JETON_FICHIER: "/tmp/jarvis-e2e-jeton" },
+    env: { JARVIS_TEST_PORT: "7721", JARVIS_TEST_EXECUTANT: "1", JARVIS_TEST_RUNTIME: "1", JARVIS_TEST_JETON_FICHIER: "/tmp/jarvis-e2e-jeton" },
   },
 });

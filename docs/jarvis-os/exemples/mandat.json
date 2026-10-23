@@ -1,0 +1,10 @@
+{
+  "version": 1,
+  "owner": "proprietaire",
+  "project": "projet-demonstration",
+  "tools": ["repo.test"],
+  "destinations": [],
+  "expires_at": 4102444800,
+  "max_cost_cents": 0,
+  "max_actions": 10
+}

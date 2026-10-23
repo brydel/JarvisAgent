@@ -14,6 +14,10 @@ import { ContexteActions, TAILLES, type ActionsBoard } from "./nodes/contexte";
 import { BarreHaut, BarreOutils, FILTRES, SaisieUrl, SousBarre, type Filtre, type Outil } from "./components/Coque";
 import { Panneau } from "./components/Panneau";
 import { DialogueMission, type DemandeMission } from "./components/DialogueMission";
+import { ActiviteDirecte } from "./components/ActiviteDirecte";
+import { CommunauteAgents } from "./components/CommunauteAgents";
+import { ConnexionsAgents } from "./components/ConnexionsAgents";
+import { RuntimeAgents } from "./components/RuntimeAgents";
 import { Historique } from "./lib/historique";
 import { cascade, depuisTexte, depuisTransfert, familleFichier, type Element } from "./lib/ingestion";
 
@@ -91,6 +95,7 @@ export function Board({ source, charge }: Props) {
   const fichierInput = useRef<HTMLInputElement>(null);
   const acceptFichier = useRef("");
   const rechargement = useRef<number>(0);
+  const versionChargement = useRef(0);
   etatRef.current = etat;
 
   const toast = useCallback((texte: string, opts: Omit<Toast, "id" | "texte"> = {}) => {
@@ -101,24 +106,37 @@ export function Board({ source, charge }: Props) {
 
   /* ------------------------------------------------------------ chargement et synchronisation ---------- */
   const charger = useCallback(async () => {
+    const version = ++versionChargement.current;
     try {
       const e = await source.charger();
+      if (version !== versionChargement.current) return;
       if (charge && source.demo) e.objets.push(...genererCharge(charge));
       setEtat(e);
       setErreur("");
-      if (!source.demo) source.approbations().then(setApprobations).catch(() => undefined);
+      if (!source.demo) source.approbations().then(a => {
+        if (version === versionChargement.current) setApprobations(a);
+      }).catch(() => undefined);
       setTick((t) => t + 1);
     } catch (x) {
-      setErreur(x instanceof Error ? x.message : "chargement impossible");
+      if (version === versionChargement.current) setErreur(x instanceof Error ? x.message : "chargement impossible");
     }
   }, [source, charge]);
   const rechargerBientot = useCallback(() => {
-    window.clearTimeout(rechargement.current);
-    rechargement.current = window.setTimeout(charger, 250);
+    // Au plus 250 ms d'attente, même si les événements arrivent sans interruption.
+    if (rechargement.current) return;
+    rechargement.current = window.setTimeout(() => { rechargement.current = 0; void charger(); }, 250);
   }, [charger]);
   useEffect(() => {
     charger();
+    return () => { ++versionChargement.current; };
   }, [charger]);
+
+  useEffect(() => {
+    if (source.demo) return;
+    // Filet de sécurité : une session SSE ouverte ne prouve pas que tous les changements sont arrivés.
+    const timer = window.setInterval(() => { if (document.visibilityState === "visible") void charger(); }, 10000);
+    return () => window.clearInterval(timer);
+  }, [source, charger]);
 
   // Flux d'événements réel (SSE). Le navigateur se reconnecte seul avec Last-Event-ID ; on recharge l'état à la reprise.
   useEffect(() => {
@@ -143,6 +161,7 @@ export function Board({ source, charge }: Props) {
     return () => {
       es.close();
       window.clearTimeout(rechargement.current);
+      rechargement.current = 0;
     };
   }, [source, rechargerBientot, toast]);
 
@@ -588,11 +607,16 @@ export function Board({ source, charge }: Props) {
 
   return (
     <ContexteActions.Provider value={actions}>
-      <div className="app">
+      <div className={`app${source.demo ? "" : " avec-activite"}`}>
         <BarreHaut recherche={recherche} setRecherche={setRecherche} notifications={approbations.length} />
         <SousBarre projet={source.espace === "accueil" ? "Accueil" : source.espace} espaces={espaces} changerEspace={changerEspace}
           demo={source.demo} compteurs={compteurs} filtre={filtre} setFiltre={setFiltre}
-          priorite={prio} setPriorite={setPrio} magnetisme={magnetisme} setMagnetisme={setMagnetisme} lancer={ouvrirDialogueMission} />
+          priorite={prio} setPriorite={setPrio} magnetisme={magnetisme} setMagnetisme={setMagnetisme} lancer={ouvrirDialogueMission}
+          communaute={<><CommunauteAgents source={source}/><ConnexionsAgents source={source}/><RuntimeAgents source={source}/></>} />
+        <ActiviteDirecte source={source} inspecter={(id) => {
+          if (etat?.objets.some(o => o.id === id)) actions.inspecter(id);
+          else toast("Cette mission est liée à un autre Board de projet. Ouvre ce projet pour voir sa carte.");
+        }} />
         <div className="travail">
           <section className="canevas" aria-label="Canevas du Board"
             onDragOver={(e) => { if (e.dataTransfer.types.includes("Files") || e.dataTransfer.types.includes("text/uri-list")) { e.preventDefault(); setDepot(true); } }}

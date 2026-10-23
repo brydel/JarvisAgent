@@ -1,0 +1,32 @@
+{
+  "version": 1,
+  "id": "recherche-documentation",
+  "engine": "temporal_prototype",
+  "project": "jarvis-documentation",
+  "steps": [
+    {
+      "id": "documentation-python",
+      "phase": "recherche",
+      "depends_on": [],
+      "operation": {
+        "tool": "web.fetch",
+        "arguments": {"url": "https://docs.python.org/3/library/asyncio.html"},
+        "mandat_id": "REMPLACER-PAR-UN-MANDAT-REEL",
+        "cost_cents": 0
+      },
+      "timeout_s": 60
+    },
+    {
+      "id": "documentation-temporal",
+      "phase": "revue",
+      "depends_on": ["documentation-python"],
+      "operation": {
+        "tool": "web.fetch",
+        "arguments": {"url": "https://docs.temporal.io/"},
+        "mandat_id": "REMPLACER-PAR-UN-MANDAT-REEL",
+        "cost_cents": 0
+      },
+      "timeout_s": 60
+    }
+  ]
+}

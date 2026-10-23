@@ -188,8 +188,8 @@ const NOMS_ROLES: Record<string, [string, string]> = {
 
 export const AgentsNode = memo(function AgentsNode({ data, selected }: P) {
   const o = data.objet;
-  const agents = o.mission?.agents ?? [];
-  const actifs = agents.filter((x) => !x.issue).length;
+  const agents = [...(o.mission?.agents ?? [])].sort((a, b) => Number(Boolean(a.fin || a.issue)) - Number(Boolean(b.fin || b.issue)) || b.debut - a.debut);
+  const actifs = agents.filter((x) => !x.fin && !x.issue).length;
   return (
     <CardShell objet={o} selected={selected} classe="c-agents" entete={false}>
       <div className="entete">
@@ -215,6 +215,7 @@ export const AgentsNode = memo(function AgentsNode({ data, selected }: P) {
       ) : (
         <div className="vide-agents">Aucun agent n'a encore travaillé sur cette mission.<br />Ils apparaîtront ici dès qu'un exécutant prendra une tâche.</div>
       )}
+      {agents.length > 4 && <p className="meta-carte">+ {agents.length - 4} tentative(s) dans l'historique de la mission</p>}
     </CardShell>
   );
 });

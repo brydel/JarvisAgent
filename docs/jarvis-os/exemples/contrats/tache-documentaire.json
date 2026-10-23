@@ -1,0 +1,14 @@
+{
+  "version": 1,
+  "id": "TK-synthese",
+  "agent_id": "AG-documentaire",
+  "objective": "Résumer le document fourni en distinguant faits et hypothèses.",
+  "project": "projet-personnel",
+  "depends_on": [],
+  "inputs": ["artifact://document-source"],
+  "acceptance": ["Chaque conclusion renvoie à un passage du document.", "Les informations absentes sont signalées."],
+  "required_tools": [],
+  "mandate_id": null,
+  "execution_engine": "local",
+  "max_attempts": 1
+}

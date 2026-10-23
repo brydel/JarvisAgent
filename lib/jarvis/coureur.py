@@ -18,15 +18,27 @@ from __future__ import annotations
 import json
 import os
 import shutil
+import subprocess
+import sys
 import tempfile
 import threading
 from pathlib import Path
 from typing import Callable
 
 from . import adaptateurs as ad, config, missions, pauses, protocole_executant as proto
+from .annulation import ControleExecution, ExecutionAnnulee, controle, executer_processus, verifier
 
 EXTENSIONS = {"image/png": ".png", "image/jpeg": ".jpg", "image/gif": ".gif", "image/webp": ".webp",
               "application/pdf": ".pdf"}
+
+_LECTURE_PAGE = """import json, sys
+sys.path.insert(0, sys.argv[1])
+from jarvis import apercus
+try:
+    print(json.dumps({"page": apercus.texte_page(sys.argv[2])}, ensure_ascii=False))
+except apercus.ApercuRefuse as exc:
+    print(json.dumps({"note": f"Page non lisible : {exc}. Analyse seulement l'adresse et ce que l'utilisateur a écrit."}, ensure_ascii=False))
+"""
 
 
 def outils_prepares(pieces: dict) -> list[dict]:
@@ -45,8 +57,9 @@ def outils_prepares(pieces: dict) -> list[dict]:
 
 def preparer_pieces(env: dict, dossier: Path) -> dict:
     """Pièces d'une contextualisation, préparées par l'exécutant LOCAL (même machine que le Board) : copie du
-    fichier seul dans `dossier`, texte de la page d'un lien (règles anti-SSRF). Ne lève jamais : une pièce
-    manquante devient une note que le modèle doit signaler."""
+    fichier seul dans `dossier`, texte de la page d'un lien (règles anti-SSRF). Une pièce manquante devient
+    une note ; une annulation remonte au coureur. La lecture web est isolée pour interrompre aussi DNS/TLS."""
+    verifier(env)
     travail, pieces = env["travail"], {"dossier": str(dossier), "fichier": None, "image": False, "page": "", "note": ""}
     if travail.get("type") != "contextualiser":
         return {}
@@ -64,13 +77,21 @@ def preparer_pieces(env: dict, dossier: Path) -> dict:
                                   + (f", durée {m['duree']:.0f} s" if isinstance(m.get('duree'), (int, float)) else "")
                                   + " : contenu non transmis (seuls les métadonnées sont connues).")
         elif travail.get("url"):
-            from . import apercus
             try:
-                pieces["page"] = apercus.texte_page(travail["url"])
-            except apercus.ApercuRefuse as exc:
-                pieces["note"] = f"Page non lisible : {exc}. Analyse seulement l'adresse et ce que l'utilisateur a écrit."
+                r = executer_processus([sys.executable, "-c", _LECTURE_PAGE, str(Path(__file__).resolve().parents[1]),
+                                        travail["url"]], timeout=min(env["delai_s"], 30), annulation=controle(env))
+                texte = json.loads(r.stdout) if r.returncode == 0 else {}
+                if not isinstance(texte, dict) or not all(isinstance(v, str) for v in texte.values()):
+                    texte = {}
+                pieces["page"] = texte.get("page", "")[:15_000]
+                pieces["note"] = texte.get("note", "")[:500]
+                if not pieces["page"] and not pieces["note"]:
+                    pieces["note"] = "Page non lisible : la lecture isolée n'a pas fourni de texte."
+            except (ValueError, subprocess.TimeoutExpired):
+                pieces["note"] = "Page non lisible : délai dépassé ou réponse de lecture invalide."
     except (missions.MissionError, OSError) as exc:
         pieces["note"] = f"Pièce indisponible : {exc}"
+    verifier(env)
     return pieces
 
 
@@ -140,12 +161,20 @@ def arret_local() -> str:
 class Coureur:
     def __init__(self, transport, adaptateurs: dict[str, ad.Adaptateur], *,
                  avant_envoi: Callable[[dict], None] | None = None, intervalle_battement: float | None = None,
-                 voie: int = 0):
+                 voie: int = 0, stop: threading.Event | None = None):
         self.transport, self.adaptateurs = transport, adaptateurs
+        self.stop = stop
         self.avant_envoi = avant_envoi  # crochet de test : simuler un plantage entre exécution et envoi
-        self.intervalle = intervalle_battement or missions.BAIL_S / 3
+        self.intervalle = min(intervalle_battement if intervalle_battement is not None else missions.BAIL_S / 3, 2.0)
+        if self.intervalle <= 0:
+            raise ValueError("intervalle de battement strictement positif attendu")
         # plusieurs voies d'une même identité (dans le même processus) : un journal chacune, jamais partagé
         self.journal = _dossier() / (f"{transport.id}.json" if voie == 0 else f"{transport.id}-v{voie}.json")
+
+    def _arret_demande(self) -> str:
+        if self.stop is not None and self.stop.is_set():
+            return "arrêt du service exécutant demandé"
+        return arret_local()
 
     # -- journal des résultats non acquittés --
     def _en_attente(self) -> list[dict]:
@@ -178,10 +207,13 @@ class Coureur:
 
     # -- un tour --
     def tour(self) -> dict:
-        arret = arret_local()
+        arret = self._arret_demande()
         if arret:
             return {"etat": "arret", "raison": arret}
         repris = self.vider_en_attente()
+        arret = self._arret_demande()
+        if arret:
+            return {"etat": "arret", "raison": arret, "repris": repris}
         env = self.transport.reclamer()
         if env is None:
             return {"etat": "vide", "repris": repris}
@@ -191,23 +223,50 @@ class Coureur:
             # rien n'est exécuté ; le bail expirera et le plan de contrôle comptera l'essai
             return {"etat": "invalide", "raison": str(exc)}
         adaptateur = self.adaptateurs.get(env["fournisseur"])
-        self.transport.demarrer(env)
-        perdu = threading.Event()
+        try:
+            jeton = ControleExecution(expire=env["bail_expire"], interruption=self._arret_demande)
+        except ValueError as exc:
+            return {"etat": "invalide", "raison": str(exc)}
+        enveloppe = env
+        env = {**env, "_annulation": jeton}  # état local : jamais reçu d'un document ni transmis au modèle
+        try:
+            self.transport.demarrer(enveloppe)
+        except missions.MissionError as exc:
+            if exc.code in ("perime", "inconnue"):
+                return {"etat": "perime", "tache_id": env["tache_id"], "raison": str(exc), "bail_perdu": True}
+            raise
         fin = threading.Event()
+        premier = threading.Event()
 
         def battre():
-            while not fin.wait(self.intervalle):
+            while not fin.is_set():
                 try:
-                    if not self.transport.battement(env).get("continuer"):
-                        perdu.set()
+                    jeton.verifier()
+                    reponse = self.transport.battement(enveloppe)
+                    if reponse.get("continuer") is not True:
+                        jeton.annuler(reponse.get("raison") or "bail perdu ou tâche annulée")
                         return
-                except missions.MissionError:
-                    perdu.set()
+                    if "bail_expire" in reponse:
+                        jeton.renouveler(reponse["bail_expire"])
+                except ExecutionAnnulee:
+                    return
+                except Exception as exc:  # noqa: BLE001 — fail closed, même si le transport échoue hors protocole
+                    jeton.annuler(f"battement indisponible ({type(exc).__name__})")
+                    return
+                finally:
+                    premier.set()
+                if fin.wait(self.intervalle):
                     return
 
         fil = threading.Thread(target=battre, daemon=True)
         fil.start()
+        sortie = None
         try:
+            # Aucun appel d'outil avant la première confirmation d'autorité. Un transport bloqué ne peut
+            # empêcher l'expiration locale du bail : cette attente vérifie le jeton toutes les 100 ms.
+            while not premier.wait(0.1):
+                jeton.verifier()
+            jeton.verifier()
             if adaptateur is None:
                 sortie = {"issue": "fournisseur_indisponible", "contenu": "",
                           "erreur": f"adaptateur « {env['fournisseur']} » absent de cet exécutant", "factice": False}
@@ -215,13 +274,21 @@ class Coureur:
                 try:
                     with tempfile.TemporaryDirectory(prefix="jarvis-pieces-") as d:
                         pieces = preparer_pieces(env, Path(d))
+                        jeton.verifier()
                         sortie = adaptateur.executer({**env, "pieces": pieces} if pieces else env)
+                        jeton.verifier()
                         sortie["outils"] = outils_prepares(pieces) + list(sortie.get("outils") or [])
                 except ValueError as exc:
                     sortie = {"issue": "echec", "contenu": "", "erreur": str(exc), "factice": False}
+        except ExecutionAnnulee:
+            sortie = None
         finally:
             fin.set()
-            fil.join(timeout=5)
+            fil.join(timeout=0.2)
+        if sortie is None or jeton.raison:
+            # Aucun résultat tardif n'entre dans le journal de réémission ou dans le plan de contrôle.
+            return {"etat": "perime", "tache_id": env["tache_id"], "raison": jeton.raison,
+                    "bail_perdu": True, "execution_arretee": True}
         resultat = proto.resultat(env, sortie["issue"], contenu=sortie.get("contenu", ""),
                                   erreur=sortie.get("erreur", ""), fournisseur=env["fournisseur"],
                                   factice=bool(sortie.get("factice")), outils=sortie.get("outils"))
@@ -237,7 +304,7 @@ class Coureur:
         except missions.MissionError as exc:
             if exc.code in ("perime", "inconnue"):
                 self._oublier(resultat["cle_idempotence"])
-                return {"etat": "perime", "tache_id": env["tache_id"], "raison": str(exc), "bail_perdu": perdu.is_set()}
+                return {"etat": "perime", "tache_id": env["tache_id"], "raison": str(exc), "bail_perdu": True}
             raise
         self._oublier(resultat["cle_idempotence"])
         return {"etat": "fait", "tache_id": env["tache_id"], "accuse": accuse}

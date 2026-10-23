@@ -95,7 +95,21 @@ CREATE TABLE IF NOT EXISTS board_commentaires (
 
 ALTER TABLE board_liens ADD COLUMN IF NOT EXISTS auteur TEXT NOT NULL DEFAULT 'humain';
 
-INSERT INTO meta VALUES ('schema_version', '3') ON CONFLICT (cle) DO UPDATE SET valeur = excluded.valeur;
+-- Version 4 : intentions et reçus persistés avec les changements métier.
+CREATE TABLE IF NOT EXISTS effets_outbox (
+    id TEXT PRIMARY KEY, tenant_id TEXT NOT NULL REFERENCES organisations(id), cle TEXT NOT NULL,
+    sorte TEXT NOT NULL, donnees TEXT NOT NULL, empreinte TEXT NOT NULL, statut TEXT NOT NULL,
+    essais INTEGER NOT NULL DEFAULT 0, essais_max INTEGER NOT NULL DEFAULT 5,
+    prochain DOUBLE PRECISION NOT NULL DEFAULT 0, bail_jeton TEXT, bail_expire DOUBLE PRECISION,
+    erreur TEXT NOT NULL DEFAULT '', cree DOUBLE PRECISION NOT NULL, maj DOUBLE PRECISION NOT NULL,
+    acquitte DOUBLE PRECISION, UNIQUE (tenant_id, cle));
+CREATE INDEX IF NOT EXISTS effets_outbox_file ON effets_outbox (tenant_id, statut, prochain);
+CREATE TABLE IF NOT EXISTS effets_inbox (
+    tenant_id TEXT NOT NULL REFERENCES organisations(id), consommateur TEXT NOT NULL, cle TEXT NOT NULL,
+    empreinte TEXT NOT NULL, resultat TEXT NOT NULL, recu DOUBLE PRECISION NOT NULL,
+    PRIMARY KEY (tenant_id, consommateur, cle));
+
+INSERT INTO meta VALUES ('schema_version', '4') ON CONFLICT (cle) DO UPDATE SET valeur = excluded.valeur;
 
 -- --- RLS : une politique par table, sur le tenant du contexte ---------------------------------------------------
 DO $$
@@ -103,7 +117,7 @@ DECLARE t TEXT;
 BEGIN
   FOREACH t IN ARRAY ARRAY['reglages_tenant', 'executants', 'connexions', 'missions', 'taches', 'tentatives',
                            'approbations', 'artefacts', 'board_objets', 'evenements', 'adhesions',
-                           'board_liens', 'board_assets', 'board_commentaires'] LOOP
+                           'board_liens', 'board_assets', 'board_commentaires', 'effets_outbox', 'effets_inbox'] LOOP
     EXECUTE format('ALTER TABLE %I ENABLE ROW LEVEL SECURITY', t);
     EXECUTE format('DROP POLICY IF EXISTS par_tenant ON %I', t);
     EXECUTE format('CREATE POLICY par_tenant ON %I USING (tenant_id = current_setting(''jarvis.tenant_id'', true)) '

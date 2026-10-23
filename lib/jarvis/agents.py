@@ -93,18 +93,18 @@ def status_all() -> tuple[list[dict] | None, str]:
             "workdir": a.get("workdir") or "",
         })
     # Agents que workmux ne suit pas (encore) : repérés par leur fenêtre tmux.
-    tracked = {a["window"] for a in agents if a["window"]}
+    tracked = {(a["session"], a["window"]) for a in agents if a["window"]}
     now = time.time()
     windows = tmux_agent_windows()
     panes = _pane_commands() if windows else {}
     arbre = None
     for a in agents:
-        if not a["kind"] and a["window"] in panes:
-            a["kind"] = _kind_from_command(panes[a["window"]])
+        if not a["kind"]:
+            a["kind"] = _kind_from_command(panes.get((a["session"], a["window"]), ""))
     for w in windows:
-        if w["window"] in tracked:
+        if (w["session"], w["window"]) in tracked:
             continue
-        kind = _kind_from_command(w["command"], panes.get(w["window"], ""))
+        kind = _kind_from_command(w["command"], panes.get((w["session"], w["window"]), ""))
         idle = max(0, int(now - w["activity"])) if w["activity"] else 0
         status, titre = "untracked", f"non suivi par workmux · dernière activité il y a {fmt_elapsed(idle)}"
         if idle >= IDLE_AFTER:
@@ -135,18 +135,22 @@ def status_all() -> tuple[list[dict] | None, str]:
     return agents, ""
 
 
-def _pane_commands() -> dict[str, str]:
-    """{fenêtre: commandes de tous ses volets} — l'agent n'est pas forcément le volet actif."""
+def _pane_commands() -> dict[tuple[str, str], str]:
+    """{(session, fenêtre): commandes des volets} — deux projets peuvent partager un nom de fenêtre."""
     if not shutil.which("tmux"):
         return {}
     try:
-        res = _run(["tmux", "list-panes", "-a", "-F", "#{window_name}\t#{pane_current_command}"], timeout=5)
+        res = _run(["tmux", "list-panes", "-a", "-F", "#{session_name}\t#{window_name}\t#{pane_current_command}"], timeout=5)
     except (subprocess.TimeoutExpired, OSError):
         return {}
-    out: dict[str, str] = {}
+    out: dict[tuple[str, str], str] = {}
     for line in res.stdout.splitlines():
-        w, _, c = line.partition("\t")
-        out[w] = f"{out.get(w, '')} {c}".strip()
+        parts = line.split("\t", 2)
+        if len(parts) != 3:
+            continue
+        session, window, command = parts
+        key = (session, window)
+        out[key] = f"{out.get(key, '')} {command}".strip()
     return out
 
 
@@ -210,16 +214,19 @@ def capture(handle: str, lines: int = 60) -> str:
             err = (res.stderr or "").strip()
         except (subprocess.TimeoutExpired, OSError) as exc:
             err = str(exc)
-    worktree = handle.split(":", 1)[-1]
-    for w in tmux_agent_windows():
-        if w["window"] == WINDOW_PREFIX + worktree:
-            try:
-                res = _run(["tmux", "capture-pane", "-p", "-J", "-t", f"{w['session']}:{w['window']}",
-                            "-S", f"-{lines}"], timeout=10)
-            except (subprocess.TimeoutExpired, OSError) as exc:
-                return f"(aperçu indisponible : {exc})"
-            if res.returncode == 0:
-                return res.stdout
+    project, _, worktree = handle.rpartition(":")
+    candidates = [w for w in tmux_agent_windows() if w["window"] == WINDOW_PREFIX + worktree
+                  and (not project or config.project_for_path(w["path"]) == project)]
+    if len(candidates) > 1:
+        return "(aperçu indisponible : cible ambiguë, précise le projet et vérifie les sessions)"
+    for w in candidates:
+        try:
+            res = _run(["tmux", "capture-pane", "-p", "-J", "-t", w["id"],
+                        "-S", f"-{lines}"], timeout=10)
+        except (subprocess.TimeoutExpired, OSError) as exc:
+            return f"(aperçu indisponible : {exc})"
+        if res.returncode == 0:
+            return res.stdout
     return f"(aperçu indisponible : {err or 'agent introuvable'})"
 
 
@@ -368,53 +375,95 @@ def _type_into_chef(line: str) -> bool:
     if chef_has_dialog():  # nouvelle vérification juste avant d'écrire : l'écran a pu changer
         return False
     try:
-        _run(["tmux", "send-keys", "-t", _chef_win(), "-l", line], timeout=5)
-        _run(["tmux", "send-keys", "-t", _chef_win(), "Enter"], timeout=5)
-        return True
+        saisie = _run(["tmux", "send-keys", "-t", _chef_win(), "-l", line], timeout=5)
+        if saisie.returncode:
+            return False
+        validation = _run(["tmux", "send-keys", "-t", _chef_win(), "Enter"], timeout=5)
+        return validation.returncode == 0
     except (subprocess.TimeoutExpired, OSError):
         return False
 
 
-def chef_inject(text: str) -> bool:
-    """Transmet un message au chef comme si tu l'écrivais.
+def _chef_file_verifiee():
+    from . import store
+    q = store.read_json(CHEF_QUEUE, None)
+    if q is None and not store.existe(CHEF_QUEUE):
+        return []
+    if not isinstance(q, list) or any(not isinstance(x, (str, dict)) for x in q):
+        raise ValueError("file du chef illisible : état conservé")
+    for x in q:
+        if isinstance(x, dict) and (not isinstance(x.get("id"), str) or not isinstance(x.get("empreinte"), str)
+                                   or type(x.get("recu")) is not bool
+                                   or (not x["recu"] and not isinstance(x.get("texte"), str))):
+            raise ValueError("entrée de file du chef invalide : état conservé")
+    return q
 
-    Si le chef affiche une boîte de dialogue, le message attend dans une file que le démon
-    vide dès que l'écran est libre. Renvoie False seulement si le chef n'est pas lancé.
+
+def chef_inject(text: str, *, message_id: str | None = None) -> bool:
+    """Persiste avant remise. Une coupure ne vide plus les messages avant leur envoi.
+
+    `message_id` permet au producteur de rejouer une remise sans réinjecter un message déjà acquitté.
+    L'acquittement signifie « tapé dans tmux », pas « compris/exécuté par le modèle ». Une interruption
+    entre le retour de tmux et cet acquittement peut encore dupliquer la ligne à la reprise.
     """
     if not chef_running():
         return False
-    from . import store  # import tardif
-    line = " ".join(text.split())  # une seule ligne : un retour à la ligne enverrait le message trop tôt
-    if not _type_into_chef(line):
-        store.update_json(CHEF_QUEUE, [], lambda q: q.append(line))
+    from . import store
+    import hashlib
+    line = " ".join(text.split())
+    empreinte = hashlib.sha256(line.encode()).hexdigest()
+    # Verrou distinct de celui du stockage : aucun commit DB ni verrou d'écriture JSON retenu pendant tmux.
+    with store.locked(CHEF_QUEUE + ".delivery"):
+        q = _chef_file_verifiee()
+        if message_id is not None:
+            if not isinstance(message_id, str) or not message_id or len(message_id) > 200:
+                raise ValueError("identifiant du message hors bornes")
+            ancien = next((x for x in q if isinstance(x, dict) and x["id"] == message_id), None)
+            if ancien:
+                if ancien["empreinte"] != empreinte:
+                    raise ValueError("identifiant de message déjà utilisé avec un autre texte")
+                return True
+            entree = {"id": message_id, "texte": line, "empreinte": empreinte, "recu": False}
+        else:
+            entree = line  # format historique conservé pour les messages sans identifiant
+        store.update_json(CHEF_QUEUE, [], lambda file: file.append(entree))
+        _chef_flush_verrouille()
     return True
 
 
+def _chef_flush_verrouille() -> int:
+    from . import store
+    delivered = 0
+    while delivered < 50:
+        q = _chef_file_verifiee()
+        index = next((i for i, x in enumerate(q) if isinstance(x, str) or not x["recu"]), None)
+        if index is None:
+            break
+        entree = q[index]
+        line = entree if isinstance(entree, str) else entree["texte"]
+        if not _type_into_chef(line):
+            break  # l'entrée reste persistée, y compris si le processus meurt pendant la remise
+
+        def acquitter(file):
+            if index >= len(file) or file[index] != entree:
+                raise ValueError("la file du chef a changé pendant la remise")
+            if isinstance(entree, str):
+                file.pop(index)
+            else:
+                file[index] = {"id": entree["id"], "empreinte": entree["empreinte"], "recu": True, "ts": time.time()}
+
+        store.update_json(CHEF_QUEUE, [], acquitter)
+        delivered += 1
+    return delivered
+
+
 def chef_flush_queue() -> int:
-    """Envoie les messages en attente si l'écran du chef est libre. Renvoie le nombre envoyé."""
+    """Remet puis acquitte chaque entrée sous un verrou inter-processus ; jamais de vidage anticipé."""
     from . import store
     if not chef_running() or chef_has_dialog():
         return 0
-    sent: list[str] = []
-
-    def _take(q):
-        sent.extend(q)
-        q.clear()
-
-    store.update_json(CHEF_QUEUE, [], _take)
-    delivered = 0
-    for i, line in enumerate(sent):
-        if not _type_into_chef(line):
-            # Une boîte de dialogue est apparue entre-temps : le reste repart en tête de file.
-            rest = sent[i:]
-
-            def _requeue(q, rest=rest):
-                q[:0] = rest
-
-            store.update_json(CHEF_QUEUE, [], _requeue)
-            break
-        delivered += 1
-    return delivered
+    with store.locked(CHEF_QUEUE + ".delivery"):
+        return _chef_flush_verrouille()
 
 
 def select_window(session: str, window: str) -> bool:

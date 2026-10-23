@@ -79,6 +79,20 @@ def valider_tache(env: object) -> dict:
         raise EnveloppeInvalide("tâche : délai hors bornes (1 s à 24 h)")
     if not all(isinstance(c, str) for c in env["capacites"]):
         raise EnveloppeInvalide("tâche : capacités mal formées")
+    if "contrats" in env:
+        from . import contrats, specifications
+        try:
+            attendus = specifications.pour_mission(env)
+            fournis = env["contrats"]
+            if not isinstance(fournis, dict) or set(fournis) != {"agent", "tache", "run"}:
+                raise EnveloppeInvalide("tâche : ensemble de contrats invalide")
+            valides = {"agent": contrats.valider_agent(fournis["agent"]),
+                       "tache": contrats.valider_tache(fournis["tache"]),
+                       "run": contrats.valider_run(fournis["run"])}
+            if valides != attendus:
+                raise EnveloppeInvalide("tâche : contrats incohérents avec le profil documentaire de l'exécutant")
+        except contrats.ContratError as exc:
+            raise EnveloppeInvalide("tâche : contrat invalide") from exc
     return env
 
 

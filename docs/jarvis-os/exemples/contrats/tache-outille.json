@@ -1,0 +1,14 @@
+{
+  "version": 1,
+  "id": "TK-recherche",
+  "agent_id": "AG-recherche",
+  "objective": "Rechercher des sources publiques pour le besoin du projet et les comparer.",
+  "project": "projet-personnel",
+  "depends_on": [],
+  "inputs": ["artifact://besoin-projet"],
+  "acceptance": ["Les sources citées ont été consultées.", "La date de consultation et les limites sont indiquées."],
+  "required_tools": ["web.search", "web.read"],
+  "mandate_id": "MD-recherche-exemple",
+  "execution_engine": "local",
+  "max_attempts": 2
+}

@@ -18,10 +18,8 @@ fil d'activité et n'annule jamais ce que le moteur a enregistré.
 from __future__ import annotations
 
 import json
-import queue
 import shutil
 import re
-import threading
 
 from . import config, store
 
@@ -48,6 +46,10 @@ def _effet(nom: str, f, *args, **kw):
     try:
         return f(*args, **kw)
     except Exception as exc:  # noqa: BLE001 — un effet de synchronisation ne casse jamais le moteur
+        from . import outbox
+        if outbox.CONTEXTE.get() is not None:
+            # Le commit métier est déjà acquis ; l'outbox doit apprendre l'échec pour conserver la remise.
+            raise
         try:
             store.feed_add("erreur", f"synchro {nom} : {exc}")
         except Exception:  # noqa: BLE001
@@ -91,8 +93,18 @@ def memoire_pour(tenant_id: str, requete: str, espace: str) -> list[str]:
 
 def _noter(tenant_id: str, **entree) -> None:
     if _local(tenant_id):
-        from . import memoire
-        memoire.noter(source="board", **entree)
+        from . import memoire, missions, outbox
+        contexte = outbox.CONTEXTE.get()
+        if contexte is None:
+            memoire.noter(source="board", **entree)
+            return
+        marque = "effet-" + missions._empreinte({"id": contexte["id"]})[:24]
+        # Le reçu vit dans l'entrée elle-même : un arrêt après l'ajout ne duplique pas la mémoire à la reprise.
+        with store.locked("synchro-memoire"):
+            if any(marque in (e.get("etiquettes") or []) for e in memoire.toutes()):
+                return
+            entree["etiquettes"] = [*(entree.get("etiquettes") or []), marque]
+            memoire.noter(source="board", **entree)
 
 
 # --- Telegram ---------------------------------------------------------------------------------------------------
@@ -107,33 +119,25 @@ def boutons(objet_id: str, propositions: list[dict]) -> list[list[tuple[str, str
     return lignes
 
 
-_file: "queue.Queue | None" = None
-_verrou = threading.Lock()
-
-
 def _en_fond(nom: str, f, *args) -> None:
-    """Telegram et le chef passent par le réseau ou tmux : un envoi lent (réseau coupé, nouvelles tentatives) ne doit
-    jamais retenir l'exécutant de missions. Une seule file, un seul fil, dans l'ordre d'arrivée."""
-    global _file
-    with _verrou:
-        if _file is None:
-            _file = queue.Queue(maxsize=200)
+    """Persiste la remise ; le démon vide l'outbox après acquittement, sans file mémoire perdue au redémarrage.
 
-            def vider():
-                while True:
-                    n, g, a = _file.get()
-                    _effet(n, g, *a)
-
-            threading.Thread(target=vider, name="synchro", daemon=True).start()
-    try:
-        _file.put_nowait((nom, f, args))
-    except queue.Full:  # file saturée (Telegram injoignable depuis longtemps) : on perd la notification, pas le travail
-        _effet(nom, lambda: (_ for _ in ()).throw(RuntimeError("file de notifications pleine")))
+    `f` reste dans la signature historique pour les appelants, mais seul le nom de destination connu est conservé.
+    Aucun nom de fonction arbitraire ni texte exécutable n'est chargé depuis la base.
+    """
+    from . import missions, outbox
+    if nom not in ("telegram", "chef"):
+        raise ValueError("destination de synchronisation inconnue")
+    contexte = outbox.CONTEXTE.get()
+    tenant = contexte["tenant_id"] if contexte else missions.tenant_local()
+    charge = {"args": list(args)}
+    cle = (f"{contexte['id']}:{nom}:" + missions._empreinte(charge)) if contexte else missions._id("notification")
+    outbox.ajouter(tenant, nom, charge, cle=cle)
 
 
-def _envoyer_telegram(texte: str, boutons_=None) -> None:
+def _envoyer_telegram(texte: str, boutons_=None) -> bool:
     from . import notify
-    notify.telegram(texte[:3900], boutons_ or None)
+    return notify.telegram(texte[:3900], boutons_ or None)
 
 
 def _telegram(texte: str, boutons_=None) -> None:
@@ -164,8 +168,8 @@ def texte_analyse(o: dict) -> str:
 
 # --- effets appelés par le moteur ---------------------------------------------------------------------------------
 
-def apres_contextualisation(tenant_id: str, objet_id: str, liens: int = 0) -> None:
-    o = _objet(tenant_id, objet_id)
+def apres_contextualisation(tenant_id: str, objet_id: str, liens: int = 0, snapshot: dict | None = None) -> None:
+    o = snapshot if snapshot is not None else _objet(tenant_id, objet_id)
     if o is None or o["supprime"]:
         return
     m, titre = o["meta"], _titre(o)
@@ -186,8 +190,8 @@ def apres_contextualisation(tenant_id: str, objet_id: str, liens: int = 0) -> No
                + f". Détails : jarvis board voir --espace {o['espace']}")
 
 
-def apres_livrable(tenant_id: str, objet_id: str) -> None:
-    o = _objet(tenant_id, objet_id)
+def apres_livrable(tenant_id: str, objet_id: str, snapshot: dict | None = None) -> None:
+    o = snapshot if snapshot is not None else _objet(tenant_id, objet_id)
     if o is None:
         return
     titre = _titre(o).removeprefix("Livrable — ")
@@ -202,11 +206,14 @@ def apres_livrable(tenant_id: str, objet_id: str) -> None:
            f"Lis-le avec : jarvis board voir --espace {o['espace']}")
 
 
-def apres_decision(tenant_id: str, objet_id: str, index: int, decision: str, par: str) -> None:
-    o = _objet(tenant_id, objet_id)
+def apres_decision(tenant_id: str, objet_id: str, index: int, decision: str, par: str, snapshot: dict | None = None) -> None:
+    o = snapshot if snapshot is not None else _objet(tenant_id, objet_id)
     if o is None or par == "jarvis:auto":
         return
-    p = (o["meta"].get("propositions") or [{}] * (index + 1))[index]
+    props = o["meta"].get("propositions") or []
+    if not 0 <= index < len(props):
+        return
+    p = props[index]
     verbe = "Lancé" if decision == "lancer" else "Écarté"
     _effet("mémoire", _noter, tenant_id, titre=f"Board {_nom_espace(o['espace'])} : {verbe.lower()} « {p.get('titre', '?')} »",
            decisions=[f"{verbe} par {par} : {p.get('titre', '?')} (élément « {_titre(o)} »)"],

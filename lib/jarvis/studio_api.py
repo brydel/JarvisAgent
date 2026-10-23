@@ -31,6 +31,8 @@ from pathlib import Path
 from urllib.parse import parse_qs, unquote, urlsplit
 
 from . import apercus, board, config, missions, studio_product
+from .annulation import ExecutionAnnulee
+from .oauth import CoffreError
 
 PORT_DEFAUT = 7718
 STATIQUES = {
@@ -106,6 +108,10 @@ class Handler(BaseHTTPRequestHandler):
     server_version = "JarvisStudio/1"
     protocol_version = "HTTP/1.1"
 
+    def setup(self):
+        super().setup()
+        self.connection.settimeout(15)  # Une connexion HTTP inactive ne retient pas la fermeture du Studio.
+
     # --- réponses ---
     def _envoyer(self, code: int, corps: bytes, ctype: str = "application/json; charset=utf-8",
                  entetes: dict | None = None, *, csp: str = CSP, cache: str = "no-store") -> None:
@@ -170,6 +176,28 @@ class Handler(BaseHTTPRequestHandler):
             return
         url = urlsplit(self.path)
         route, q = url.path, parse_qs(url.query)
+        if route == "/api/v2/oauth/callback":
+            # Retour Google : SameSite=Strict peut exclure le cookie. L'état secret à usage unique
+            # lie le retour au flux déjà ouvert par le propriétaire, jamais à une config de cette URL.
+            from . import oauth
+            from .annulation import ControleExecution, ExecutionAnnulee
+            try:
+                requis = {"state", "code"}
+                if not requis <= set(q) <= requis | {"scope", "authuser", "prompt", "hd", "iss"} or any(len(v) != 1 for v in q.values()):
+                    raise ValueError
+                controle = ControleExecution(interruption=lambda: "arrêt du Studio" if self.server.arret.is_set() else "")
+                oauth.callback(q["state"][0], q["code"][0], annulation=controle)
+                message = "Autorisation Gmail enregistrée. Tu peux fermer cette page et revenir au Studio."
+                code = 200
+            except CoffreError:
+                message = "Connexion indisponible. Reviens au Studio après restauration du coffre local."
+                code = 503
+            except (OSError, ValueError, ExecutionAnnulee):
+                message = "Autorisation non enregistrée. Reviens au Studio pour démarrer une nouvelle connexion."
+                code = 400
+            self._envoyer(code, ("<!doctype html><html lang='fr'><meta charset='utf-8'><title>Connexion Gmail</title>"
+                                "<h1>Connexion Gmail</h1><p>" + message + "</p></html>").encode(), "text/html; charset=utf-8")
+            return
         if route in STATIQUES or route == "/connexion":
             fichier, ctype = STATIQUES["/" if route == "/connexion" else route]
             try:
@@ -191,6 +219,11 @@ class Handler(BaseHTTPRequestHandler):
             return
         org = missions.tenant_local()
         try:
+            from . import os_api
+            resultat_os = os_api.lire(route, q, org)
+            if resultat_os is not None:
+                self._json(*resultat_os)
+                return
             if route == "/api/v2/atelier":
                 self._json(200, studio_product.catalogue(org))
             elif m := re.fullmatch(r"/api/v2/atelier/candidats/(RB-[0-9]{4,})", route):
@@ -216,14 +249,36 @@ class Handler(BaseHTTPRequestHandler):
                                  "reglages": missions.reglages_board(org)})
             elif route == "/api/v2/espaces":
                 self._json(200, {"espaces": board.espaces(org)})
+            elif route == "/api/v2/activite":
+                from . import activite
+                self._json(200, activite.instantane(org, (q.get("espace") or ["accueil"])[0]))
+            elif route == "/api/v2/os/schemas":
+                from . import contrats
+                self._json(200, contrats.schemas())
+            elif route == "/api/v2/os/capacites":
+                from . import capacites
+                self._json(200, capacites.collecter())
+            elif route == "/api/v2/os/mandats":
+                from . import mandats
+                try:
+                    self._json(200, {"mandats": mandats.lister()})
+                except mandats.MandatError:
+                    self._erreur(503, "Registre de mandats indisponible ; aucune autorisation déduite.")
+            elif m := re.fullmatch(r"/api/v2/activite/([0-9a-f]{24})/apercu", route):
+                from . import activite
+                self._json(200, {"texte": activite.apercu(org, m.group(1), (q.get("espace") or ["accueil"])[0])})
             elif m := re.match(r"^/api/v2/fichiers/(AS-[0-9a-f]{12})$", route):
                 self._fichier(*board.fichier(org, m.group(1)))
             elif m := re.match(r"^/api/v2/objets/(BO-[0-9a-f]{12})/commentaires$", route):
                 self._json(200, {"commentaires": board.commentaires(org, m.group(1))})
             else:
                 self._erreur(404, "Route inconnue.")
+        except CoffreError:
+            self._erreur(503, "Coffre OAuth indisponible ; aucune connexion déduite.")
         except ValueError:
             self._erreur(400, "paramètre invalide")
+        except OSError:
+            self._erreur(503, "État local indisponible ; aucune connexion ni autorisation déduite.")
         except missions.MissionError as exc:
             self._erreur(404 if exc.code == "inconnue" else 403 if exc.code == "interdit" else 400, str(exc))
 
@@ -422,13 +477,24 @@ class Handler(BaseHTTPRequestHandler):
                 self._post_v2(org, route, corps)
             else:
                 self._erreur(404, "Route inconnue.")
+        except CoffreError:
+            self._erreur(503, "Coffre OAuth indisponible ; aucun échange autorisé.")
         except (TypeError, ValueError):
             self._erreur(400, "valeur invalide")
+        except ExecutionAnnulee:
+            self._erreur(503, "Studio en cours d'arrêt ; aucun nouveau départ autorisé.")
+        except OSError:
+            self._erreur(503, "État local indisponible ; aucune écriture externe confirmée.")
         except missions.MissionError as exc:
             conflits = ("approbation", "transition", "conflit", "verrouille", "concurrence")
             self._erreur(404 if exc.code == "inconnue" else 403 if exc.code == "interdit" else 409 if exc.code in conflits else 400, str(exc))
 
     def _post_v2(self, org: str, route: str, corps: dict) -> None:
+        from . import os_api
+        resultat_os = os_api.ecrire(route, corps, org, stop=self.server.arret)
+        if resultat_os is not None:
+            self._json(*resultat_os)
+            return
         espace = board.nom_espace(corps.get("espace"))
         if m := re.fullmatch(r"/api/v2/atelier/agents/([a-z0-9_-]{1,64})/(verifier|proposer)", route):
             action = studio_product.verifier if m.group(2) == "verifier" else studio_product.proposer
@@ -528,10 +594,21 @@ class Handler(BaseHTTPRequestHandler):
         pass  # aucune URL journalisée : rien ne doit y traîner
 
 
+class ServeurStudio(ThreadingHTTPServer):
+    daemon_threads = False
+
+    def server_close(self):
+        if hasattr(self, "arret"):
+            self.arret.set()
+            from . import pilotage
+            pilotage.arreter()
+        super().server_close()
+
+
 def serveur(port: int = PORT_DEFAUT) -> ThreadingHTTPServer:
     ThreadingHTTPServer.allow_reuse_address = True
     ThreadingHTTPServer.daemon_threads = True
-    httpd = ThreadingHTTPServer(("127.0.0.1", port), Handler)
+    httpd = ServeurStudio(("127.0.0.1", port), Handler)
     httpd.arret = threading.Event()
     httpd.intervalle_flux = 0.5
     return httpd

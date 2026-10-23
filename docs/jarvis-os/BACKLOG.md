@@ -1,0 +1,588 @@
+# Backlog de réalisation
+
+Références locales stables, pas des identifiants Linear créés. Voir le manifeste pour les dépendances et statuts structurés.
+
+L’avancement vérifié et les limites de la livraison figurent dans [LIVRAISON_RUNTIME.md](LIVRAISON_RUNTIME.md) et [LIVRAISON_USINE.md](LIVRAISON_USINE.md).
+
+## JOS-001 — Unifier AgentSpec, TaskSpec, RunSpec et les capacités effectives
+
+Objectif : Définir des contrats versionnés utilisés par Board, chef, workmux et moteur de missions.
+
+Responsable agent : Architecte agentique
+Relecteur indépendant : Ingénieur runtime agentique
+Dépendances : Aucune
+Phase : F0
+Référence locale stable : JOS-001
+Obligatoire : oui
+
+Critères d’acceptation :
+- Schémas et exemples exécutables pour une tâche documentaire et un projet outillé.
+- Même rôle, outils, budget et preuves attendues dans les deux voies actuelles.
+- Aucun attribut de capacité ne vaut preuve de disponibilité sans diagnostic fonctionnel.
+
+Avancement local : Contrats v1, exemples, validation stricte et intégration missions/prompts/activité livrés ; convergence complète des voies encore en cours.
+
+Lire docs/jarvis-os/PLAN.md, ARCHITECTURE.md et SESSIONS.md. Les rôles agents ne sont pas des comptes utilisateurs Linear. Ne pas revendiquer une capacité configurée comme vérifiée sans test réel.
+
+## JOS-002 — Définir le mandat personnel et harmoniser les politiques d’autonomie
+
+Objectif : Remplacer les contradictions entre prompts, constantes L3/L4 et volonté d’autonomie par une délégation explicite du propriétaire.
+
+Responsable agent : Ingénieur politique d’autonomie
+Relecteur indépendant : QA indépendante des agents
+Dépendances : Aucune
+Phase : F0
+Référence locale stable : JOS-002
+Obligatoire : oui
+
+Critères d’acceptation :
+- Mandat versionné : projets, dépôts, domaines, destinataires, actions, environnements, budgets et durée.
+- Les actions couvertes avancent sans reconfirmation ; les exceptions sont motivées et visibles.
+- Un agent ne peut pas étendre ses droits ; délégation et révocation sont vérifiées côté service.
+
+Avancement local : Mandats persistants appliqués aux inférences et outils ; création/révocation depuis le Board. Isolation système et harmonisation des anciennes voies restent à réaliser.
+
+Lire docs/jarvis-os/PLAN.md, ARCHITECTURE.md et SESSIONS.md. Les rôles agents ne sont pas des comptes utilisateurs Linear. Ne pas revendiquer une capacité configurée comme vérifiée sans test réel.
+
+## JOS-003 — Diagnostiquer réellement modèles, outils, réseau et exécutants
+
+Objectif : Établir une base observée des capacités de l’installation et du compte, sans confondre configuration et fonctionnement.
+
+Responsable agent : SRE des exécutants
+Relecteur indépendant : QA indépendante des agents
+Dépendances : Aucune
+Phase : F0
+Référence locale stable : JOS-003
+Obligatoire : oui
+
+Critères d’acceptation :
+- Tester séparément voie CLI, voie Board, réseau, authentification et disponibilité des modèles.
+- États absent/configuré/authentifié/vérifié/dégradé présentés avec dernière preuve.
+- Aucune clé imprimée ; catalogue de modèles validé sur le compte, sans alias supposé disponible.
+
+Avancement local : Diagnostic local, métadonnées MCP et sonde réseau explicite livrés ; authentification, catalogue du compte et inférence réelle restent non vérifiés.
+
+Lire docs/jarvis-os/PLAN.md, ARCHITECTURE.md et SESSIONS.md. Les rôles agents ne sont pas des comptes utilisateurs Linear. Ne pas revendiquer une capacité configurée comme vérifiée sans test réel.
+
+## JOS-004 — Rendre les effets post-commit et messages durables par outbox/inbox
+
+Objectif : Remplacer les callbacks post-commit volatils et la file vidée avant remise par intentions durables et acquittements.
+
+Responsable agent : Ingénieur fiabilité distribuée
+Relecteur indépendant : Ingénieur workflows Temporal
+Dépendances : JOS-001
+Phase : F1
+Référence locale stable : JOS-004
+Obligatoire : oui
+
+Critères d’acceptation :
+- État métier et intention d’effet écrits dans la même transaction.
+- Après crash avant/après remise, l’effet reste rapprochable sans message perdu.
+- Reprises bornées, déduplication, inspection des échecs et relance explicite disponibles.
+
+Avancement local : Outbox/inbox, remises durables et instantanés livrés ; chemin initial objet vers analyse encore historique ; PostgreSQL non vérifié sur serveur réel.
+
+Lire docs/jarvis-os/PLAN.md, ARCHITECTURE.md et SESSIONS.md. Les rôles agents ne sont pas des comptes utilisateurs Linear. Ne pas revendiquer une capacité configurée comme vérifiée sans test réel.
+
+## JOS-005 — Rendre atomique l’acceptation d’une proposition du Board
+
+Objectif : Garantir une décision et une seule mission/carte/relation malgré clics concurrents ou redémarrage.
+
+Responsable agent : Ingénieur fiabilité distribuée
+Relecteur indépendant : QA indépendante des agents
+Dépendances : JOS-001
+Phase : F1
+Référence locale stable : JOS-005
+Obligatoire : oui
+
+Critères d’acceptation :
+- Dix décisions concurrentes créent au plus une mission et une carte pour la même proposition.
+- Crash à chaque frontière puis reprise sans carte orpheline ni statut contradictoire.
+- Tests sur les backends effectivement supportés ; migration réversible.
+
+Avancement local : Décision, mission, tâche, carte et lien atomiques, concurrence et crash vérifiés sur SQLite ; génération courante protégée.
+
+Lire docs/jarvis-os/PLAN.md, ARCHITECTURE.md et SESSIONS.md. Les rôles agents ne sont pas des comptes utilisateurs Linear. Ne pas revendiquer une capacité configurée comme vérifiée sans test réel.
+
+## JOS-006 — Propager annulation et perte de bail aux processus et outils
+
+Objectif : Arrêter le travail réel dès que sa tentative perd l’autorité, au lieu de poser seulement un indicateur local.
+
+Responsable agent : Ingénieur runtime agentique
+Relecteur indépendant : SRE des exécutants
+Dépendances : JOS-001, JOS-003
+Phase : F1
+Référence locale stable : JOS-006
+Obligatoire : oui
+
+Critères d’acceptation :
+- Contrat de cancellation des adaptateurs, des appels réseau et du groupe de processus.
+- Perte de bail : aucun nouvel appel d’outil, arrêt local dans le délai documenté.
+- Effet déjà parti identifié comme à réconcilier ; résultat ancien refusé.
+
+Avancement local : Annulation propagée aux modèles, transports HTTPS et processus MCP, avec jonction à l’arrêt du Studio ; anciennes sessions workmux hors mécanisme.
+
+Lire docs/jarvis-os/PLAN.md, ARCHITECTURE.md et SESSIONS.md. Les rôles agents ne sont pas des comptes utilisateurs Linear. Ne pas revendiquer une capacité configurée comme vérifiée sans test réel.
+
+## JOS-007 — Journaliser opérations externes, reçus et résultats inconnus
+
+Objectif : Donner une identité stable aux effets externes et gérer le cas exécuté mais réponse perdue.
+
+Responsable agent : Ingénieur fiabilité distribuée
+Relecteur indépendant : Ingénieur courriel et effets externes
+Dépendances : JOS-002, JOS-004, JOS-006
+Phase : F1
+Référence locale stable : JOS-007
+Obligatoire : oui
+
+Critères d’acceptation :
+- operation_id, empreinte, mandat, tentative et reçu persistés.
+- État unknown distinct de failed ; timeout d’écriture sans retry aveugle.
+- Crash après effet puis rapprochement fournisseur sans double action observée.
+
+Avancement local : Journal des appels et résultats inconnus intégré au runtime ; rapprochement Gmail disponible sans rejouer l’envoi. Preuve fournisseur réelle et résolution générale restent à valider.
+
+Lire docs/jarvis-os/PLAN.md, ARCHITECTURE.md et SESSIONS.md. Les rôles agents ne sont pas des comptes utilisateurs Linear. Ne pas revendiquer une capacité configurée comme vérifiée sans test réel.
+
+## JOS-008 — Créer le service de connexions, coffre et cycle OAuth
+
+Objectif : Gérer authentification, scopes, renouvellement et références de secrets hors du contexte LLM.
+
+Responsable agent : Ingénieur MCP et OAuth
+Relecteur indépendant : Ingénieur politique d’autonomie
+Dépendances : JOS-002, JOS-003
+Phase : F2
+Référence locale stable : JOS-008
+Obligatoire : oui
+
+Critères d’acceptation :
+- Le navigateur et les prompts ne reçoivent pas les secrets des fournisseurs.
+- Connexion, expiration, renouvellement, révocation et diagnostic testés.
+- L’exécutant ne peut pas modifier directement la politique ni le coffre.
+
+Avancement local : OAuth Google PKCE, scopes, renouvellement et révocation livrés et testés par HTTP contrôlé ; coffre local 0600, isolation système et connexion réelle restent à réaliser.
+
+Lire docs/jarvis-os/PLAN.md, ARCHITECTURE.md et SESSIONS.md. Les rôles agents ne sont pas des comptes utilisateurs Linear. Ne pas revendiquer une capacité configurée comme vérifiée sans test réel.
+
+## JOS-009 — Connecter des serveurs MCP HTTP et stdio avec découverte réelle
+
+Objectif : Supporter ajout d’un serveur, authentification adaptée, découverte des outils et affectation par scope.
+
+Responsable agent : Ingénieur MCP et OAuth
+Relecteur indépendant : QA indépendante des agents
+Dépendances : JOS-008
+Phase : F2
+Référence locale stable : JOS-009
+Obligatoire : oui
+
+Critères d’acceptation :
+- Un serveur HTTP OAuth et un serveur stdio contrôlé testés réellement.
+- Schémas d’outils versionnés ; outils sélectionnables par rôle et projet.
+- Révocation bloque le prochain appel ; aucun wildcard de serveur ne crée de mandat implicite.
+
+Avancement local : MCP HTTP et stdio intégrés et testés avec processus réels, découverte, sélection, révocation et arrêt. Serveurs tiers et OAuth MCP générique restent à vérifier.
+
+Lire docs/jarvis-os/PLAN.md, ARCHITECTURE.md et SESSIONS.md. Les rôles agents ne sont pas des comptes utilisateurs Linear. Ne pas revendiquer une capacité configurée comme vérifiée sans test réel.
+
+## JOS-010 — Exécuter API et MCP via une passerelle d’outils typés
+
+Objectif : Le modèle propose, la passerelle valide le mandat puis exécute avec quotas, timeout et reçu.
+
+Responsable agent : Ingénieur runtime agentique
+Relecteur indépendant : Ingénieur fiabilité distribuée
+Dépendances : JOS-001, JOS-002, JOS-007, JOS-008
+Phase : F2
+Référence locale stable : JOS-010
+Obligatoire : oui
+
+Critères d’acceptation :
+- Mêmes règles pour un outil natif et un outil MCP.
+- Appel sans droit ou invalide refusé avant effet ; résultats typés et expurgés.
+- Tous les appels écrivent des événements corrélés et un résultat réconciliable.
+
+Avancement local : Passerelle web/MCP/Gmail/réseau interne reliée à la boucle cognitive ; mandats, validation et reçus contrôlés. Comptes externes réels restent non vérifiés.
+
+Lire docs/jarvis-os/PLAN.md, ARCHITECTURE.md et SESSIONS.md. Les rôles agents ne sont pas des comptes utilisateurs Linear. Ne pas revendiquer une capacité configurée comme vérifiée sans test réel.
+
+## JOS-011 — Livrer recherche web sourcée et navigateur isolé
+
+Objectif : Permettre recherche, lecture, navigation, téléchargement et vérification web dans le mandat.
+
+Responsable agent : Ingénieur recherche et navigateur
+Relecteur indépendant : QA indépendante des agents
+Dépendances : JOS-009, JOS-010
+Phase : F2
+Référence locale stable : JOS-011
+Obligatoire : oui
+
+Critères d’acceptation :
+- Une question exigeant recherche livre des sources consultées et datées.
+- Navigation Playwright réelle avec preuves, limites réseau et contexte isolé.
+- Coupure/reprise et contenu hostile testés ; aucune action externe hors mandat.
+
+Lire docs/jarvis-os/PLAN.md, ARCHITECTURE.md et SESSIONS.md. Les rôles agents ne sont pas des comptes utilisateurs Linear. Ne pas revendiquer une capacité configurée comme vérifiée sans test réel.
+
+## JOS-012 — Livrer le premier connecteur email fiable et autonome
+
+Objectif : Choisir Graph ou Gmail selon le compte connecté, puis lire, préparer et envoyer dans les destinataires délégués.
+
+Responsable agent : Ingénieur courriel et effets externes
+Relecteur indépendant : Ingénieur fiabilité distribuée
+Dépendances : JOS-007, JOS-008, JOS-010
+Phase : F2
+Référence locale stable : JOS-012
+Obligatoire : oui
+
+Critères d’acceptation :
+- Parcours réel OAuth → lecture → brouillon → envoi à l’adresse de test mandatée → reçu.
+- Après timeout post-envoi, rapprochement avant réémission ; état inconnu conservé si non résoluble.
+- Révocation, pièces jointes et quotas testés sans exposer de secret.
+
+Avancement local : Gmail : lecture, recherche, brouillon, envoi et rapprochement Message-ID livrés avec OAuth PKCE. Tests contrôlés ; aucun compte réel ni envoi réel validé.
+
+Lire docs/jarvis-os/PLAN.md, ARCHITECTURE.md et SESSIONS.md. Les rôles agents ne sont pas des comptes utilisateurs Linear. Ne pas revendiquer une capacité configurée comme vérifiée sans test réel.
+
+## JOS-013 — Connecter GitHub, Linear et le staging au même plan de contrôle
+
+Objectif : Créer et suivre issues, branches, PR, vérifications et déploiements de projet avec des reçus.
+
+Responsable agent : Ingénieur MCP et OAuth
+Relecteur indépendant : SRE des exécutants
+Dépendances : JOS-009, JOS-010
+Phase : F2
+Référence locale stable : JOS-013
+Obligatoire : oui
+
+Critères d’acceptation :
+- Linear/GitHub réellement connectés ; IDs distants et permissions vérifiés.
+- Staging choisi dans le mandat, déploiement et retour arrière testables.
+- Même statut effectif dans Board, CLI et Telegram ; erreurs d’accès explicites.
+
+Lire docs/jarvis-os/PLAN.md, ARCHITECTURE.md et SESSIONS.md. Les rôles agents ne sont pas des comptes utilisateurs Linear. Ne pas revendiquer une capacité configurée comme vérifiée sans test réel.
+
+## JOS-014 — Unifier le runtime des agents outillés et les sessions du Board
+
+Objectif : Une mission du Board doit exécuter le même contrat d’agent outillé que les autres voies.
+
+Responsable agent : Ingénieur runtime agentique
+Relecteur indépendant : Architecte agentique
+Dépendances : JOS-001, JOS-002, JOS-003, JOS-010
+Phase : F3
+Référence locale stable : JOS-014
+Obligatoire : oui
+
+Critères d’acceptation :
+- Profils documentaire et outillé explicites ; ne pas supprimer globalement toutes les restrictions.
+- Boucle modèle → outil → observation → vérification avec budget, contexte et annulation.
+- Run/session réel lié à chaque avatar ; événements d’activité pendant l’exécution.
+
+Avancement local : Boucle durable typée et adaptateur OpenAI Responses, checkpoints, budgets, pause/annulation et revue distincte livrés ; modèle lié à chaque run. Migration des missions historiques et projets dépendants restent à réaliser.
+
+Lire docs/jarvis-os/PLAN.md, ARCHITECTURE.md et SESSIONS.md. Les rôles agents ne sont pas des comptes utilisateurs Linear. Ne pas revendiquer une capacité configurée comme vérifiée sans test réel.
+
+## JOS-015 — Compiler les prompts du chef et des spécialistes depuis les contrats
+
+Objectif : Adapter le chef à l’usage personnel et injecter le rôle, le mandat et les outils effectivement disponibles.
+
+Responsable agent : Ingénieur prompts et évaluations
+Relecteur indépendant : QA indépendante des agents
+Dépendances : JOS-001, JOS-002, JOS-014
+Phase : F3
+Référence locale stable : JOS-015
+Obligatoire : oui
+
+Critères d’acceptation :
+- Aucune contradiction entre prompt, politique et capacités du runtime.
+- Brief ciblé par spécialiste, stratégie d’escalade, preuves attendues et boucle de correction bornée.
+- Versions/canaris existants réutilisés ; tests métier avant promotion.
+
+Avancement local : Instructions du nouveau runtime compilées depuis contrats et catalogue contrôlés ; prompts du chef et spécialistes historiques restent à unifier et évaluer.
+
+Lire docs/jarvis-os/PLAN.md, ARCHITECTURE.md et SESSIONS.md. Les rôles agents ne sont pas des comptes utilisateurs Linear. Ne pas revendiquer une capacité configurée comme vérifiée sans test réel.
+
+## JOS-016 — Livrer une mémoire de projet sourcée et un contexte sélectionné
+
+Objectif : Récupérer faits, décisions et artefacts utiles sans copier toutes les conversations.
+
+Responsable agent : Ingénieur mémoire et contexte
+Relecteur indépendant : QA indépendante des agents
+Dépendances : JOS-001, JOS-008
+Phase : F3
+Référence locale stable : JOS-016
+Obligatoire : oui
+
+Critères d’acceptation :
+- Recherche lexicale/sémantique comparée sur un corpus de projet avec sources.
+- Permissions, fraîcheur, invalidation et distinction fait/hypothèse/décision appliquées.
+- Chaque épisode de session renvoie aux preuves ; pas de faits inventés à partir d’un résumé.
+
+Lire docs/jarvis-os/PLAN.md, ARCHITECTURE.md et SESSIONS.md. Les rôles agents ne sont pas des comptes utilisateurs Linear. Ne pas revendiquer une capacité configurée comme vérifiée sans test réel.
+
+## JOS-017 — Rendre le dispatch spécialisé efficace et piloté par dépendances
+
+Objectif : Faire gérer files, limites et rappels par du code, et réserver le modèle à la planification utile.
+
+Responsable agent : Architecte agentique
+Relecteur indépendant : SRE des exécutants
+Dépendances : JOS-014, JOS-015
+Phase : F3
+Référence locale stable : JOS-017
+Obligatoire : oui
+
+Critères d’acceptation :
+- Parallélisme selon DAG, budgets et conflits de fichiers/ressources.
+- Pas d’agents permanents inutiles ni de réveil LLM sans événement utile.
+- Mesurer qualité, temps, consommation et interventions face à la baseline.
+
+Lire docs/jarvis-os/PLAN.md, ARCHITECTURE.md et SESSIONS.md. Les rôles agents ne sont pas des comptes utilisateurs Linear. Ne pas revendiquer une capacité configurée comme vérifiée sans test réel.
+
+## JOS-018 — Lier la réussite aux preuves métier et à une contre-revue indépendante
+
+Objectif : Remplacer l’acceptation de forme Markdown comme preuve suffisante de livraison.
+
+Responsable agent : QA indépendante des agents
+Relecteur indépendant : Ingénieur prompts et évaluations
+Dépendances : JOS-014, JOS-015, JOS-016
+Phase : F3
+Référence locale stable : JOS-018
+Obligatoire : oui
+
+Critères d’acceptation :
+- Verdict lié au SHA/empreinte et au livrable effectivement vérifié.
+- Tests logiciels, critères métier, reçu externe et vérification navigateur selon la tâche.
+- Un auteur ne valide pas seul sa propre livraison ; faux succès détectés dans le corpus.
+
+Avancement local : Le nouveau runtime exige une revue distincte et des références avant réussite ; référentiels métier et revue agentique automatique restent à réaliser.
+
+Lire docs/jarvis-os/PLAN.md, ARCHITECTURE.md et SESSIONS.md. Les rôles agents ne sont pas des comptes utilisateurs Linear. Ne pas revendiquer une capacité configurée comme vérifiée sans test réel.
+
+## JOS-019 — Prouver Temporal sur un workflow de projet interrompu
+
+Objectif : Prototype séparé pour DAG, activité, signal externe, timer, replay et changement de version.
+
+Responsable agent : Ingénieur workflows Temporal
+Relecteur indépendant : Ingénieur fiabilité distribuée
+Dépendances : JOS-001, JOS-003
+Phase : F4
+Référence locale stable : JOS-019
+Obligatoire : oui
+
+Critères d’acceptation :
+- Tuer puis relancer un worker conserve la progression et l’attente externe.
+- Aucun appel modèle/outil dans le code déterministe du workflow.
+- Rejouer un historique enregistré avec une nouvelle version du code et démontrer la continuation des anciens workflows.
+- Rapport mesuré : exploitation, historique, reprise et décision d’adoption.
+
+Avancement local : Prototype SDK séparé et 17 tests livrés ; serveur officiel bloqué par le réseau cloud, reprise réelle et replay non validés.
+
+Lire docs/jarvis-os/PLAN.md, ARCHITECTURE.md et SESSIONS.md. Les rôles agents ne sont pas des comptes utilisateurs Linear. Ne pas revendiquer une capacité configurée comme vérifiée sans test réel.
+
+## JOS-020 — Migrer les missions par moteur sans double ordonnanceur
+
+Objectif : Temporal devient propriétaire des reprises pour les missions migrées et seulement celles-ci.
+
+Responsable agent : Ingénieur workflows Temporal
+Relecteur indépendant : Architecte agentique
+Dépendances : JOS-004, JOS-006, JOS-007, JOS-019
+Phase : F4
+Référence locale stable : JOS-020
+Obligatoire : oui
+
+Critères d’acceptation :
+- execution_engine local/handoff_pending/temporal et workflow_id persistés ; outbox de transfert et démarrage idempotent, sans transaction DB/Temporal supposée.
+- missions.recuperer ne replanifie pas un workflow Temporal.
+- Tests crash : workflow créé/accusé perdu ; intention DB conservée/workflow absent ; anciennes tentatives drainées avant transfert.
+- Reprise, rollback de migration, versionnement et correspondance des événements testés.
+
+Lire docs/jarvis-os/PLAN.md, ARCHITECTURE.md et SESSIONS.md. Les rôles agents ne sont pas des comptes utilisateurs Linear. Ne pas revendiquer une capacité configurée comme vérifiée sans test réel.
+
+## JOS-021 — Construire le workflow projet recherche → livraison → suivi
+
+Objectif : Orchestrer dépendances, production parallèle, revue, corrections, staging, vérification et communication.
+
+Responsable agent : Ingénieur workflows Temporal
+Relecteur indépendant : QA indépendante des agents
+Dépendances : JOS-011, JOS-012, JOS-013, JOS-014, JOS-017, JOS-018, JOS-020
+Phase : F4
+Référence locale stable : JOS-021
+Obligatoire : oui
+
+Critères d’acceptation :
+- Étapes et critères explicites, résultats réutilisés sans recommencer tout le projet.
+- Attentes de services et événements externes avec timers, backoff et compensation.
+- Budget et mandat traversent la délégation ; résultat durable visible dans le Board.
+
+Lire docs/jarvis-os/PLAN.md, ARCHITECTURE.md et SESSIONS.md. Les rôles agents ne sont pas des comptes utilisateurs Linear. Ne pas revendiquer une capacité configurée comme vérifiée sans test réel.
+
+## JOS-022 — Livrer une page Intégrations fonctionnelle pour MCP et API
+
+Objectif : Connecter les outils depuis l’interface et les affecter réellement au chef, aux rôles et aux projets.
+
+Responsable agent : Ingénieur frontend intégrations
+Relecteur indépendant : Designer et ingénieur observabilité
+Dépendances : JOS-008, JOS-009, JOS-010
+Phase : F5
+Référence locale stable : JOS-022
+Obligatoire : oui
+
+Critères d’acceptation :
+- Ajouter, authentifier, découvrir, tester, affecter et révoquer fonctionnent sur de vrais connecteurs.
+- États de connexion explicites et secrets absents du navigateur.
+- Une affectation modifie les capacités effectives du prochain run et laisse un événement.
+
+Avancement local : Interface MCP HTTP/stdio, modèle API, mandats et OAuth Gmail livrée et testée dans Chromium ; connexion réelle aux comptes du propriétaire reste à valider.
+
+Lire docs/jarvis-os/PLAN.md, ARCHITECTURE.md et SESSIONS.md. Les rôles agents ne sont pas des comptes utilisateurs Linear. Ne pas revendiquer une capacité configurée comme vérifiée sans test réel.
+
+## JOS-023 — Représenter chef, sessions et appels d’outils dans un graphe opérationnel
+
+Objectif : Rendre visibles délégations, dépendances, connexions, activité et preuves à partir des sources réelles.
+
+Responsable agent : Designer et ingénieur observabilité
+Relecteur indépendant : Ingénieur frontend intégrations
+Dépendances : JOS-014, JOS-020, JOS-022
+Phase : F5
+Référence locale stable : JOS-023
+Obligatoire : oui
+
+Critères d’acceptation :
+- Les avatars référencent des rôles et les sessions des runs distincts.
+- Clic sur un outil : mandat, état, tentative, reçu et preuve.
+- Reconnexion de flux, données périmées et affichage mobile testés.
+
+Avancement local : Missions outillées visibles avec états, tours, traces publiques et contrôles ; graphe unifié chef/sessions/outils reste à construire.
+
+Lire docs/jarvis-os/PLAN.md, ARCHITECTURE.md et SESSIONS.md. Les rôles agents ne sont pas des comptes utilisateurs Linear. Ne pas revendiquer une capacité configurée comme vérifiée sans test réel.
+
+## JOS-024 — Créer un projet autonome et son mandat depuis le Board
+
+Objectif : Donner une intention, choisir connexions/périmètre, examiner le plan puis lancer le cycle complet.
+
+Responsable agent : Ingénieur frontend intégrations
+Relecteur indépendant : Ingénieur politique d’autonomie
+Dépendances : JOS-002, JOS-021, JOS-022, JOS-023
+Phase : F5
+Référence locale stable : JOS-024
+Obligatoire : oui
+
+Critères d’acceptation :
+- Préflight distingue les prérequis manquants des préférences facultatives.
+- Un mandat initial couvre les actions habituelles, avec budgets et révocation lisibles.
+- Pause/reprise/annulation agissent sur le workflow réel et affichent les effets incertains.
+
+Avancement local : Création de mandat et mission outillée depuis le Board livrée ; compilation et ordonnanceur de projet complet restent à construire.
+
+Lire docs/jarvis-os/PLAN.md, ARCHITECTURE.md et SESSIONS.md. Les rôles agents ne sont pas des comptes utilisateurs Linear. Ne pas revendiquer une capacité configurée comme vérifiée sans test réel.
+
+## JOS-025 — Exécuter le premier projet personnel réel de bout en bout
+
+Objectif : Petit produit interne : besoin → sources → Linear → code → tests → revue → staging → email récapitulatif.
+
+Responsable agent : QA indépendante des agents
+Relecteur indépendant : Architecte agentique
+Dépendances : JOS-011, JOS-012, JOS-013, JOS-016, JOS-018, JOS-021, JOS-024
+Phase : F6
+Référence locale stable : JOS-025
+Obligatoire : oui
+
+Critères d’acceptation :
+- Connexions et données de test réellement autorisées, pas uniquement fournisseur factice.
+- Aucune intervention après mandat initial dans le scénario nominal.
+- Livraison vérifiée avec SHA, tests, URL/identifiant de staging et reçu email.
+
+Lire docs/jarvis-os/PLAN.md, ARCHITECTURE.md et SESSIONS.md. Les rôles agents ne sont pas des comptes utilisateurs Linear. Ne pas revendiquer une capacité configurée comme vérifiée sans test réel.
+
+## JOS-026 — Tester pannes, révocations, concurrence et effets inconnus
+
+Objectif : Prouver la récupération du pilote à chaque frontière d’effet externe.
+
+Responsable agent : Ingénieur fiabilité distribuée
+Relecteur indépendant : QA indépendante des agents
+Dépendances : JOS-007, JOS-020, JOS-025
+Phase : F6
+Référence locale stable : JOS-026
+Obligatoire : oui
+
+Critères d’acceptation :
+- Crash avant/après envoi, retrait OAuth, coupure réseau, double événement et perte de bail couverts.
+- Aucun double effet observé ; unknown ne devient pas une réussite inventée.
+- Temps de récupération et cas nécessitant une exception documentés.
+
+Avancement local : Tests de crash, concurrence, OAuth, transport et arrêt MCP intégrés ; pannes de projet complet, serveur Temporal et restauration restent à éprouver.
+
+Lire docs/jarvis-os/PLAN.md, ARCHITECTURE.md et SESSIONS.md. Les rôles agents ne sont pas des comptes utilisateurs Linear. Ne pas revendiquer une capacité configurée comme vérifiée sans test réel.
+
+## JOS-027 — Évaluer modèles, prompts et autonomie avec des scores métier
+
+Objectif : Choisir les modèles et versions selon résultats mesurés et non leur seul niveau déclaré.
+
+Responsable agent : Ingénieur prompts et évaluations
+Relecteur indépendant : QA indépendante des agents
+Dépendances : JOS-015, JOS-018, JOS-025
+Phase : F6
+Référence locale stable : JOS-027
+Obligatoire : oui
+
+Critères d’acceptation :
+- Dix essais du pilote, score de succès vérifié, interventions, coûts et durée.
+- Objectif proposé : au moins neuf succès autonomes sur dix ; échecs conservés.
+- Modèle OpenAI réellement disponible testé sur planification et revue ; canari/retour arrière avant promotion.
+
+Lire docs/jarvis-os/PLAN.md, ARCHITECTURE.md et SESSIONS.md. Les rôles agents ne sont pas des comptes utilisateurs Linear. Ne pas revendiquer une capacité configurée comme vérifiée sans test réel.
+
+## JOS-028 — Exploiter Jarvis personnel avec sauvegarde, reprise et mises à jour
+
+Objectif : Rendre le système utilisable au quotidien même après arrêt de la machine et changement de version.
+
+Responsable agent : SRE des exécutants
+Relecteur indépendant : Ingénieur fiabilité distribuée
+Dépendances : JOS-026, JOS-027
+Phase : F6
+Référence locale stable : JOS-028
+Obligatoire : oui
+
+Critères d’acceptation :
+- Workers et services redémarrables ; dépendances et versions documentées.
+- Sauvegarde/restauration vérifiée de workflow, contrats, connexions et preuves.
+- Tableau de santé, coûts, alertes utiles et retour à une version stable testés.
+
+Lire docs/jarvis-os/PLAN.md, ARCHITECTURE.md et SESSIONS.md. Les rôles agents ne sont pas des comptes utilisateurs Linear. Ne pas revendiquer une capacité configurée comme vérifiée sans test réel.
+
+## JOS-029 — Comparer LangGraph et une boucle cognitive typée simple
+
+Objectif : Décider sur preuves si LangGraph améliore suffisamment le runtime, sans imposer LangChain au cœur.
+
+Responsable agent : Ingénieur runtime agentique
+Relecteur indépendant : Ingénieur prompts et évaluations
+Dépendances : JOS-014
+Phase : F3
+Référence locale stable : JOS-029
+Obligatoire : non
+
+Critères d’acceptation :
+- Même scénario, outils, modèle et budget pour les deux implémentations.
+- Comparer qualité, reprise, complexité, coût et délai ; documenter go/no-go.
+- Si retenu, périmètre de checkpoints borné et absence de double retry avec Temporal.
+
+Lire docs/jarvis-os/PLAN.md, ARCHITECTURE.md et SESSIONS.md. Les rôles agents ne sont pas des comptes utilisateurs Linear. Ne pas revendiquer une capacité configurée comme vérifiée sans test réel.
+
+## JOS-030 — Ouvrir le réseau libre des agents à toute l’usine
+
+Objectif : Permettre aux agents de discuter librement des modèles, de l’usine et de tout sujet, avec projets et tâches facultatifs.
+
+Responsable agent : Ingénieur runtime agentique
+Relecteur indépendant : QA indépendante des agents
+Dépendances : JOS-001
+Phase : F3
+Référence locale stable : JOS-030
+Obligatoire : oui
+
+Critères d’acceptation :
+- Salon général global et salons libres, publications et réponses persistantes, aucun filtre sémantique ni preuve obligatoire pour parler.
+- Identité contrôlée côté HTTP/CLI, pagination, idempotence et limites techniques de stockage.
+- Réseau visible dans le Board ; prompts et notifications permettent aux sessions réelles de participer sans opinions inventées.
+- Promotion distincte en leçon après relecture ; aucune conversation ne change implicitement droits ou logiciel.
+
+Avancement local : Réseau global libre, CLI/API/interface et prompts livrés ; outils de publication/réponse utilisables par le nouveau runtime sous mandat usine. Parcours Chromium avec fournisseur factice explicite validé ; aucun modèle distant présenté actif.
+
+Lire docs/jarvis-os/PLAN.md, ARCHITECTURE.md et SESSIONS.md. Les rôles agents ne sont pas des comptes utilisateurs Linear. Ne pas revendiquer une capacité configurée comme vérifiée sans test réel.

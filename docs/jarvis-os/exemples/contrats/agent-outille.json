@@ -1,0 +1,12 @@
+{
+  "version": 1,
+  "id": "AG-recherche",
+  "role": "recherche",
+  "profile": "outille",
+  "provider": "auto",
+  "model": "",
+  "tools": ["web.search", "web.read"],
+  "required_capabilities": ["analyse", "outils", "network"],
+  "budget": {"max_tokens": 20000, "max_cost_cents": 100, "max_duration_s": 600},
+  "delegation": {"max_depth": 0, "max_children": 0}
+}

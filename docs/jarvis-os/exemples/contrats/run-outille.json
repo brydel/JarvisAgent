@@ -1,0 +1,10 @@
+{
+  "version": 1,
+  "id": "RUN-recherche",
+  "agent_id": "AG-recherche",
+  "task_id": "TK-recherche",
+  "status": "planned",
+  "source": "cli",
+  "session_ref": null,
+  "evidence": []
+}
