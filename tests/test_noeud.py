@@ -38,7 +38,8 @@ sys.exit(jarvis_noeud.principal(["ssh"]))
 
 
 class MoteurFactice:
-    nom = "factice-small"
+    """Faux Whisper (interface de service.Whisper)."""
+    nom, charge = "factice-small", False
 
     def __init__(self):
         self.appels = 0
@@ -46,6 +47,28 @@ class MoteurFactice:
     def transcrire(self, chemin, langue):
         self.appels += 1
         return {"texte": "Rappelle-moi d'envoyer le devis à Repriceo vendredi.", "langue": langue, "segments": 1}
+
+    def decharger(self):
+        pass
+
+
+class LlmFactice:
+    """Faux modèle local (interface de service.Ollama)."""
+    nom, charge = "local-factice:4b", False
+
+    def __init__(self):
+        self.appels = []
+
+    def present(self):
+        return True
+
+    def discuter(self, consigne, document, max_jetons, image=None):
+        self.appels.append((consigne, document, image))
+        texte = "Texte visible : Maquette — Page d'accueil" if image else "Résumé : envoyer le devis vendredi."
+        return {"texte": texte, "jetons_entree": 30, "jetons_sortie": 8, "modele": self.nom}
+
+    def decharger(self):
+        pass
 
 
 class NoeudTest(tb.Base):
@@ -57,8 +80,9 @@ class NoeudTest(tb.Base):
         self.cr = coureur.Coureur(coureur.TransportLocal(rid, secret), {"factice": self.capteur})
         d = Path(tempfile.mkdtemp(prefix="jarvis-noeud-test-"))
         self.addCleanup(shutil.rmtree, d, True)
-        self.moteur = MoteurFactice()
-        self.srv = service.serveur(service.Reglages(jeton=JETON, port=0, entree=str(d / "entree")), self.moteur)
+        self.moteur, self.llm = MoteurFactice(), LlmFactice()
+        reglages = service.Reglages(jeton=JETON, port=0, entree=str(d / "entree"))
+        self.srv = service.serveur(reglages, service.Moteurs(reglages, whisper=self.moteur, llm=self.llm))
         fil = threading.Thread(target=self.srv.serve_forever, daemon=True)
         fil.start()
         self.addCleanup(lambda: (self.srv.shutdown(), self.srv.server_close(), fil.join(2)))
@@ -132,11 +156,47 @@ class NoeudTest(tb.Base):
         self.assertIn("transcription impossible", p["note"])
         self.assertEqual(self.moteur.appels, 0)
 
-    def test_image_jamais_envoyee_au_noeud(self):
+    def test_image_du_board_lue_par_le_modele_local(self):
         a = self.fichier(tb.png(20, 20), "capture.png")
         mi.board_ajouter(self.org, "accueil", "image", "", auteur="test", asset_id=a["id"], contextualiser=True)
-        self.cr.tour()
-        self.assertEqual(self.moteur.appels, 0)
+        self.assertEqual(self.cr.tour()["etat"], "fait")
+        vu = self.capteur.vu
+        p = vu["pieces"]
+        self.assertEqual(self.moteur.appels, 0, "une image ne passe jamais par Whisper")
+        self.assertEqual(p["fichier"], "piece.png", "l'image reste jointe au modèle principal")
+        self.assertIn("Maquette", p["vision"])
+        self.assertIsNotNone(self.llm.appels[-1][2])
+        self.assertIn("lecture d'image (noeud GPU)", [o["outil"] for o in coureur.outils_prepares(p)])
+        consigne = ad._consigne(vu)
+        self.assertLess(consigne.index("<<<ELEMENT"), consigne.index("Maquette"))
+        self.assertLess(consigne.index("Maquette"), consigne.index("ELEMENT>>>"))
+
+    def test_image_sans_noeud_reste_lue_par_le_modele_principal(self):
+        self.srv.shutdown()
+        self.srv.server_close()
+        a = self.fichier(tb.png(20, 20), "capture.png")
+        mi.board_ajouter(self.org, "accueil", "image", "", auteur="test", asset_id=a["id"], contextualiser=True)
+        self.assertEqual(self.cr.tour()["etat"], "fait")
+        p = self.capteur.vu["pieces"]
+        self.assertEqual(p["fichier"], "piece.png")
+        self.assertNotIn("vision", p)
+        self.assertIn("impossible", p["vision_note"])
+
+    def test_petite_tache_texte_par_la_passerelle(self):
+        r = noeud.generer_texte("Résume en une phrase.", "Il faut envoyer le devis à Repriceo vendredi.",
+                                cle_operation="test:texte", max_jetons=128)
+        self.assertEqual(r["texte"], "Résumé : envoyer le devis vendredi.")
+        self.assertEqual(r["modele"], "local-factice:4b")
+        self.assertEqual(self.llm.appels[-1][:2], ("Résume en une phrase.", "Il faut envoyer le devis à Repriceo vendredi."))
+        ops = [o for o in outils.operations(noeud.PROJET_BOARD) if o["operation_id"].startswith("test:texte:")]
+        self.assertIn("texte_generer", {o["tool"].split(".")[-1] for o in ops})
+        self.assertTrue(all(o["status"] == "succeeded" for o in ops), "chaque appel journalisé et réussi")
+
+    def test_cli_demander(self):
+        with mock.patch("builtins.print") as imprime:
+            self.assertEqual(cli.cmd_noeud_demander(mock.Mock(consigne=["Classe", "ce", "texte."], fichier=None,
+                                                              image=None, max_jetons=64)), 0)
+        self.assertEqual(imprime.call_args_list[0].args[0], "Résumé : envoyer le devis vendredi.")
 
     def test_rebranchement_revoque_l_ancien_mandat(self):
         ancien = self.branche["mandat"]

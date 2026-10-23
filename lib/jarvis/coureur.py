@@ -52,6 +52,10 @@ def outils_prepares(pieces: dict) -> list[dict]:
         sortie.append({"outil": "lecture web", "detail": f"{len(pieces['page'])} caractères lus"})
     if pieces.get("transcription"):
         sortie.append({"outil": "transcription (noeud GPU)", "detail": pieces.get("transcription_detail", "")[:200]})
+    if pieces.get("vision"):
+        sortie.append({"outil": "lecture d'image (noeud GPU)", "detail": pieces.get("vision_detail", "")[:200]})
+    elif pieces.get("vision_note"):
+        sortie.append({"outil": "lecture d'image (noeud GPU)", "detail": pieces["vision_note"]})
     if pieces.get("note"):
         sortie.append({"outil": "pièce indisponible", "detail": pieces["note"][:200]})
     return sortie
@@ -73,6 +77,8 @@ def preparer_pieces(env: dict, dossier: Path) -> dict:
             if ext:
                 shutil.copyfile(chemin, dossier / f"piece{ext}")
                 pieces.update(fichier=f"piece{ext}", image=a["mime"].startswith("image/"))
+                if pieces["image"]:
+                    _lire_image(env, pieces, chemin)
             else:
                 m = a.get("meta") or {}
                 metadonnees = (f"Fichier {a['mime']} « {a['nom']} », {a['taille']} octets"
@@ -97,6 +103,27 @@ def preparer_pieces(env: dict, dossier: Path) -> dict:
         pieces["note"] = f"Pièce indisponible : {exc}"
     verifier(env)
     return pieces
+
+
+def _lire_image(env: dict, pieces: dict, chemin: Path) -> None:
+    """Image du Board : texte visible et description par le modèle local du noeud, en plus de l'image elle-même.
+    Facultatif : une panne laisse le modèle principal lire l'image seul, sans note d'erreur bloquante."""
+    from . import noeud
+    r = noeud.reglages()
+    if not noeud.active(r)[0]:
+        return
+    r["delai_s"] = max(30, min(int(r.get("delai_s") or 900), int(env["delai_s"]) // 3))
+    try:
+        v = noeud.decrire_image(chemin, cle_operation=f"noeud-image:{env['tache_id']}:{env['tentative_id']}",
+                                verifier=lambda: verifier(env), r=r)
+    except (noeud.NoeudError, OSError) as exc:
+        pieces["vision_note"] = f"lecture locale de l'image impossible ({exc})"[:200]
+        return
+    if v["texte"]:
+        pieces.update(vision=v["texte"], vision_detail=" · ".join(x for x in (
+            v["modele"] and f"modèle {v['modele']}",
+            v["duree_traitement_s"] is not None and f"lu en {v['duree_traitement_s']:.0f} s",
+            f"{len(v['texte'])} caractères") if x))
 
 
 def _transcrire(env: dict, pieces: dict, chemin: Path, metadonnees: str) -> None:

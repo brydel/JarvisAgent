@@ -95,6 +95,7 @@ ${C_CYAN}Réglages${C_OFF}
   jarvis projet liste
   jarvis telegram config|test           Relier Jarvis à ton téléphone
   jarvis noeud config <u@hote>|etat     Étendre Jarvis d'un noeud GPU (Jetson) : outils sous mandat
+  jarvis noeud demander "…" [--fichier F|--image I]  Petite tâche sur le modèle local du noeud
   jarvis regler <clé> <valeur>          ex. general.max_agents 3
   jarvis veille [fait <projet>]         Veille concurrentielle par projet
   jarvis init-project [dossier]         Ajoute AGENTS.md + CLAUDE.md (protocole Linear)

@@ -28,26 +28,59 @@ JETON = "test-only-not-a-real-secret-" * 2
 
 
 class MoteurFactice:
+    """Faux Whisper : mêmes méthodes que service.Whisper, sans modèle."""
     nom = "factice"
 
     def __init__(self):
-        self.appels, self.liberer, self.erreur = [], threading.Event(), None
+        self.appels, self.liberer, self.erreur, self.charge, self.decharges = [], threading.Event(), None, False, 0
         self.liberer.set()
 
     def transcrire(self, chemin, langue):
+        self.charge = True
         self.appels.append((Path(chemin).read_bytes(), langue))
         self.liberer.wait(3)
         if self.erreur:
             raise self.erreur
         return {"texte": " Bonjour Jarvis. ", "langue": langue, "segments": 1}
 
+    def decharger(self):
+        if self.charge:
+            self.decharges += 1
+        self.charge = False
+
+
+class LlmFactice:
+    """Faux modèle local : mêmes méthodes que service.Ollama, sans serveur."""
+    nom = "local-factice:4b"
+
+    def __init__(self):
+        self.appels, self.charge, self.decharges = [], False, 0
+
+    def present(self):
+        return True
+
+    def discuter(self, consigne, document, max_jetons, image=None):
+        self.charge = True
+        self.appels.append((consigne, document, max_jetons, image))
+        return {"texte": "Résumé : devis vendredi.", "jetons_entree": 42, "jetons_sortie": 7, "modele": self.nom}
+
+    def decharger(self):
+        if self.charge:
+            self.decharges += 1
+        self.charge = False
+
+
+PNG = b"\x89PNG\r\n\x1a\n" + b"\x00" * 32
+
 
 class Base(unittest.TestCase):
     def setUp(self):
         self.tmp = Path(tempfile.mkdtemp(prefix="jarvis-noeud-"))
         self.entree = self.tmp / "entree"
-        self.moteur = MoteurFactice()
-        self.srv = service.serveur(service.Reglages(jeton=JETON, port=0, entree=str(self.entree)), self.moteur)
+        self.moteur, self.llm = MoteurFactice(), LlmFactice()
+        reglages = service.Reglages(jeton=JETON, port=0, entree=str(self.entree))
+        self.moteurs = service.Moteurs(reglages, whisper=self.moteur, llm=self.llm)
+        self.srv = service.serveur(reglages, self.moteurs)
         self.fil = threading.Thread(target=self.srv.serve_forever, daemon=True)
         self.fil.start()
         conf = self.tmp / "env"
@@ -145,7 +178,9 @@ class McpTests(Base):
                        {"jsonrpc": "2.0", "id": 4, "method": "shell/exec"})
         self.assertIn("error", rep[0], "aucun outil avant initialize")
         self.assertEqual(rep[1]["result"]["protocolVersion"], "2025-03-26")
-        self.assertEqual({t["name"] for t in rep[2]["result"]["tools"]}, {"audio_transcrire", "audio_resultat", "noeud_sante"})
+        self.assertEqual({t["name"] for t in rep[2]["result"]["tools"]},
+                         {"audio_transcrire", "audio_resultat", "texte_generer", "image_decrire", "travail_resultat",
+                          "noeud_sante"})
         self.assertEqual(rep[3]["error"]["code"], -32601)
 
     def test_schemas_dans_le_sous_ensemble_de_la_passerelle(self):
@@ -166,6 +201,60 @@ class McpTests(Base):
                           ("noeud_sante", {"x": 1}), ("inconnu", {})):
             with self.subTest(nom=nom, args=args):
                 self.assertTrue(self.appel(nom, args)["isError"])
+
+
+class ModeleLocalTests(Base):
+    def resultat(self, outil, args):
+        soumis = self.appel(outil, args)
+        self.assertFalse(soumis["isError"], soumis)
+        return self.appel("travail_resultat", {"travail": soumis["structuredContent"]["id"], "attente_s": 5})["structuredContent"]
+
+    def test_texte_genere_comme_donnee_bornee(self):
+        fini = self.resultat("texte_generer", {"consigne": "Résume en une phrase.", "texte": "Envoyer le devis vendredi.",
+                                               "max_jetons": 128})
+        self.assertEqual(fini["statut"], "termine")
+        self.assertEqual(fini["resultat"]["texte"], "Résumé : devis vendredi.")
+        self.assertEqual(self.llm.appels, [("Résume en une phrase.", "Envoyer le devis vendredi.", 128, None)])
+        self.assertNotIn("consigne", fini, "la demande n'est pas renvoyée ni gardée")
+
+    def test_image_decrite_seulement_si_vraie_image(self):
+        sha = self.deposer(PNG)
+        fini = self.resultat("image_decrire", {"fichier": sha, "consigne": "Lis le texte visible."})
+        self.assertEqual(fini["statut"], "termine")
+        self.assertEqual(self.llm.appels[-1][3], PNG)
+        self.assertFalse((self.entree / sha).exists())
+        faux = self.resultat("image_decrire", {"fichier": self.deposer(b"pas une image"), "consigne": "Lis."})
+        self.assertEqual(faux["statut"], "echec")
+        self.assertEqual(len(self.llm.appels), 1)
+
+    def test_un_seul_modele_en_memoire(self):
+        ident = self.appel("audio_transcrire", {"fichier": self.deposer()})["structuredContent"]["id"]
+        self.appel("travail_resultat", {"travail": ident, "attente_s": 5})
+        self.assertTrue(self.moteur.charge)
+        self.resultat("texte_generer", {"consigne": "Classe."})
+        self.assertFalse(self.moteur.charge, "Whisper libéré avant le modèle texte")
+        self.assertEqual(self.moteur.decharges, 1)
+        ident = self.appel("audio_transcrire", {"fichier": self.deposer(b"autre")})["structuredContent"]["id"]
+        self.appel("travail_resultat", {"travail": ident, "attente_s": 5})
+        self.assertEqual(self.llm.decharges, 1, "modèle texte libéré avant Whisper")
+
+    def test_whisper_libere_apres_inactivite(self):
+        ident = self.appel("audio_transcrire", {"fichier": self.deposer()})["structuredContent"]["id"]
+        self.appel("travail_resultat", {"travail": ident, "attente_s": 5})
+        self.moteurs.inactif()
+        self.assertTrue(self.moteur.charge, "encore récent : gardé")
+        self.moteurs.dernier -= 10_000
+        self.moteurs.inactif()
+        self.assertFalse(self.moteur.charge)
+
+    def test_entrees_hors_bornes_refusees(self):
+        for nom, args in (("texte_generer", {"consigne": ""}), ("texte_generer", {"consigne": "x", "texte": "y" * 30_000}),
+                          ("texte_generer", {"consigne": "x", "max_jetons": 99_999}),
+                          ("texte_generer", {"consigne": "x", "modele": "autre"}),
+                          ("image_decrire", {"fichier": "a" * 64}), ("image_decrire", {"fichier": "../x", "consigne": "x"})):
+            with self.subTest(nom=nom, args=args):
+                self.assertTrue(self.appel(nom, args)["isError"])
+        self.assertEqual(self.llm.appels, [])
 
 
 class DepotTests(Base):

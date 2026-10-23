@@ -7,7 +7,12 @@ jamais des données.
 
 Pas d'agents de code sur le noeud : Claude Code et Codex calculent dans le cloud, la Jetson n'y apporterait que
 ses 8 Go et obligerait à copier dépôts, worktrees et secrets. Le noeud sert au calcul GPU local : transcription
-aujourd'hui ; vision, embeddings (calculés ici, stockés par Jarvis) et petit modèle local ensuite.
+(Whisper) et **modèle local multimodal** (Gemma 3 4B par défaut, via Ollama) pour les petites et moyennes tâches
+texte et la lecture d'images. Ensuite : embeddings (calculés ici, stockés par Jarvis).
+
+**Mémoire** : 8 Go partagés CPU/GPU, donc **un seul modèle lourd à la fois**. Whisper est chargé au premier audio
+et libéré après 5 min sans travail ; avant un travail texte ou image, Whisper est libéré, et avant un audio le
+modèle local l'est. Les travaux passent par une seule file, un par un.
 
 ## Architecture
 
@@ -24,12 +29,19 @@ Jarvis (poste)                                         Jetson
 - **Transport** : la connexion MCP `mcp_stdio` de la passerelle lance `/usr/bin/ssh … mcp`. Aucun port n'est ouvert
   sur la Jetson ; le service GPU n'écoute que sur 127.0.0.1. La clé de Jarvis est **limitée à une commande forcée** :
   elle ne donne ni shell, ni redirection de port. Seules `mcp`, `depot <sha256> <taille>` et `sante` sont acceptées.
-- **Outils MCP** : `audio_transcrire` (dépose un travail, répond tout de suite), `audio_resultat` (attend 15 s au
-  plus), `noeud_sante` (lecture seule). Une session MCP stdio est bornée à 30 s : la transcription est asynchrone.
+- **Outils MCP** (tous asynchrones : une session MCP stdio est bornée à 30 s) :
+  `audio_transcrire`, `texte_generer` (consigne ≤ 4 000 caractères, texte-donnée ≤ 24 000, 16 à 2 048 jetons),
+  `image_decrire` (image déposée, PNG/JPEG/WEBP/GIF reconnus par leurs octets), `travail_resultat` /
+  `audio_resultat` (attendent 15 s au plus), `noeud_sante` (lecture seule). Le modèle local n'a aucun outil : il
+  lit une donnée délimitée et rend du texte, que Jarvis traite à son tour comme une donnée.
+- **Usages côté Jarvis** : audio du Board transcrit ; images du Board lues (texte visible et description) en plus
+  de l'image jointe au chef ; `jarvis noeud demander "…" [--fichier F | --image I]` pour le chef, les agents ou toi
+  (résumer, extraire, classer, lire une capture) sans jeton Claude ni Codex.
 - **Fichiers lourds** : déposés à part (`depot`), vérifiés par taille et empreinte, désignés ensuite par leur
   SHA-256. Effacés après traitement ; ceux qui n'ont pas servi sont purgés au bout d'une heure.
-- **Mandat** : `jarvis noeud config` crée un mandat d'un an pour le projet `jarvis-board`, limité aux deux outils de
-  transcription et à la destination `mcp:<connexion>`. Le révoquer coupe aussitôt le Board du noeud.
+- **Mandat** : `jarvis noeud config` crée un mandat d'un an pour le projet `jarvis-board`, limité aux outils du
+  noeud et à la destination `mcp:<connexion>`. Le révoquer coupe aussitôt Jarvis du noeud. Un mandat ne s'élargit
+  pas : après l'ajout d'outils, relancer `jarvis noeud config` (nouvelle connexion, nouveau mandat, l'ancien révoqué).
 - **Pannes** : noeud éteint, délai dépassé, mandat révoqué → l'audio garde ses métadonnées et le modèle le signale ;
   la mission continue. Aucun rejeu aveugle : chaque appel a un identifiant d'opération stable.
 

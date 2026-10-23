@@ -10,15 +10,18 @@
 set -euo pipefail
 
 MODELE="small"
+LLM="gemma3:4b"
 CLE=""
 while (($#)); do
   case "$1" in
     --modele) MODELE="$2"; shift 2 ;;
+    --llm) LLM="$2"; shift 2 ;;
     --cle-jarvis) CLE="$2"; shift 2 ;;
     *) echo "Option inconnue : $1" >&2; exit 2 ;;
   esac
 done
 [[ "$MODELE" =~ ^[a-z0-9.-]{1,40}$ ]] || { echo "Nom de modèle invalide." >&2; exit 2; }
+[[ "$LLM" =~ ^[a-z0-9._:/-]{1,80}$ ]] || { echo "Nom de modèle local invalide." >&2; exit 2; }
 
 WHISPER_VERSION="20240930"
 DIR="$HOME/.local/share/jarvis-noeud"
@@ -54,16 +57,23 @@ reglage() {  # reglage CLE VALEUR : remplace ou ajoute une ligne du fichier env
   if grep -q "^$1=" "$CONF/env"; then sed -i "s|^$1=.*|$1=$2|" "$CONF/env"; else printf '%s=%s\n' "$1" "$2" >> "$CONF/env"; fi
 }
 reglage JARVIS_NOEUD_MODELE "$MODELE"
+reglage JARVIS_NOEUD_LLM "$LLM"
 reglage JARVIS_NOEUD_ENTREE "$HOME/.cache/jarvis-noeud/entree"
 chmod 600 "$CONF/env"
 
-echo "Téléchargement du modèle « $MODELE » si absent…"
+echo "Téléchargement du modèle audio « $MODELE » si absent…"
 "$DIR/venv/bin/python" -c "import whisper; whisper.load_model('$MODELE', device='cpu')" >/dev/null
+if command -v ollama >/dev/null; then
+  echo "Téléchargement du modèle local « $LLM » si absent (Ollama)…"
+  ollama pull "$LLM" >/dev/null && echo "✓ modèle local $LLM prêt"
+else
+  echo "⚠ Ollama absent : texte et image locaux indisponibles. Installe-le (sudo) : curl -fsSL https://ollama.com/install.sh | sh" >&2
+fi
 
 cat > "$UNITE" <<EOF
 [Unit]
-Description=Jarvis : noeud GPU (transcription Whisper)
-After=network-online.target
+Description=Jarvis : noeud GPU (transcription Whisper, modèle local texte et image)
+After=network-online.target ollama.service
 
 [Service]
 EnvironmentFile=$CONF/env
@@ -93,5 +103,5 @@ if [[ -n "$CLE" ]]; then
   echo "✓ Clé de Jarvis autorisée (commande forcée, sans shell). Copie de l'ancien fichier : authorized_keys.avant-jarvis-noeud"
 fi
 
-echo "✓ Noeud GPU jarvis-noeud (modèle $MODELE) démarré, à l'écoute sur 127.0.0.1 seulement."
+echo "✓ Noeud GPU jarvis-noeud (audio $MODELE à la demande, texte/image $LLM) démarré, sur 127.0.0.1 seulement."
 echo "  Journal : journalctl --user -u jarvis-noeud -f"
