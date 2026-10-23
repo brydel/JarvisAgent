@@ -34,7 +34,8 @@ def vivant(pid):
         # Un petit-enfant tué peut rester zombie jusqu'au passage de l'init du conteneur.
         etat = Path(f"/proc/{pid}/stat").read_text().split(") ", 1)[1].split()[0]
         return etat not in ("Z", "X")
-    except FileNotFoundError:
+    except (FileNotFoundError, ProcessLookupError, IndexError):
+        # le processus peut disparaître PENDANT la lecture de /proc (ESRCH, contenu tronqué) : il est arrêté
         return False
 
 
