@@ -168,15 +168,17 @@ def synchroniser(agents_vus: list[dict] | None = None, *, now: float | None = No
                             "statut": STATUTS_AGENT.get(a["status"], a["status"]), "actif": a["status"] in ACTIFS,
                             "issue": a.get("issue") or "", "depuis": a.get("elapsed", "")})
         actifs = [m for m in membres if m["actif"]]
-        if not actifs:
-            # pas de travail : la carte existante passe au repos, aucune n'est créée
-            c = missions._connecter(tenant)
-            try:
-                existe = _trouver(c, tenant, projet, f"equipe:{projet}")
-            finally:
-                c.close()
-            if existe is None:
-                continue
+        c = missions._connecter(tenant)
+        try:
+            existe = _trouver(c, tenant, projet, f"equipe:{projet}")
+        finally:
+            c.close()
+        if not actifs and (existe is None or existe["supprime"]):
+            continue  # pas de travail : la carte existante passe au repos, aucune n'est créée ni ramenée
+        if actifs and existe is not None and existe["supprime"]:
+            # retirée quand l'équipe était au repos : elle revient dès que des agents se remettent au travail
+            from . import board
+            board.supprimer(tenant, [existe["id"]], par="jarvis:chef", restaurer=True, now=now)
         oid = _carte(tenant, projet, f"equipe:{projet}", "agents", {
             "titre": f"Équipe {projet}", "membres": membres[:8], "actifs": len(actifs)}, taille=(360, 360), now=now)
         if oid:
@@ -192,6 +194,69 @@ def synchroniser(agents_vus: list[dict] | None = None, *, now: float | None = No
                     if carte_t and not carte_t["supprime"]:
                         _lier(tenant, projet, oid, carte_t["id"], "travaille sur", "utilise")
     return bilan
+
+
+RETRAITS = "board_retraits.json"  # derniers retraits (pour « restaurer --dernier »)
+
+
+def termines(tenant: str, espace: str) -> list[dict]:
+    """Cartes de travail finies d'un Board : tâches non actives, équipe au repos, plans approuvés sans tâche active.
+    Un plan encore à valider et tout ce qui est en cours restent."""
+    from . import board
+    objs = [o for o in board.objets(tenant, espace)["objets"] if o["meta"].get("travail_ref")]
+    actives_par_plan = {}
+    for o in objs:
+        if o["type"] == "tache" and o["meta"].get("actif"):
+            actives_par_plan[o["meta"].get("plan_id")] = True
+    sortie = []
+    for o in objs:
+        m = o["meta"]
+        if (o["type"] == "tache" and not m.get("actif")) \
+                or (o["type"] == "agents" and not m.get("actifs")) \
+                or (o["type"] == "plan" and m.get("statut") == "approuve" and not actives_par_plan.get(m.get("plan_id"))):
+            sortie.append(o)
+    return sortie
+
+
+def retirer(tenant: str, espace: str, *, ids: list[str] | None = None, finis: bool = False, par: str,
+            now: float | None = None) -> dict:
+    """Retire du Board (suppression douce, restaurable) des cartes désignées et/ou les cartes de travail finies.
+    Rien n'est effacé ; la synchronisation ne recrée pas une carte retirée."""
+    from . import board
+    now = now or time.time()
+    choisis: dict[str, dict] = {}
+    if finis:
+        for o in termines(tenant, espace):
+            choisis[o["id"]] = o
+    if ids:
+        presents = {o["id"]: o for o in board.objets(tenant, espace)["objets"]}
+        inconnus = [i for i in ids if i not in presents]
+        if inconnus:
+            raise missions.MissionError("inconnue", f"carte(s) absente(s) du Board {espace} : {', '.join(inconnus[:5])}")
+        choisis.update({i: presents[i] for i in ids})
+    if not choisis:
+        return {"retirees": 0, "ids": [], "espace": espace}
+    liste = list(choisis)
+    n = 0
+    for i in range(0, len(liste), 500):
+        n += board.supprimer(tenant, liste[i:i + 500], par=par, now=now)
+    store.write_json(RETRAITS, {"ts": now, "ids": liste, "espace": espace, "par": par})
+    par_type: dict[str, int] = {}
+    for o in choisis.values():
+        par_type[o["type"]] = par_type.get(o["type"], 0) + 1
+    return {"retirees": n, "ids": liste, "espace": espace, "par_type": par_type}
+
+
+def restaurer_dernier(tenant: str, *, par: str, now: float | None = None) -> dict:
+    from . import board
+    dernier = store.read_json(RETRAITS, {})
+    if not dernier.get("ids"):
+        raise missions.MissionError("inconnue", "aucun retrait récent à restaurer")
+    n = 0
+    for i in range(0, len(dernier["ids"]), 500):
+        n += board.supprimer(tenant, dernier["ids"][i:i + 500], par=par, restaurer=True, now=now)
+    store.write_json(RETRAITS, {})
+    return {"restaurees": n, "espace": dernier.get("espace", "")}
 
 
 def verifier(now: float | None = None) -> None:

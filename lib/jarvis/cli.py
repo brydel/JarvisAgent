@@ -2035,6 +2035,36 @@ def cmd_board(a) -> int:
                 return _err("usage : jarvis board decider BO-… <numéro d'action> lancer|ecarter")
             r = missions.decider_proposition(org, a.quoi[0], int(a.quoi[1]) - 1, a.quoi[2], par=acteur)
             print(f"mission {r['mission_id']} créée (préparation L1)" if r.get("mission_id") else "action écartée")
+        elif a.action == "retirer":
+            from . import travail_board
+            ids = [i for i in a.quoi if i.startswith("BO-")]
+            if not ids and not a.termines:
+                return _err("usage : jarvis board retirer --espace P --termines [--essai]  ou  jarvis board retirer BO-… [BO-…]")
+            if a.essai:
+                vises = travail_board.termines(org, espace) if a.termines else []
+                for o in vises:
+                    print(f"{o['id']} [{o['type']}] {o['meta'].get('titre', '')[:80]}")
+                print(f"{len(vises) + len(ids)} carte(s) seraient retirées du Board {espace} (essai : rien n'a été retiré)")
+                return 0
+            r = travail_board.retirer(org, espace, ids=ids, finis=a.termines, par=acteur)
+            detail = ", ".join(f"{n} {t}" for t, n in sorted(r.get("par_type", {}).items()))
+            print(f"{r['retirees']} carte(s) retirée(s) du Board {espace}" + (f" ({detail})" if detail else "")
+                  + (". Restaurer : jarvis board restaurer --dernier" if r["retirees"] else " : rien à retirer"))
+            if r["retirees"] and acteur != "humain":  # ce que fait le chef sur ton Board, tu le sais tout de suite
+                store.feed_add("chef", f"Board {espace} : {r['retirees']} carte(s) retirée(s) par le chef ({detail})")
+                synchro._effet("telegram", synchro._telegram,
+                               f"🧹 Le chef a retiré {r['retirees']} carte(s) du Board {espace} ({detail}).\n"
+                               "Rien n'est effacé : demande-lui de les remettre, ou jarvis board restaurer --dernier.")
+        elif a.action == "restaurer":
+            from . import travail_board
+            ids = [i for i in a.quoi if i.startswith("BO-")]
+            if a.dernier:
+                r = travail_board.restaurer_dernier(org, par=acteur)
+                print(f"{r['restaurees']} carte(s) restaurée(s) sur le Board {r['espace']}")
+            elif ids:
+                print(f"{board.supprimer(org, ids, par=acteur, restaurer=True)} carte(s) restaurée(s)")
+            else:
+                return _err("usage : jarvis board restaurer --dernier  ou  jarvis board restaurer BO-… [BO-…]")
     except missions.MissionError as exc:
         return _err(str(exc))
     return 0
@@ -2285,12 +2315,17 @@ def build_parser() -> argparse.ArgumentParser:
     s.set_defaults(fn=cmd_secrets)
 
     s = sub.add_parser("board", help="le Board partagé : voir, déposer, commenter, relier, décider (chef compris)")
-    s.add_argument("action", nargs="?", default="voir", choices=("voir", "espaces", "deposer", "commenter", "lier", "decider"))
+    s.add_argument("action", nargs="?", default="voir",
+                   choices=("voir", "espaces", "deposer", "commenter", "lier", "decider", "retirer", "restaurer"))
     s.add_argument("quoi", nargs="*")
     s.add_argument("--espace", default="accueil", help="Board du projet (accueil par défaut)")
     s.add_argument("--titre", default="")
     s.add_argument("--nature", default="alimente")
     s.add_argument("--analyser", action="store_true", help="faire contextualiser la carte déposée")
+    s.add_argument("--termines", action="store_true",
+                   help="retirer : les cartes de travail finies (tâches, équipe au repos, plans sans tâche active)")
+    s.add_argument("--dernier", action="store_true", help="restaurer : le dernier retrait")
+    s.add_argument("--essai", action="store_true", help="retirer : montrer ce qui serait retiré, sans rien retirer")
     s.set_defaults(fn=cmd_board)
 
     s = sub.add_parser("memoire", help="mémoire du chef : décisions, échecs, leçons (recherche pondérée)")
