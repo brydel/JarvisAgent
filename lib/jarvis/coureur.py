@@ -50,6 +50,8 @@ def outils_prepares(pieces: dict) -> list[dict]:
         sortie.append({"outil": "copie isolée", "detail": pieces["fichier"]})
     if pieces.get("page"):
         sortie.append({"outil": "lecture web", "detail": f"{len(pieces['page'])} caractères lus"})
+    if pieces.get("transcription"):
+        sortie.append({"outil": "transcription (noeud GPU)", "detail": pieces.get("transcription_detail", "")[:200]})
     if pieces.get("note"):
         sortie.append({"outil": "pièce indisponible", "detail": pieces["note"][:200]})
     return sortie
@@ -73,9 +75,11 @@ def preparer_pieces(env: dict, dossier: Path) -> dict:
                 pieces.update(fichier=f"piece{ext}", image=a["mime"].startswith("image/"))
             else:
                 m = a.get("meta") or {}
-                pieces["note"] = (f"Fichier {a['mime']} « {a['nom']} », {a['taille']} octets"
-                                  + (f", durée {m['duree']:.0f} s" if isinstance(m.get('duree'), (int, float)) else "")
-                                  + " : contenu non transmis (seuls les métadonnées sont connues).")
+                metadonnees = (f"Fichier {a['mime']} « {a['nom']} », {a['taille']} octets"
+                               + (f", durée {m['duree']:.0f} s" if isinstance(m.get('duree'), (int, float)) else ""))
+                pieces["note"] = metadonnees + " : contenu non transmis (seuls les métadonnées sont connues)."
+                if a["mime"].startswith("audio/"):
+                    _transcrire(env, pieces, chemin, metadonnees)
         elif travail.get("url"):
             try:
                 r = executer_processus([sys.executable, "-c", _LECTURE_PAGE, str(Path(__file__).resolve().parents[1]),
@@ -93,6 +97,31 @@ def preparer_pieces(env: dict, dossier: Path) -> dict:
         pieces["note"] = f"Pièce indisponible : {exc}"
     verifier(env)
     return pieces
+
+
+def _transcrire(env: dict, pieces: dict, chemin: Path, metadonnees: str) -> None:
+    """Audio du Board : texte par le noeud GPU s'il est branché (outil MCP sous le mandat du Board). Une panne
+    garde les métadonnées et le dit au modèle ; elle n'échoue jamais la tâche. Une annulation remonte."""
+    from . import noeud
+    r = noeud.reglages()
+    if not noeud.active(r)[0]:
+        return
+    # la moitié du délai de la tâche au plus : le modèle doit encore pouvoir contextualiser
+    r["delai_s"] = max(30, min(int(r.get("delai_s") or 900), int(env["delai_s"]) // 2))
+    try:
+        t = noeud.transcrire(chemin, cle_operation=f"noeud:{env['tache_id']}:{env['tentative_id']}",
+                             verifier=lambda: verifier(env), r=r)
+    except (noeud.NoeudError, OSError) as exc:
+        pieces["note"] = f"{metadonnees} : transcription impossible ({exc}). Seules les métadonnées sont connues."
+        return
+    if not t["texte"]:
+        pieces["note"] = f"{metadonnees} : transcription vide (aucune parole reconnue)."
+        return
+    pieces.update(transcription=t["texte"], note="", transcription_detail=" · ".join(x for x in (
+        t["modele"] and f"modèle {t['modele']}", t["langue"] and f"langue {t['langue']}",
+        t["duree_audio_s"] is not None and f"{t['duree_audio_s']:.0f} s d'audio",
+        t["duree_traitement_s"] is not None and f"traité en {t['duree_traitement_s']:.0f} s",
+        f"{len(t['texte'])} caractères") if x))
 
 
 class TransportLocal:
