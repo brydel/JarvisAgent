@@ -195,6 +195,9 @@ def apres_livrable(tenant_id: str, objet_id: str, snapshot: dict | None = None) 
     if o is None:
         return
     titre = _titre(o).removeprefix("Livrable — ")
+    if _local(tenant_id):  # l'équipe en parlera : bravo, critiques, améliorations
+        from . import vie_sociale
+        _effet("vie sociale", vie_sociale.signaler, "livrable", titre, projet="" if o["espace"] == "accueil" else o["espace"])
     _effet("mémoire", _noter, tenant_id, titre=f"Livrable : {titre}", corps=o["contenu"][:1500],
            projet="" if o["espace"] == "accueil" else o["espace"], etiquettes=["board", "livrable"])
     if not _local(tenant_id):

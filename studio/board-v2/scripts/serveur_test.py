@@ -53,6 +53,8 @@ if os.environ.get("JARVIS_TEST_RUNTIME") == "1":
 port = int(os.environ.get("JARVIS_TEST_PORT", "7720"))
 org = missions.tenant_local()
 missions.declarer_connexion(org, "factice", "factice")
+from jarvis import vie_sociale  # noqa: E402
+vie_sociale.regler("off")  # silence par défaut : un test anime explicitement la vie sociale
 httpd = studio_api.serveur(port)
 httpd.intervalle_flux = 0.2
 jeton = studio_api.jeton(nouveau=True)
@@ -67,6 +69,7 @@ if os.environ.get("JARVIS_TEST_EXECUTANT") == "1":
         while True:
             missions.recuperer()
             cr.tour()
+            missions.traiter_outbox(limite=10)  # effets durables, dont la publication des prises de parole
             time.sleep(1)
 
     threading.Thread(target=boucle, daemon=True).start()

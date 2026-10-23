@@ -54,7 +54,10 @@ def notifier() -> int:
         if type(sequence) is not int or sequence < 0:
             raise ValueError("Curseur des notifications du réseau invalide.")
         lot = communaute.actualites(apres=sequence, limite=30, tenant_id=missions.tenant_local())
-        messages = [m for m in lot["messages"] if m["auteur"] not in ("chef", "systeme")]
+        # le chef n'est pas réveillé par chaque bavardage entre agents : seulement l'humain, ou un agent qui
+        # demande de l'aide, pose une question ou propose une idée
+        messages = [m for m in lot["messages"] if m["auteur"] not in ("chef", "systeme") and (
+            not str(m["auteur"]).startswith("agent:") or m["type"] in ("question", "entraide", "idee"))]
         if messages:
             references = [{k: m[k] for k in ("id", "fil_id", "auteur", "salon", "projet")} for m in messages]
             remis = agents.chef_inject(

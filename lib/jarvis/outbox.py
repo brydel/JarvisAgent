@@ -15,7 +15,8 @@ from typing import Callable
 CONTEXTE = contextvars.ContextVar("jarvis_effet", default=None)
 BAIL_S = 60
 ESSAIS_MAX = 5
-SORTES_LOCALES = ("board.auto", "synchro.contextualisation", "synchro.livrable", "synchro.decision", "feed")
+SORTES_LOCALES = ("board.auto", "synchro.contextualisation", "synchro.livrable", "synchro.decision", "feed",
+                  "social.tour")
 
 SCHEMA_SQLITE = """
 CREATE TABLE IF NOT EXISTS effets_outbox (
@@ -150,6 +151,10 @@ def _executer(e: dict):
         nom = {"synchro.contextualisation": "apres_contextualisation", "synchro.livrable": "apres_livrable",
                "synchro.decision": "apres_decision"}[e["sorte"]]
         return getattr(synchro, nom)(tenant, **d)
+    if e["sorte"] == "social.tour":
+        from . import vie_sociale
+        vie_sociale.apres_tour(tenant, d["travail"], d["contenu"])  # publication idempotente (operation_id)
+        return {"remis": True}
     if e["sorte"] == "feed":
         from . import store
         store.feed_add(d["type"], d["texte"], operation_id=e["id"])

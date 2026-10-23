@@ -59,7 +59,7 @@ test("les références sont sûres et une leçon demande une relecture distincte
   await page.getByRole("button", { name: "Réseau des agents", exact: true }).click();
   const reseau = page.getByRole("dialog", { name: "Réseau des agents" });
   await expect(reseau.getByRole("article").getByText("<img src=x onerror=alert(1)> Une idée à vérifier.", { exact: true })).toBeVisible();
-  await expect(reseau.locator(".reseau-messages img")).toHaveCount(0);
+  await expect(reseau.locator(".reseau-messages img:not(.avatar img)")).toHaveCount(0);
   await expect(reseau.locator('a[href^="javascript:"]')).toHaveCount(0);
   await expect(reseau.getByRole("link", { name: "https://example.org/rapport" })).toHaveAttribute("rel", "noreferrer noopener");
   await reseau.getByRole("button", { name: "Tirer un enseignement" }).click();

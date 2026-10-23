@@ -601,3 +601,18 @@ button { font: inherit; color: inherit; }
 /* origine d'une carte (Telegram, chef) */
 .origine-carte { position: absolute; right: 10px; bottom: 14px; z-index: 3; padding: 2px 8px; border-radius: 999px; font-size: 11px;
   color: var(--text-secondary); background: rgba(18, 22, 34, 0.9); border: 1px solid var(--border-card); pointer-events: none; }
+
+/* cartes du travail du chef : plan et tâche d'agent */
+.c-plan .contenu, .c-tache .contenu { padding: 16px 18px; display: grid; gap: 10px; align-content: start; }
+.c-plan .ligne1, .c-tache .ligne1 { display: flex; align-items: center; gap: 8px; }
+.c-plan .ligne1 .statut-pill, .c-tache .ligne1 .statut-pill { margin-left: auto; }
+.icone-plan { display: grid; place-items: center; width: 36px; height: 36px; border-radius: 10px; background: rgba(124, 92, 255, 0.16); color: #A48BFF; }
+.c-plan h3, .c-tache h3 { margin: 0; font-size: 17px; }
+.elements-plan { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; font-size: 13px; }
+.elements-plan li { display: grid; grid-template-columns: auto 1fr auto; gap: 2px 8px; padding: 6px 8px; border-radius: 8px; background: var(--surface-inset); }
+.elements-plan li.lance { border-left: 3px solid #3FB984; }
+.elements-plan small { grid-column: 1 / -1; color: var(--text-secondary); }
+.elements-plan .modele, .agent-tache .modele { color: #9DB0FF; font-size: 12px; }
+.c-tache.active { box-shadow: 0 0 0 1px rgba(56, 189, 248, 0.5), 0 0 26px rgba(56, 189, 248, 0.18); }
+.agent-tache { display: flex; gap: 12px; align-items: center; }
+.agent-tache > div { display: grid; gap: 2px; }

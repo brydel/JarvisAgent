@@ -186,8 +186,37 @@ const NOMS_ROLES: Record<string, [string, string]> = {
   developpement: ["Développeur", "Code"], tests: ["Testeur", "Qualité"], redaction: ["Rédacteur", "Contenu"],
 };
 
+type Membre = { id: string; role: string; titre: string; modele: string; agent: string; statut: string; actif: boolean; issue: string; depuis: string };
+
+/** Équipe d'un projet (agents de code du chef) : chaque agent, son rôle, son modèle et ce qu'il fait maintenant. */
+function EquipeProjet({ o, selected }: { o: P["data"]["objet"]; selected: boolean }) {
+  const membres = (o.meta.membres as Membre[]) ?? [];
+  const actifs = membres.filter((x) => x.actif).length;
+  return (
+    <CardShell objet={o} selected={selected} classe="c-agents" entete={false}>
+      <div className="entete">
+        <Users size={19} /> {String(o.meta.titre ?? "ÉQUIPE").toUpperCase()}
+        <span className="badge-actifs tab-num">{actifs ? `${actifs} au travail` : "au repos"}</span>
+      </div>
+      <div className="grille-agents">
+        {[...membres].sort((a, b) => Number(b.actif) - Number(a.actif)).slice(0, 4).map((ag) => (
+          <div key={ag.id} className="agent">
+            <Avatar id={ag.id} role={ag.titre} taille={80} statut={ag.actif ? "actif" : "termine"} point={ag.actif}
+              fournisseur={ag.agent} titre={`${ag.titre} — ${ag.modele || ag.agent} — ${ag.statut}`} />
+            <span className="nom">{ag.titre}</span>
+            <span className="role">{ag.modele || ag.agent}</span>
+            <span className="outil-agent">{ag.issue ? `${ag.issue} · ` : ""}{ag.statut}{ag.depuis ? ` · ${ag.depuis}` : ""}</span>
+          </div>
+        ))}
+      </div>
+      {membres.length > 4 && <p className="meta-carte">+ {membres.length - 4} autre(s) agent(s)</p>}
+    </CardShell>
+  );
+}
+
 export const AgentsNode = memo(function AgentsNode({ data, selected }: P) {
   const o = data.objet;
+  if (!o.mission && Array.isArray(o.meta.membres)) return <EquipeProjet o={o} selected={selected} />;
   const agents = [...(o.mission?.agents ?? [])].sort((a, b) => Number(Boolean(a.fin || a.issue)) - Number(Boolean(b.fin || b.issue)) || b.debut - a.debut);
   const actifs = agents.filter((x) => !x.fin && !x.issue).length;
   return (

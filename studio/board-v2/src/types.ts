@@ -3,7 +3,7 @@
 export type Priorite = "" | "P1" | "P2" | "P3";
 export type TypeObjet =
   | "note" | "texte" | "lien" | "image" | "video" | "audio" | "pdf" | "document" | "capture"
-  | "mission" | "agents" | "dossier";
+  | "mission" | "agents" | "dossier" | "plan" | "tache";
 
 export interface Asset {
   id: string;

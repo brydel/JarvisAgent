@@ -39,4 +39,6 @@ export const TAILLES: Record<string, { min: [number, number]; defaut: [number, n
   video: { min: [300, 170], defaut: [378, 178] },
   dossier: { min: [300, 140], defaut: [378, 152] },
   capture: { min: [220, 170], defaut: [491, 309] },
+  plan: { min: [320, 220], defaut: [440, 320] },
+  tache: { min: [300, 200], defaut: [400, 260] },
 };

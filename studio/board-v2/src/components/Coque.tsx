@@ -16,7 +16,7 @@ export const FILTRES: { cle: Filtre; nom: string; types: string[] }[] = [
   { cle: "fichiers", nom: "Fichiers", types: ["pdf", "document", "dossier"] },
   { cle: "liens", nom: "Liens", types: ["lien"] },
   { cle: "medias", nom: "Médias", types: ["image", "audio", "video", "capture"] },
-  { cle: "missions", nom: "Missions", types: ["mission"] },
+  { cle: "missions", nom: "Missions", types: ["mission", "plan", "tache"] },
   { cle: "agents", nom: "Agents", types: ["agents"] },
 ];
 

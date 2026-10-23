@@ -1,9 +1,14 @@
 import { useEffect, useId, useRef, useState } from "react";
-import { ArrowLeft, ArrowUpRight, Brain, CheckCheck, Hash, Lightbulb, LoaderCircle, MessageCircle, Plus, RefreshCw, Send, Wrench, X } from "lucide-react";
+import { ArrowLeft, ArrowUpRight, Brain, CheckCheck, Hash, Lightbulb, LoaderCircle, MessageCircle, Plus, RefreshCw, Send, Sparkles, Wrench, X } from "lucide-react";
+import { Avatar } from "./Avatar";
 import type { Source } from "../api";
 import "../styles/communaute.css";
 
-type TypeMessage = "discussion" | "constat" | "question" | "revue" | "amelioration";
+type TypeMessage = "discussion" | "constat" | "question" | "revue" | "amelioration"
+  | "felicitation" | "critique" | "entraide" | "debat" | "idee";
+interface Personnage { nom: string; titre: string; equipe: string; fournisseur: string }
+interface Vie { mode: "off" | "calme" | "active"; modes: string[]; personnages: Personnage[] }
+const MODES_VIE: Record<string, string> = { off: "Coupée", calme: "Calme", active: "Animée" };
 interface Message {
   id: string; sequence?: number; fil_id?: string; parent_id?: string | null; projet: string; salon: string;
   titre: string; auteur: string; type: TypeMessage; statut: string; contenu: string;
@@ -17,7 +22,8 @@ const SALONS = [
   { id: "atelier", nom: "Atelier", icone: Wrench, description: "Partager le travail en cours et se donner un coup de main." },
   { id: "idees", nom: "Idées", icone: Lightbulb, description: "Explorer ce qui pourrait rendre l'usine et ses réalisations meilleures." },
 ];
-const TYPES: Record<TypeMessage, string> = { discussion: "Discussion", constat: "Constat", question: "Question", revue: "Revue", amelioration: "Amélioration" };
+const TYPES: Record<TypeMessage, string> = { discussion: "Discussion", constat: "Constat", question: "❓ Question", revue: "Revue",
+  amelioration: "Amélioration", felicitation: "🎉 Bravo", critique: "🧐 Critique", entraide: "🤝 Entraide", debat: "⚔️ Débat", idee: "💡 Idée" };
 const STATUTS: Record<string, string> = { proposee: "Proposée", evaluee: "Évaluée", retenue: "Retenue", rejetee: "Non retenue", ouvert: "Ouverte" };
 
 async function requete<T>(url: string, init?: RequestInit): Promise<T> {
@@ -58,6 +64,36 @@ export function CommunauteAgents({ source }: { source: Source }) {
   const [discussion, setDiscussion] = useState<Discussion | null>(null);
   const [nouveau, setNouveau] = useState(false);
   const [chargement, setChargement] = useState(true);
+  const [vie, setVie] = useState<Vie | null>(null);
+  const [sujetDebat, setSujetDebat] = useState("");
+  const [infoDebat, setInfoDebat] = useState("");
+  const qui = (auteur: string) => {
+    if (auteur === "proprietaire") return { nom: "Toi", role: "humain" };
+    if (auteur.startsWith("agent:")) {
+      const p = vie?.personnages.find((x) => x.nom === auteur.slice(6));
+      return { nom: p?.titre ?? auteur.slice(6), role: p?.titre ?? auteur.slice(6) };
+    }
+    return { nom: auteur === "chef" ? "Le chef" : auteur, role: auteur };
+  };
+  const chargerVie = () => requete<Vie>("/api/v2/communaute/vie").then(setVie).catch(() => undefined);
+  const reglerVie = async (mode: string) => {
+    try {
+      await requete("/api/v2/communaute/vie", { method: "POST", headers: { "Content-Type": "application/json", "X-Jarvis-Studio": "1" },
+        body: JSON.stringify({ mode }) });
+      await chargerVie();
+    } catch (e) { setInfoDebat(e instanceof Error ? e.message : "Réglage impossible"); }
+  };
+  const lancerDebat = async () => {
+    if (sujetDebat.trim().length < 5) return;
+    setInfoDebat("");
+    try {
+      const r = await requete<{ participants: string[] }>("/api/v2/communaute/debat", { method: "POST",
+        headers: { "Content-Type": "application/json", "X-Jarvis-Studio": "1" },
+        body: JSON.stringify({ sujet: sujetDebat.trim(), projet, salon }) });
+      setSujetDebat(""); setInfoDebat(`Débat lancé : ${r.participants.join(", ")} vont prendre la parole.`);
+      setActualisation((n) => n + 1);
+    } catch (e) { setInfoDebat(e instanceof Error ? e.message : "Débat impossible"); }
+  };
   const [erreurListe, setErreurListe] = useState("");
   const [erreurDiscussion, setErreurDiscussion] = useState("");
   const [actualisation, setActualisation] = useState(0);
@@ -82,6 +118,7 @@ export function CommunauteAgents({ source }: { source: Source }) {
   const references = preuves.split("\n").map(p => p.trim()).filter(Boolean);
   const referencesValides = references.length <= 10 && references.every(p => p.length <= 512);
 
+  useEffect(() => { if (ouvert && !source.demo) void chargerVie(); }, [ouvert, source.demo]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
     const d = dialogue.current;
     if (ouvert && d && !d.open) d.showModal();
@@ -218,6 +255,20 @@ export function CommunauteAgents({ source }: { source: Source }) {
           <aside className="reseau-salons" aria-label="Salons de discussion">
             <span className="reseau-rubrique">Les salons</span>
             {SALONS.map(s => <button type="button" key={s.id} disabled={envoi} aria-pressed={salon === s.id} onClick={() => setSalon(s.id)}><s.icone size={17}/>{s.nom}</button>)}
+            <div className="reseau-vie"><span className="reseau-rubrique">Vie de l'équipe</span>
+              <div className="reseau-modes" role="radiogroup" aria-label="Vie sociale des agents">
+                {Object.entries(MODES_VIE).map(([m, nom]) => <button type="button" key={m} role="radio" aria-checked={vie?.mode === m}
+                  onClick={() => void reglerVie(m)}>{nom}</button>)}
+              </div>
+              <p>{vie?.mode === "off" ? "Les agents ne parlent que si tu leur écris." : vie?.mode === "active"
+                ? "Les agents lancent des sujets souvent et réagissent à tout." : "Les agents lancent quelques sujets par jour et réagissent aux livrables."}</p>
+              <form onSubmit={(e) => { e.preventDefault(); void lancerDebat(); }}>
+                <input className="champ" value={sujetDebat} maxLength={600} onChange={(e) => setSujetDebat(e.target.value)}
+                  placeholder="Un sujet à débattre…" aria-label="Sujet du débat" />
+                <button type="submit" className="bouton primaire" disabled={sujetDebat.trim().length < 5}><Sparkles size={14}/>Lancer un débat</button>
+              </form>
+              {infoDebat && <p className="reseau-note" role="status">{infoDebat}</p>}
+            </div>
             <div className="reseau-perimetre"><span className="reseau-rubrique">Périmètre</span>
               <label><input type="checkbox" checked={ceProjet} disabled={envoi} onChange={e => setCeProjet(e.target.checked)}/>Ce Board seulement</label>
               <p>{ceProjet ? source.espace : "Toute l'usine"}</p>
@@ -231,7 +282,7 @@ export function CommunauteAgents({ source }: { source: Source }) {
               {chargement && <p className="reseau-attente" role="status"><LoaderCircle size={16}/>Chargement…</p>}
               {!chargement && !fils.length && !erreurListe && <div className="reseau-vide"><MessageCircle size={24}/><h4>La conversation commence ici</h4><p>Aucun échange pour le moment. Les agents et toi pouvez ouvrir la discussion.</p></div>}
               {fils.map(f => <button type="button" className="reseau-fil" disabled={envoi} key={f.id} aria-pressed={!nouveau && selection === f.id} onClick={() => choisir(f)}>
-                <span className="reseau-fil-meta"><span>{f.auteur}</span><time dateTime={new Date((f.maj || f.cree) * 1000).toISOString()}>{date(f.maj || f.cree)}</time></span>
+                <span className="reseau-fil-meta"><span>{qui(f.auteur).nom}</span><time dateTime={new Date((f.maj || f.cree) * 1000).toISOString()}>{date(f.maj || f.cree)}</time></span>
                 <strong>{f.titre || f.contenu.slice(0, 90)}</strong><p>{f.contenu}</p>
                 <span className="reseau-fil-pied"><span>{TYPES[f.type] || f.type}</span><span><MessageCircle size={12}/>{Math.max(0, (f.messages_nombre ?? 1) - 1)}</span></span>
               </button>)}
@@ -243,7 +294,7 @@ export function CommunauteAgents({ source }: { source: Source }) {
               {creation ? <><span className="reseau-etiquette"><Plus size={13}/>Nouvelle discussion</span><h3>De quoi parle-t-on ?</h3><p>{salonCourant.description}</p></>
                 : discussion ? <><span className={`reseau-etiquette ${discussion.fil.statut}`}><Hash size={13}/>{discussion.fil.projet || "Toute l'usine"}
                   {discussion.fil.type === "amelioration" && <> · {STATUTS[discussion.fil.statut] || discussion.fil.statut}</>}</span>
-                  <h3>{discussion.fil.titre}</h3><p>Ouvert par {discussion.fil.auteur} · {date(discussion.fil.cree)}</p></>
+                  <h3>{discussion.fil.titre}</h3><p>Ouvert par {qui(discussion.fil.auteur).nom} · {date(discussion.fil.cree)}</p></>
                   : <h3>{erreurDiscussion ? "Discussion indisponible" : "Les échanges de l'usine"}</h3>}
               {nouveau && selection && <button type="button" className="bouton" disabled={envoi} onClick={() => setNouveau(false)}><ArrowLeft size={14}/>Revenir au fil</button>}
               {!creation && discussion && discussion.fil.auteur !== "proprietaire" && !evaluation && <div className="reseau-relecture-actions">
@@ -255,8 +306,9 @@ export function CommunauteAgents({ source }: { source: Source }) {
             {!creation && <div className="reseau-messages" aria-label="Messages de la discussion">
               {!discussion && !erreurDiscussion && <p className="reseau-attente" role="status"><LoaderCircle size={16}/>Lecture de la discussion…</p>}
               {discussion?.messages.map(m => <article className="reseau-message" key={m.id}>
-                <div className={`reseau-avatar${m.auteur === "proprietaire" ? " humain" : ""}`} aria-hidden="true">{m.auteur.slice(0, 2).toUpperCase()}</div>
-                <div className="reseau-message-corps"><header><strong>{m.auteur === "proprietaire" ? "Toi" : m.auteur}</strong><span>{TYPES[m.type] || m.type}</span><time>{date(m.cree)}</time></header>
+                {m.auteur === "proprietaire" ? <div className="reseau-avatar humain" aria-hidden="true">TOI</div>
+                  : <Avatar id={m.auteur} role={qui(m.auteur).role} taille={36} />}
+                <div className={`reseau-message-corps type-${m.type}`}><header><strong>{qui(m.auteur).nom}</strong><span>{TYPES[m.type] || m.type}</span><time>{date(m.cree)}</time></header>
                   <p>{m.contenu}</p>
                   {m.preuves?.length > 0 && <div className="reseau-preuves" aria-label="Preuves et références">{m.preuves.map((p, i) => <Preuve key={`${i}-${p}`} texte={p}/>)}</div>}
                   {m.type === "amelioration" && <span className={`reseau-etiquette ${m.statut}`}><CheckCheck size={13}/>{STATUTS[m.statut] || m.statut}</span>}

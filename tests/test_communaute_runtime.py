@@ -95,8 +95,16 @@ class ReseauApiTest(unittest.TestCase):
         self.assertIn("modèles sur des tâches réelles", contexte)
         self.assertIn("sans autorité", contexte)
 
+    def test_le_bavardage_entre_agents_ne_reveille_pas_le_chef(self):
+        communaute.publier(contenu="Bravo pour la PR #135 !", auteur="agent:design", type="felicitation", tenant_id=self.org)
+        with mock.patch("jarvis.agents.chef_running", return_value=True), mock.patch("jarvis.agents.chef_inject") as inject:
+            self.assertEqual(communaute_runtime.notifier(), 0)
+            inject.assert_not_called()
+        self.assertTrue(store.existe(communaute_runtime.ETAT), "le curseur avance : le message n'est pas relu en boucle")
+
     def test_notification_non_acquittee_avant_remise_et_pas_de_boucle_chef(self):
-        communaute.publier(contenu="Une idée", auteur="agent:chercheur", tenant_id=self.org)
+        # une idée (comme une question ou une demande d'aide) d'un agent réveille le chef ; le bavardage, non
+        communaute.publier(contenu="Une idée", auteur="agent:chercheur", type="idee", tenant_id=self.org)
         with mock.patch("jarvis.agents.chef_running", return_value=True), \
              mock.patch("jarvis.agents.chef_inject", side_effect=[False, True]) as inject:
             self.assertEqual(communaute_runtime.notifier(), 0)

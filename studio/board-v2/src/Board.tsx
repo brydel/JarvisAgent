@@ -16,6 +16,7 @@ import { Panneau } from "./components/Panneau";
 import { DialogueMission, type DemandeMission } from "./components/DialogueMission";
 import { ActiviteDirecte } from "./components/ActiviteDirecte";
 import { CommunauteAgents } from "./components/CommunauteAgents";
+import { PlanNode, TacheNode } from "./nodes/CartesTravail";
 import { ConnexionsAgents } from "./components/ConnexionsAgents";
 import { RuntimeAgents } from "./components/RuntimeAgents";
 import { Historique } from "./lib/historique";
@@ -24,10 +25,11 @@ import { cascade, depuisTexte, depuisTransfert, familleFichier, type Element } f
 const TYPES_NOEUDS = {
   image: ImageNode, capture: ImageNode, lien: LienNode, pdf: PdfNode, document: PdfNode, note: NoteNode, texte: NoteNode,
   mission: MissionNode, agents: AgentsNode, audio: AudioNode, video: VideoNode, dossier: DossierNode,
+  plan: PlanNode, tache: TacheNode,
 };
 const TYPES_LIENS = { relation: RelationEdge };
 const MARQUEUR_PRESSE_PAPIERS = "jarvis-board/objets:";
-const COULEUR_MINIMAP: Record<string, string> = { mission: "#5B6CFF", agents: "#3FB984", note: "#2E2A55", image: "#3A4260", video: "#3A4260" };
+const COULEUR_MINIMAP: Record<string, string> = { plan: "#7C5CFF", tache: "#38BDF8", mission: "#5B6CFF", agents: "#3FB984", note: "#2E2A55", image: "#3A4260", video: "#3A4260" };
 const COULEUR_FLECHE: Record<StyleLien, string> = { inspire: "#B26BF5", alimente: "#3FCF9A", utilise: "#38BDF8", depend: "#5B6CFF", defaut: "#5B6CFF" };
 
 /** Vrai si la cible est un champ de saisie (le collage et les raccourcis du Board ne s'y appliquent pas). */

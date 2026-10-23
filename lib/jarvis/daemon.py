@@ -948,6 +948,18 @@ def _voie_executant(stop: threading.Event, ident: dict, voie: int) -> None:
             stop.wait(30)
 
 
+def travail_board_check() -> None:
+    """Plans, tâches d'agents et équipe au travail reflétés sur le Board de chaque projet."""
+    from . import travail_board
+    travail_board.verifier()
+
+
+def vie_sociale_check() -> None:
+    """Les agents se parlent : réponses à l'humain, faits récents, sujets ouverts (réglage communaute.vie)."""
+    from . import vie_sociale
+    vie_sociale.verifier()
+
+
 def watch_loop(stop: threading.Event) -> None:
     first = True
     while not stop.is_set():
@@ -957,7 +969,7 @@ def watch_loop(stop: threading.Event) -> None:
         for step in (battement_demon, lambda: watch_once(first=first), ag.chef_flush_queue, budget_check,
                      prevision_check, blocage_check, jetons_check, chef_check, modeles_check, veille_check,
                      veille_modeles_check, menage_check, battement_check, bilan_check, skills_check, executant_check,
-                     canari_check, optimisation_check, missions_check):
+                     canari_check, optimisation_check, missions_check, travail_board_check, vie_sociale_check):
             if stop.is_set():
                 break
             try:

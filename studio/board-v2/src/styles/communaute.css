@@ -103,3 +103,26 @@
   .reseau-messages { padding: 0 12px 12px; }.reseau-message { gap: 8px; padding-top: 14px; }.reseau-avatar { width: 25px; height: 25px; border-radius: 8px; font-size: 9px; }.reseau-message-corps>header { font-size: 11px; }.reseau-message p { font-size: 11px; }.reseau-message time { font-size: 9px; }
   .reseau-composition { padding: 10px 14px 12px; gap: 8px; max-height: 48%; }.reseau-composition textarea { min-height: 48px; padding: 8px; font-size: 11px; }.reseau-composition input { padding: 7px 9px; }.reseau-signature { display: none; }.reseau-options { font-size: 9px; }
 }
+
+/* vie sociale ouverte */
+.reseau-vie { display: grid; gap: 8px; margin-top: 14px; }
+.reseau-vie p { margin: 0; font-size: 12px; color: var(--text-secondary); }
+.reseau-modes { display: flex; gap: 4px; }
+.reseau-modes button { flex: 1; height: 28px; border-radius: 8px; border: 1px solid var(--border-card); background: var(--surface-inset);
+  color: var(--text-secondary); font-size: 12px; cursor: pointer; }
+.reseau-modes button[aria-checked="true"] { color: var(--text-primary); border-color: var(--brand-indigo); background: rgba(91, 108, 255, 0.14); }
+.reseau-vie form { display: grid; gap: 6px; }
+.reseau-vie .champ { height: 32px; }
+.reseau-vie .bouton { height: 30px; gap: 6px; justify-content: center; }
+.reseau-message-corps.type-felicitation { border-left: 3px solid #3FB984; padding-left: 10px; }
+.reseau-message-corps.type-critique { border-left: 3px solid #E8BE3F; padding-left: 10px; }
+.reseau-message-corps.type-debat { border-left: 3px solid #EB4F86; padding-left: 10px; }
+.reseau-message-corps.type-idee { border-left: 3px solid #A48BFF; padding-left: 10px; }
+.reseau-message-corps.type-entraide { border-left: 3px solid #38BDF8; padding-left: 10px; }
+/* la colonne des salons accueille les réglages de la vie de l équipe : un peu plus large, rien ne déborde */
+.reseau-espace { grid-template-columns: 196px 280px minmax(0,1fr); }
+.reseau-vie, .reseau-vie form { min-width: 0; }
+.reseau-modes { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 3px; }
+.reseau-modes button { min-width: 0; padding: 0 2px; font-size: 11.5px; }
+.reseau-vie .champ, .reseau-vie .bouton { width: 100%; box-sizing: border-box; min-width: 0; }
+@media (max-width: 1100px) { .reseau-espace { grid-template-columns: 170px 220px minmax(0,1fr); } }

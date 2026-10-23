@@ -18,7 +18,8 @@ import time
 
 from . import store
 
-TYPES = ("discussion", "constat", "question", "revue", "amelioration")
+TYPES = ("discussion", "constat", "question", "revue", "amelioration",
+         "felicitation", "critique", "entraide", "debat", "idee")  # vie sociale ouverte entre agents
 SALONS = ("general", "modeles", "atelier", "idees")
 MAX_CONTENU = 8_000
 MAX_MESSAGES_FIL = 200

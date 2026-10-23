@@ -27,6 +27,10 @@ def lire(route: str, query: dict, tenant: str):
         from . import communaute
         projet = (query.get("projet") or [""])[0]
         limite = int((query.get("limite") or ["50"])[0])
+        if route == "/api/v2/communaute/vie":
+            from . import vie_sociale
+            return 200, {"mode": vie_sociale._mode_effectif(), "modes": list(vie_sociale.MODES),
+                         "personnages": [{k: p[k] for k in ("nom", "titre", "equipe", "fournisseur")} for p in vie_sociale.personnages()]}
         if route == "/api/v2/communaute":
             return 200, communaute.fils(projet, salon=(query.get("salon") or [None])[0],
                                         limite=limite, avant=(query.get("avant") or [None])[0], tenant_id=tenant)
@@ -105,6 +109,18 @@ def ecrire(route: str, corps: dict, tenant: str, *, stop=None):
             salon=corps.get("salon", "general"), tache_id=corps.get("tache_id", ""),
             parent_id=parent, preuves=corps.get("preuves"), operation_id=corps.get("operation_id"), tenant_id=tenant)
         return 201, message
+    if route == "/api/v2/communaute/vie":
+        from . import vie_sociale
+        _champs(corps, {"mode"})
+        return 200, {"mode": vie_sociale.regler(str(corps.get("mode", "")))}
+    if route == "/api/v2/communaute/debat":
+        from . import vie_sociale
+        _champs(corps, {"sujet", "projet", "salon"})
+        try:
+            return 201, vie_sociale.lancer_debat(str(corps.get("sujet", "")), projet=str(corps.get("projet", ""))[:80],
+                                                 salon=str(corps.get("salon", "general"))[:80])
+        except ValueError as exc:  # la raison (coupée, en pause, plafond du jour) est montrée telle quelle
+            return 409, {"erreur": str(exc)}
     if m := re.fullmatch(r"/api/v2/communaute/messages/(CM-[0-9a-f]{24})/evaluation", route):
         from . import communaute
         _champs(corps, {"projet", "decision", "contenu", "preuves", "operation_id"})

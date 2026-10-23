@@ -835,6 +835,9 @@ def _appliquer_resultat(c: sqlite3.Connection, executant_id: str, secret: str, r
         _transition(c, t, SUCCEEDED, now=now, raison=f"revue : {raison}")
         if t["type"] == "contextualiser":
             _enregistrer_propositions(c, t, r["contenu"], now)
+        elif t["type"] == "converser":  # prise de parole d'un agent : publiée dans le réseau, jamais une carte
+            outbox.enregistrer(c, t["tenant_id"], "social.tour", {"travail": json.loads(t["travail"]), "contenu": r["contenu"]},
+                               cle=f"social:{t['id']}", now=now)
         else:
             livrable = _poser_livrable(c, t, r["contenu"], now)
             if livrable:
@@ -912,11 +915,11 @@ def _recuperer_tenant(c, tenant: str, now: float, bilan: dict) -> None:
 # --- Board -----------------------------------------------------------------------------
 
 TYPES_BOARD = ("note", "texte", "lien", "capture", "image", "pdf", "document", "audio", "video", "mission",
-               "agents", "dossier")
+               "agents", "dossier", "plan", "tache")  # plan / tache : le travail du chef (travail_board.py)
 ANALYSABLES = ("note", "texte", "lien")
 # Board V2 : tout élément déposé est contextualisé par le chef (mission L1, autorisée d'office par la politique)
 CONTEXTUALISABLES = ("note", "texte", "lien", "image", "capture", "pdf", "document", "audio", "video")
-SANS_CONTENU = ("mission", "agents", "dossier", "image", "audio", "video", "pdf", "document", "capture")
+SANS_CONTENU = ("mission", "agents", "dossier", "plan", "tache", "image", "audio", "video", "pdf", "document", "capture")
 PRIORITES = ("", "P1", "P2", "P3")
 
 
