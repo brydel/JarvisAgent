@@ -124,9 +124,14 @@ class Handler(BaseHTTPRequestHandler):
         self.send_header("Content-Security-Policy", csp)
         for k, v in (entetes or {}).items():
             self.send_header(k, v)
-        self.end_headers()
-        if self.command != "HEAD":
-            self.wfile.write(corps)
+        try:
+            self.end_headers()
+            if self.command != "HEAD":
+                self.wfile.write(corps)
+        except (BrokenPipeError, ConnectionResetError):
+            # le navigateur a abandonné la requête (onglet fermé, vue changée, rechargement) : rien à signaler,
+            # et surtout pas une « erreur 503 » réécrite sur la même connexion fermée
+            self.close_connection = True
 
     def _json(self, code: int, data) -> None:
         self._envoyer(code, json.dumps(data, ensure_ascii=False).encode())

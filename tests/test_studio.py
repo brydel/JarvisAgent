@@ -190,5 +190,18 @@ class StudioTest(unittest.TestCase):
             self.assertEqual(cli.main(["mission", "studio"]), 4)
 
 
+class ConnexionCoupeeTest(unittest.TestCase):
+    def test_requete_abandonnee_par_le_navigateur_sans_trace_ni_503(self):
+        class Coupe:
+            def write(self, _):
+                raise BrokenPipeError(32, "Broken pipe")
+
+        h = studio_api.Handler.__new__(studio_api.Handler)
+        h.command, h.request_version, h.requestline, h.client_address = "GET", "HTTP/1.1", "GET /api/v2/activite", ("127.0.0.1", 1)
+        h.wfile, h.close_connection = Coupe(), False
+        h._json(200, {"ok": True})  # ne lève pas : rien à réécrire sur une connexion fermée
+        self.assertTrue(h.close_connection)
+
+
 if __name__ == "__main__":
     unittest.main()
