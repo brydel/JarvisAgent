@@ -467,7 +467,7 @@ cmd_task() {
 cmd_board() {
   case "${1:-}" in
     # le Board partagé (Studio) : lu et alimenté par le chef
-    voir|espaces|deposer|commenter|lier|decider|retirer|restaurer) py board "$@" ;;
+    voir|espaces|deposer|modifier|ranger|reduire|grouper|commenter|lier|decider|retirer|restaurer) py board "$@" ;;
     *) has workmux || die "workmux n'est pas installé."; exec workmux dashboard "$@" ;;
   esac
 }

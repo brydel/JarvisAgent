@@ -2007,16 +2007,46 @@ def cmd_board(a) -> int:
             for e in board.espaces(org):
                 print(f"{e['nom']:<24} {e['objets']:>4} carte(s){'  (projet)' if e['projet'] else ''}")
         elif a.action == "deposer":
+            from . import dessin_board
             texte = " ".join(a.quoi).strip()
-            if not texte:
-                return _err('usage : jarvis board deposer --espace P [--titre "…"] [--analyser] <texte ou lien>')
-            x, y = synchro.position_libre(org, espace)
-            lien = synchro.URL.fullmatch(texte)
-            o = missions.board_ajouter(org, espace, "lien" if lien else "note", texte, auteur=acteur, x=x, y=y,
-                                       largeur=434 if lien else 408, hauteur=356 if lien else 320,
-                                       meta={"titre": (a.titre or texte.split(chr(10))[0])[:80], "source": acteur},
-                                       analyser=False, contextualiser=a.analyser)
+            if not texte and not a.fichier and a.format != "dossier":
+                return _err('usage : jarvis board deposer --espace P [--format note|texte|lien|dossier|…] [--titre "…"] '
+                            "[--x X --y Y] [--largeur L --hauteur H] [--couleur C] [--compact] [--fichier F] <texte ou lien>")
+            format_ = a.format or ("lien" if synchro.URL.fullmatch(texte) else "note")
+            o = dessin_board.poser(org, espace, format_=format_, contenu=texte, titre=a.titre, fichier=a.fichier,
+                                   x=a.x, y=a.y, largeur=a.largeur, hauteur=a.hauteur, couleur=a.couleur,
+                                   compact=a.compact, tags=a.tags.split(",") if a.tags else None,
+                                   priorite=a.priorite, dans=a.dans, par=acteur, analyser=a.analyser)
             print(f"{o['objet_id']} déposé sur le Board {espace}" + (" (analyse lancée)" if o.get("mission_id") else ""))
+        elif a.action == "modifier":
+            from . import dessin_board
+            if len(a.quoi) < 1 or not a.quoi[0].startswith("BO-"):
+                return _err('usage : jarvis board modifier BO-… [--x X --y Y] [--largeur L --hauteur H] [--titre "…"] '
+                            '[--couleur C] [--compact|--normal] [--priorite P1] [--tags a,b] [--contenu "…"]')
+            r = dessin_board.modifier(org, a.quoi[0], par=acteur, x=a.x, y=a.y, largeur=a.largeur, hauteur=a.hauteur,
+                                      contenu=a.contenu, titre=a.titre or None, couleur=a.couleur,
+                                      compact=True if a.compact else False if a.normal else None,
+                                      tags=a.tags.split(",") if a.tags else None, priorite=a.priorite or None)
+            print(f"{a.quoi[0]} modifiée (version {r['version']})")
+        elif a.action == "ranger":
+            from . import dessin_board
+            r = dessin_board.ranger(org, espace, disposition=a.disposition, ids=[i for i in a.quoi if i.startswith("BO-")],
+                                    types=a.types.split(",") if a.types else None, x0=a.x or 0, y0=a.y or 0,
+                                    espacement=a.espacement, colonnes=a.colonnes, par=acteur)
+            print(f"{r['deplacees']} carte(s) rangée(s) en {a.disposition} sur le Board {espace}"
+                  + (f", {r['ignorees']} ignorée(s)" if r["ignorees"] else ""))
+        elif a.action == "reduire":
+            from . import dessin_board
+            r = dessin_board.reduire(org, espace, echelle=a.echelle, ids=[i for i in a.quoi if i.startswith("BO-")],
+                                     types=a.types.split(",") if a.types else None, compact=a.compact, par=acteur)
+            print(f"{r['modifiees']} carte(s) redimensionnée(s) sur le Board {espace}")
+        elif a.action == "grouper":
+            from . import dessin_board
+            ids = [i for i in a.quoi if i.startswith("BO-")]
+            if not ids or not a.titre:
+                return _err('usage : jarvis board grouper --espace P --titre "…" BO-… [BO-…] [--couleur C]')
+            r = dessin_board.grouper(org, espace, ids, titre=a.titre, couleur=a.couleur, par=acteur)
+            print(f"{r['cartes']} carte(s) rangée(s) dans le dossier {r['dossier_id']}")
         elif a.action == "commenter":
             if len(a.quoi) < 2:
                 return _err("usage : jarvis board commenter BO-… <texte>")
@@ -2316,7 +2346,8 @@ def build_parser() -> argparse.ArgumentParser:
 
     s = sub.add_parser("board", help="le Board partagé : voir, déposer, commenter, relier, décider (chef compris)")
     s.add_argument("action", nargs="?", default="voir",
-                   choices=("voir", "espaces", "deposer", "commenter", "lier", "decider", "retirer", "restaurer"))
+                   choices=("voir", "espaces", "deposer", "modifier", "ranger", "reduire", "grouper", "commenter", "lier",
+                            "decider", "retirer", "restaurer"))
     s.add_argument("quoi", nargs="*")
     s.add_argument("--espace", default="accueil", help="Board du projet (accueil par défaut)")
     s.add_argument("--titre", default="")
@@ -2326,6 +2357,25 @@ def build_parser() -> argparse.ArgumentParser:
                    help="retirer : les cartes de travail finies (tâches, équipe au repos, plans sans tâche active)")
     s.add_argument("--dernier", action="store_true", help="restaurer : le dernier retrait")
     s.add_argument("--essai", action="store_true", help="retirer : montrer ce qui serait retiré, sans rien retirer")
+    # dessin libre (deposer, modifier, ranger, reduire, grouper)
+    s.add_argument("--format", default="", help="note, texte, lien, dossier, image, pdf, audio, video, document")
+    s.add_argument("--fichier", default="", help="deposer : fichier à poser (copié dans le Board)")
+    s.add_argument("--x", type=float)
+    s.add_argument("--y", type=float)
+    s.add_argument("--largeur", type=float)
+    s.add_argument("--hauteur", type=float)
+    s.add_argument("--couleur", help="indigo, violet, rose, orange, jaune, vert, cyan, gris (vide : aucune)")
+    s.add_argument("--compact", action="store_true", help="carte en vignette (titre et icône)")
+    s.add_argument("--normal", action="store_true", help="modifier : quitter le mode compact")
+    s.add_argument("--tags", default="", help="étiquettes séparées par des virgules")
+    s.add_argument("--priorite", default="", choices=("", "P1", "P2", "P3"))
+    s.add_argument("--contenu", help="modifier : nouveau texte de la carte")
+    s.add_argument("--dans", default="", help="deposer : dossier parent (BO-…)")
+    s.add_argument("--disposition", default="grille", choices=("grille", "colonnes", "flux", "ligne"))
+    s.add_argument("--types", default="", help="ranger / reduire : seulement ces types (ex. tache,plan)")
+    s.add_argument("--espacement", type=float, default=60)
+    s.add_argument("--colonnes", type=int)
+    s.add_argument("--echelle", type=float, default=0.6, help="reduire : facteur de taille (0.1 à 3)")
     s.set_defaults(fn=cmd_board)
 
     s = sub.add_parser("memoire", help="mémoire du chef : décisions, échecs, leçons (recherche pondérée)")

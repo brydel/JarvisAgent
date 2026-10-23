@@ -169,6 +169,9 @@ def lancer_tour(*, sujet: str, persona: dict, participants: list[dict], projet: 
                "projet": projet, "salon": salon, "fil_id": fil_id, "tour": tour, "max_tours": max_tours,
                "fil": _fil_recent(fil_id, projet), "contexte": contexte(projet), "raison": raison[:200]}
     cle = "converser:" + hashlib.sha256(f"{fil_id or sujet}|{tour}|{persona['nom']}|{jour}".encode()).hexdigest()[:20]
+    # identité de CETTE prise de parole (sujet, fil, tour, rôle, jour) : rend sa publication idempotente sans
+    # confondre deux débats ouverts par le même rôle
+    travail["prise_id"] = cle
     m = missions.creer_mission(org, f"Conversation : {persona['titre']} — {sujet[:80]}",
                                [{"type": "converser", "niveau": "L1", "capacites": ["analyse"],
                                  "fournisseur": fournisseur, "travail": travail, "delai_s": 300}],
@@ -241,7 +244,8 @@ def apres_tour(tenant_id: str, travail: dict, contenu: str) -> None:
     publie = communaute.publier(travail.get("projet", ""), msg["contenu"], auteur=f"agent:{persona['nom']}",
                                 type=msg["type"], titre="" if travail.get("fil_id") else titre,
                                 salon=travail.get("salon", "general"), parent_id=travail.get("fil_id"),
-                                operation_id=f"converser:{travail.get('fil_id') or 'racine'}:{travail['tour']}:{persona['nom']}"[:150],
+                                operation_id=str(travail.get("prise_id") or
+                                                 f"converser:{travail.get('fil_id') or travail['sujet'][:60]}:{travail['tour']}:{persona['nom']}")[:150],
                                 tenant_id=tenant_id)
     fil_id = travail.get("fil_id") or publie.get("fil_id") or publie["id"]
     if travail["tour"] >= travail.get("max_tours", TOURS_FIL):

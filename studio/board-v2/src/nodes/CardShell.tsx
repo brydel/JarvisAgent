@@ -1,6 +1,6 @@
 import { memo, useEffect, useRef, useState, type ReactNode } from "react";
 import { Handle, NodeResizer, Position, useStore } from "@xyflow/react";
-import { ArrowUpToLine, Copy, FileText, Image as IconeImage, Link2, Lock, LockOpen, MoreHorizontal, Music, PanelRight, Sparkles, Target, Trash2, Users, Video, Folder } from "lucide-react";
+import { ArrowUpToLine, ClipboardList, Copy, FileText, Minimize2, Maximize2, Palette, Wrench, Image as IconeImage, Link2, Lock, LockOpen, MoreHorizontal, Music, PanelRight, Sparkles, Target, Trash2, Users, Video, Folder } from "lucide-react";
 import type { ObjetBoard, Priorite } from "../types";
 import { CONTEXTUALISABLES, TAILLES, useActions } from "./contexte";
 import { Avatar } from "../components/Avatar";
@@ -20,13 +20,33 @@ const COTES = [Position.Top, Position.Right, Position.Bottom, Position.Left];
 export const ZOOM_DETAIL = 0.45;
 const choisirResume = (s: { transform: [number, number, number] }) => s.transform[2] < ZOOM_DETAIL;
 const ICONES: Record<string, typeof FileText> = { image: IconeImage, capture: IconeImage, lien: Link2, audio: Music, video: Video,
-  mission: Target, agents: Users, dossier: Folder };
+  mission: Target, agents: Users, dossier: Folder, plan: ClipboardList, tache: Wrench };
+
+const COULEURS = ["", "indigo", "violet", "rose", "orange", "jaune", "vert", "cyan", "gris"];
 
 export const CardShell = memo(function CardShell({ objet, selected, classe, children, entete = true, ratio }: Props) {
   const t = TAILLES[objet.type] ?? TAILLES.note!;
   const verrou = Boolean(objet.verrouille);
   // booléen : la carte ne se re-rend qu'au franchissement du seuil, pas à chaque image du zoom
   const resume = useStore(choisirResume);
+  // format choisi par le chef ou par toi : couleur d'accent, vignette compacte
+  const accent = typeof objet.meta.couleur === "string" && objet.meta.couleur ? ` accent accent-${objet.meta.couleur}` : "";
+  if (objet.meta.compact && !resume) {
+    const Icone = ICONES[objet.type] ?? FileText;
+    return (
+      <>
+        <NodeResizer isVisible={selected && !verrou} minWidth={120} minHeight={56} maxWidth={2400} maxHeight={2400} />
+        {COTES.map((p) => <Handle key={p} id={p} type="source" position={p} />)}
+        <article className={`carte carte-compacte ${classe}${accent}${verrou ? " verrouillee" : ""}`}
+          aria-label={`${objet.meta.titre || objet.type} (vignette)`}>
+          <Icone size={18} aria-hidden />
+          <span className="titre-compact">{objet.meta.titre || objet.mission?.objectif || objet.asset?.nom || objet.contenu.slice(0, 60) || objet.type}</span>
+          {objet.priorite && <span className={`badge-p ${objet.priorite}`}>{objet.priorite}</span>}
+          <MenuCarte objet={objet} />
+        </article>
+      </>
+    );
+  }
   if (resume) {
     const Icone = ICONES[objet.type] ?? FileText;
     return (
@@ -45,7 +65,7 @@ export const CardShell = memo(function CardShell({ objet, selected, classe, chil
       <NodeResizer isVisible={selected && !verrou} minWidth={t.min[0]} minHeight={t.min[1]} maxWidth={2400} maxHeight={2400}
         keepAspectRatio={ratio} />
       {COTES.map((p) => <Handle key={p} id={p} type="source" position={p} />)}
-      <article className={`carte ${classe}${verrou ? " verrouillee" : ""}`} aria-label={objet.meta.titre || objet.type}>
+      <article className={`carte ${classe}${accent}${verrou ? " verrouillee" : ""}`} aria-label={objet.meta.titre || objet.type}>
         {entete && (
           <div className="entete-flottante">
             {objet.priorite ? <span className={`badge-p ${objet.priorite}`}>{objet.priorite}</span> : <span />}
@@ -141,6 +161,22 @@ export function MenuCarte({ objet }: { objet: ObjetBoard }) {
           )}
           <button role="menuitem" onClick={faire(() => a.dupliquer([objet.id]))}><Copy size={16} /> Dupliquer</button>
           <button role="menuitem" onClick={faire(() => a.devant([objet.id]))}><ArrowUpToLine size={16} /> Amener devant</button>
+          <button role="menuitem" onClick={faire(() => {
+            const t = TAILLES[objet.type]?.defaut ?? [408, 320];
+            a.modifier(objet.id, objet.meta.compact
+              ? { meta: { ...objet.meta, compact: false }, largeur: t[0], hauteur: t[1] }
+              : { meta: { ...objet.meta, compact: true }, largeur: 240, hauteur: 96 });
+          })}>
+            {objet.meta.compact ? <><Maximize2 size={16} /> Taille normale</> : <><Minimize2 size={16} /> Vignette compacte</>}
+          </button>
+          <div className="menu-couleurs" role="group" aria-label="Couleur de la carte">
+            <Palette size={15} aria-hidden />
+            {COULEURS.map((c) => (
+              <button key={c || "aucune"} role="menuitemradio" aria-checked={(objet.meta.couleur ?? "") === c}
+                aria-label={c ? `Couleur ${c}` : "Sans couleur"} className={`pastille-couleur ${c ? `accent-${c}` : "aucune"}`}
+                onClick={faire(() => a.modifier(objet.id, { meta: { ...objet.meta, couleur: c } }))} />
+            ))}
+          </div>
           <button role="menuitem" onClick={faire(() => a.modifier(objet.id, { verrouille: !objet.verrouille }))}>
             {objet.verrouille ? <><LockOpen size={16} /> Déverrouiller</> : <><Lock size={16} /> Verrouiller</>}
           </button>

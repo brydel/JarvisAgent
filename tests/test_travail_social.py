@@ -110,6 +110,23 @@ class VieSocialeTest(test_board_v2.Base):
         self.assertGreaterEqual(len(set(auteurs)), 2, "plusieurs agents prennent la parole")
         self.assertIn("felicitation", [m["type"] for m in d["messages"]], "les types sociaux sont publiés")
 
+    def test_deux_debats_ouverts_par_le_meme_role(self):
+        """Régression : l'identité d'une prise de parole ne doit pas confondre deux débats du même rôle."""
+        with mock.patch.object(vie_sociale, "_choisir", side_effect=lambda n, **k: vie_sociale.personnages()[:n]):
+            vie_sociale.lancer_debat("Premier sujet : la documentation")
+            self.faire_tourner()
+            store.update_json(vie_sociale.ETAT, {}, lambda e: e.__setitem__("tours", {}))
+            vie_sociale.lancer_debat("Second sujet : les tests de bout en bout")
+            self.faire_tourner()
+        racines = [f["fil"]["contenu"] for f in self.messages()]
+        self.assertTrue(any("Premier sujet" in t for t in racines) and any("Second sujet" in t for t in racines), racines)
+        c = mi._connecter(self.org)
+        try:
+            self.assertEqual(c.execute("SELECT COUNT(*) AS n FROM effets_outbox WHERE statut<>'livre'").fetchone()["n"], 0,
+                             "aucune publication bloquée dans l'outbox")
+        finally:
+            c.close()
+
     def test_l_humain_ecrit_un_agent_repond(self):
         vie_sociale.passage()  # mise en route : l'historique n'appelle pas de réponse
         humain = communaute.publier("", "Salut l'équipe, quelqu'un a un avis sur Terraform ?", auteur="proprietaire",

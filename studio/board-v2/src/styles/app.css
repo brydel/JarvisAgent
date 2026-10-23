@@ -616,3 +616,24 @@ button { font: inherit; color: inherit; }
 .c-tache.active { box-shadow: 0 0 0 1px rgba(56, 189, 248, 0.5), 0 0 26px rgba(56, 189, 248, 0.18); }
 .agent-tache { display: flex; gap: 12px; align-items: center; }
 .agent-tache > div { display: grid; gap: 2px; }
+
+/* format libre des cartes : couleur d accent et vignette compacte */
+.carte.accent { border-top: 4px solid var(--accent-carte); }
+.accent-indigo { --accent-carte: #5B6CFF; }
+.accent-violet { --accent-carte: #A48BFF; }
+.accent-rose { --accent-carte: #EB4F86; }
+.accent-orange { --accent-carte: #F08A3C; }
+.accent-jaune { --accent-carte: #E8BE3F; }
+.accent-vert { --accent-carte: #3FB984; }
+.accent-cyan { --accent-carte: #38BDF8; }
+.accent-gris { --accent-carte: #8A93A8; }
+.carte-compacte { flex-direction: row; align-items: center; gap: 8px; padding: 0 6px 0 12px; font-size: 13.5px; }
+.carte-compacte > svg { flex: none; color: var(--text-secondary); }
+.carte-compacte .titre-compact { flex: 1; min-width: 0; font-weight: 600; overflow: hidden; text-overflow: ellipsis; display: -webkit-box;
+  -webkit-line-clamp: 2; -webkit-box-orient: vertical; line-height: 1.3; }
+.carte-compacte .badge-p { height: 20px; min-width: 28px; font-size: 11px; }
+.carte-compacte.accent { border-top-width: 1.5px; border-left: 4px solid var(--accent-carte); }
+.menu-couleurs { display: flex; align-items: center; gap: 4px; padding: 6px 8px; color: var(--text-secondary); flex-wrap: wrap; }
+.pastille-couleur { width: 16px; height: 16px; padding: 0; border-radius: 50%; border: 1px solid var(--border-strong); background: var(--accent-carte, transparent); cursor: pointer; }
+.pastille-couleur.aucune { background: linear-gradient(135deg, transparent 45%, #EB4F86 45%, #EB4F86 55%, transparent 55%); }
+.pastille-couleur[aria-checked="true"] { outline: 2px solid var(--text-primary); outline-offset: 1px; }

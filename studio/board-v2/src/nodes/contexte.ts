@@ -3,7 +3,7 @@ import type { ObjetBoard, Priorite } from "../types";
 
 /** Actions du Board accessibles aux cartes. Références stables (créées une fois) : aucun re-rendu en cascade. */
 export interface ActionsBoard {
-  modifier(id: string, champs: Partial<Pick<ObjetBoard, "contenu" | "meta" | "priorite">> & { verrouille?: boolean }): void;
+  modifier(id: string, champs: Partial<Pick<ObjetBoard, "contenu" | "meta" | "priorite" | "largeur" | "hauteur">> & { verrouille?: boolean }): void;
   priorite(id: string, p: Priorite): void;
   supprimer(ids: string[]): void;
   dupliquer(ids: string[]): void;
