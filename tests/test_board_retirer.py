@@ -78,6 +78,18 @@ class RetirerTest(test_board_v2.Base):
         self.assertEqual(len(equipe), 1)
         self.assertEqual(equipe[0]["meta"]["actifs"], 1)
 
+    def test_par_le_vrai_lanceur_comme_le_chef(self):
+        """`jarvis board …` passe par bin/jarvis : les sous-commandes doivent atteindre le Board (pas workmux)."""
+        import subprocess
+        racine = test_jarvis.ROOT
+        r = subprocess.run([str(racine / "bin" / "jarvis"), "board", "retirer", "--espace", "repriceo", "--termines", "--essai"],
+                           capture_output=True, text=True, timeout=60, env={**os.environ, "JARVIS_ROLE": "chef"})
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertIn("seraient retirées du Board repriceo", r.stdout)
+        r = subprocess.run([str(racine / "bin" / "jarvis"), "board", "voir", "--espace", "repriceo"],
+                           capture_output=True, text=True, timeout=60)
+        self.assertIn("Board repriceo", r.stdout)
+
     def test_cartes_designees_et_garde_fous(self):
         code, _ = self.chef("retirer", "--espace", "repriceo", self.note)
         self.assertEqual(code, 0, "une carte que l'humain désigne peut être retirée, même une note")

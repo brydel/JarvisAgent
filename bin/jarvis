@@ -73,6 +73,7 @@ ${C_CYAN}Agents${C_OFF}
   jarvis verdict <projet> <ISSUE> pret|corrections [note]
                                         Verdict d'une contre-relecture
   jarvis board · jarvis status          Tableau de bord workmux · tâches du projet courant
+  jarvis board voir|deposer|lier|retirer|restaurer …  Le Board partagé du Studio (un par projet)
 
 ${C_CYAN}Rôles et modèles${C_OFF}
   jarvis role [voir <nom>]              Les spécialités de l'usine (DevOps, front-end, vidéo…)
@@ -463,7 +464,13 @@ cmd_task() {
   ok "Agent lancé en arrière-plan. Suis-le dans le cockpit (jarvis cockpit)."
 }
 
-cmd_board()  { has workmux || die "workmux n'est pas installé."; exec workmux dashboard "$@"; }
+cmd_board() {
+  case "${1:-}" in
+    # le Board partagé (Studio) : lu et alimenté par le chef
+    voir|espaces|deposer|commenter|lier|decider|retirer|restaurer) py board "$@" ;;
+    *) has workmux || die "workmux n'est pas installé."; exec workmux dashboard "$@" ;;
+  esac
+}
 cmd_status() { has workmux || die "workmux n'est pas installé."; exec workmux list "$@"; }
 
 cmd_init_project() {
