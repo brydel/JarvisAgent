@@ -1,7 +1,7 @@
 """Noeud GPU (Jetson) : une extension de Jarvis, pas un second Jarvis.
 
-La Jetson n'a ni base, ni Board, ni chef, ni agent : elle expose des outils GPU (transcription…) par un serveur
-MCP stdio joint en SSH, avec une clé dédiée limitée à une commande forcée (services/noeud_jetson). Jarvis l'appelle
+La Jetson n'a ni base, ni Board, ni chef, ni agent : elle expose des outils GPU (transcription, modèle local texte
+et image pour les petites et moyennes tâches) par un serveur MCP stdio joint en SSH, avec une clé dédiée limitée à une commande forcée (services/noeud_jetson). Jarvis l'appelle
 comme toute connexion MCP : par la passerelle d'outils, sous mandat, avec un identifiant d'opération stable et une
 trace au journal. Les fichiers lourds (audio du Board) sont déposés à part, désignés ensuite par leur empreinte :
 une session MCP stdio est bornée à 30 s et ses messages à 1 Mo.
@@ -21,8 +21,11 @@ from pathlib import Path
 
 from . import config
 
-OUTILS_BOARD = ("audio_transcrire", "audio_resultat")
+OUTILS_BOARD = ("audio_transcrire", "audio_resultat", "texte_generer", "image_decrire", "travail_resultat")
 OUTILS = OUTILS_BOARD + ("noeud_sante",)
+CONSIGNE_IMAGE = ("Décris cette image pour quelqu'un qui ne la voit pas. Commence par une section « Texte visible » qui "
+                  "recopie fidèlement tout le texte lisible (titres, libellés, chiffres), puis une section « Description » "
+                  "de 3 phrases au plus : de quoi il s'agit (capture d'écran, maquette, photo de papier…) et ce qui compte.")
 PROJET_BOARD = "jarvis-board"
 ATTENTE_S = 15
 TEXTE_MAX = 200_000
@@ -123,16 +126,12 @@ def appeler(outil: str, arguments: dict, *, operation_id: str, r: dict | None = 
     return data
 
 
-def transcrire(chemin: Path, *, cle_operation: str, verifier=None, r: dict | None = None) -> dict:
-    """Audio → {texte, langue, duree_audio_s, duree_traitement_s, modele}. `verifier()` lève si la tâche est annulée."""
-    r = r or reglages()
-    ok, raison = active(r)
-    if not ok:
-        raise NoeudError(raison)
-    echeance = time.monotonic() + float(r.get("delai_s") or 900)
-    sha = deposer(chemin, delai=echeance - time.monotonic(), r=r)
-    travail = appeler("audio_transcrire", {"fichier": sha, "langue": str(r.get("langue") or "fr")},
-                      operation_id=f"{cle_operation}:soumettre", r=r)
+def _nombre(v):
+    return v if isinstance(v, (int, float)) and not isinstance(v, bool) else None
+
+
+def _attendre(travail: dict, *, outil: str, cle_operation: str, echeance: float, verifier, r: dict) -> dict:
+    """Interroge le travail (attente bornée par appel, une opération journalisée chacune) jusqu'à sa fin."""
     ident = travail.get("id")
     if not isinstance(ident, str):
         raise NoeudError("le noeud n'a pas rendu d'identifiant de travail")
@@ -140,19 +139,63 @@ def transcrire(chemin: Path, *, cle_operation: str, verifier=None, r: dict | Non
         if verifier:
             verifier()
         etat = travail if travail.get("statut") in ("termine", "echec") else appeler(
-            "audio_resultat", {"travail": ident, "attente_s": ATTENTE_S}, operation_id=f"{cle_operation}:resultat:{n}", r=r)
+            outil, {"travail": ident, "attente_s": ATTENTE_S}, operation_id=f"{cle_operation}:resultat:{n}", r=r)
         if etat.get("statut") == "termine":
-            res = etat.get("resultat") or {}
-            nombre = lambda v: v if isinstance(v, (int, float)) and not isinstance(v, bool) else None  # noqa: E731
-            return {"texte": str(res.get("texte") or "").strip()[:TEXTE_MAX], "langue": str(res.get("langue") or "")[:8],
-                    "duree_audio_s": nombre(res.get("duree_audio_s")), "modele": str(res.get("modele") or "")[:40],
-                    "duree_traitement_s": nombre(res.get("duree_traitement_s"))}
+            return etat.get("resultat") or {}
         if etat.get("statut") == "echec":
-            raise NoeudError(f"transcription refusée par le noeud : {str(etat.get('erreur') or '')[:160]}")
+            raise NoeudError(f"refusé par le noeud : {str(etat.get('erreur') or '')[:160]}")
         if time.monotonic() > echeance:
-            raise NoeudError("délai de transcription dépassé")
-        travail = {}
-    raise NoeudError("délai de transcription dépassé")
+            raise NoeudError("délai dépassé sur le noeud")
+        travail = {"id": ident}
+    raise NoeudError("délai dépassé sur le noeud")
+
+
+def _demarrer(r: dict | None) -> tuple[dict, float]:
+    r = r or reglages()
+    ok, raison = active(r)
+    if not ok:
+        raise NoeudError(raison)
+    return r, time.monotonic() + float(r.get("delai_s") or 900)
+
+
+def transcrire(chemin: Path, *, cle_operation: str, verifier=None, r: dict | None = None) -> dict:
+    """Audio → {texte, langue, duree_audio_s, duree_traitement_s, modele}. `verifier()` lève si la tâche est annulée."""
+    r, echeance = _demarrer(r)
+    sha = deposer(chemin, delai=echeance - time.monotonic(), r=r)
+    travail = appeler("audio_transcrire", {"fichier": sha, "langue": str(r.get("langue") or "fr")},
+                      operation_id=f"{cle_operation}:soumettre", r=r)
+    res = _attendre(travail, outil="audio_resultat", cle_operation=cle_operation, echeance=echeance, verifier=verifier, r=r)
+    return {"texte": str(res.get("texte") or "").strip()[:TEXTE_MAX], "langue": str(res.get("langue") or "")[:8],
+            "duree_audio_s": _nombre(res.get("duree_audio_s")), "modele": str(res.get("modele") or "")[:40],
+            "duree_traitement_s": _nombre(res.get("duree_traitement_s"))}
+
+
+def _sortie_modele(res: dict) -> dict:
+    return {"texte": str(res.get("texte") or "").strip()[:TEXTE_MAX], "modele": str(res.get("modele") or "")[:80],
+            "jetons_entree": _nombre(res.get("jetons_entree")), "jetons_sortie": _nombre(res.get("jetons_sortie")),
+            "duree_traitement_s": _nombre(res.get("duree_traitement_s"))}
+
+
+def generer_texte(consigne: str, texte: str = "", *, cle_operation: str, max_jetons: int = 1024, verifier=None,
+                  r: dict | None = None) -> dict:
+    """Petite ou moyenne tâche texte sur le modèle local du noeud. `texte` est une donnée, jamais une consigne.
+    → {texte, modele, jetons_entree, jetons_sortie, duree_traitement_s}."""
+    r, echeance = _demarrer(r)
+    travail = appeler("texte_generer", {"consigne": consigne[:4000], "texte": texte[:24_000], "max_jetons": max_jetons},
+                      operation_id=f"{cle_operation}:soumettre", r=r)
+    return _sortie_modele(_attendre(travail, outil="travail_resultat", cle_operation=cle_operation, echeance=echeance,
+                                    verifier=verifier, r=r))
+
+
+def decrire_image(chemin: Path, *, cle_operation: str, consigne: str = CONSIGNE_IMAGE, max_jetons: int = 768,
+                  verifier=None, r: dict | None = None) -> dict:
+    """Texte visible et description d'une image par le modèle local du noeud (même retour que generer_texte)."""
+    r, echeance = _demarrer(r)
+    sha = deposer(chemin, delai=echeance - time.monotonic(), r=r)
+    travail = appeler("image_decrire", {"fichier": sha, "consigne": consigne[:4000], "max_jetons": max_jetons},
+                      operation_id=f"{cle_operation}:soumettre", r=r)
+    return _sortie_modele(_attendre(travail, outil="travail_resultat", cle_operation=cle_operation, echeance=echeance,
+                                    verifier=verifier, r=r))
 
 
 # --- branchement (terminal du propriétaire) -----------------------------------------------------

@@ -142,6 +142,10 @@ def _consigne_travail(env: dict) -> str:
             piece = "Texte de la page :\n" + _donnee(page, 15_000)
         else:
             piece = _donnee(pieces.get("note"), 500)
+        if pieces.get("vision"):
+            # lecture préalable par le modèle local : une aide (donnée), l'image jointe reste la référence
+            piece += ("\nLecture automatique de l'image par le modèle local (peut contenir des erreurs ; l'image jointe "
+                      "fait foi) :\n" + _donnee(pieces["vision"], 8_000))
         return CONSIGNE_CONTEXTE.format(
             fichier=fichier, missions=liste(travail.get("missions_en_cours") or []),
             voisins="\n".join(f"- {_donnee(v.get('ref'), 5)} — {_donnee(v.get('type'), 20)} — {_donnee(v.get('titre'), 200)}"

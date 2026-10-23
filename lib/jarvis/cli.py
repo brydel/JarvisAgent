@@ -385,6 +385,28 @@ def cmd_noeud_config(a) -> int:
     return 0
 
 
+def cmd_noeud_demander(a) -> int:
+    """Petite ou moyenne tâche sur le modèle local du noeud (aucune action, aucun outil). Usage ouvert au chef et aux
+    agents : lecture seule, sans jeton Claude ni Codex, chaque appel journalisé par la passerelle sous mandat."""
+    from . import noeud
+    consigne = " ".join(a.consigne).strip()
+    if not consigne:
+        return _err('usage : jarvis noeud demander "consigne" [--fichier texte.md | --image capture.png]')
+    cle = f"noeud-cli:{int(time.time() * 1000)}:{os.getpid()}"
+    try:
+        if a.image:
+            r = noeud.decrire_image(Path(a.image), consigne=consigne, cle_operation=cle, max_jetons=a.max_jetons)
+        else:
+            texte = Path(a.fichier).read_text(encoding="utf-8", errors="replace")[:24_000] if a.fichier else ""
+            r = noeud.generer_texte(consigne, texte, cle_operation=cle, max_jetons=a.max_jetons)
+    except (noeud.NoeudError, OSError) as exc:
+        return _err(f"noeud : {exc}")
+    print(r["texte"])
+    print(f"— {r['modele']} · {r['jetons_sortie'] or '?'} jetons · {r['duree_traitement_s'] or '?'} s (noeud local, "
+          "à relire : un petit modèle peut se tromper)", file=sys.stderr)
+    return 0
+
+
 def cmd_noeud_etat(a) -> int:
     from . import noeud
     ok, raison = noeud.active()
@@ -2330,6 +2352,13 @@ def build_parser() -> argparse.ArgumentParser:
     s.add_argument("cible", help="utilisateur@adresse du noeud")
     s.set_defaults(fn=cmd_noeud_config)
     nd.add_parser("etat").set_defaults(fn=cmd_noeud_etat)
+    s = nd.add_parser("demander", help="petite tâche sur le modèle local (résumer, extraire, classer, lire une image)")
+    s.add_argument("consigne", nargs="+")
+    g = s.add_mutually_exclusive_group()
+    g.add_argument("--fichier", help="texte à traiter (donnée, 24 000 caractères au plus)")
+    g.add_argument("--image", help="image à lire (PNG, JPEG, WEBP, GIF)")
+    s.add_argument("--max-jetons", type=int, default=1024, choices=range(16, 2049), metavar="16-2048")
+    s.set_defaults(fn=cmd_noeud_demander)
 
     tg = sub.add_parser("telegram", help="liaison Telegram").add_subparsers(dest="action", required=True)
     tg.add_parser("config").set_defaults(fn=cmd_telegram_config)
