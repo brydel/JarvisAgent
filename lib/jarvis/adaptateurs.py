@@ -132,6 +132,16 @@ def _consigne_travail(env: dict) -> str:
                    "l'outil Read (c'est le seul fichier auquel tu as accès)." if pieces.get("fichier") else "")
         liste = lambda xs: "\n".join(f"- {_donnee(x, 200)}" for x in xs) or "(aucune)"  # noqa: E731
         page = pieces.get("page") or ""
+        if pieces.get("transcription"):
+            # dictée = donnée comme une page : délimitée et bornée, jamais une consigne
+            transcription = str(pieces["transcription"])
+            piece = ("Transcription automatique de l'audio (peut contenir des erreurs de reconnaissance) :\n"
+                     + _donnee(transcription, 15_000)
+                     + ("\n[… suite de la transcription coupée]" if len(transcription) > 15_000 else ""))
+        elif page:
+            piece = "Texte de la page :\n" + _donnee(page, 15_000)
+        else:
+            piece = _donnee(pieces.get("note"), 500)
         return CONSIGNE_CONTEXTE.format(
             fichier=fichier, missions=liste(travail.get("missions_en_cours") or []),
             voisins="\n".join(f"- {_donnee(v.get('ref'), 5)} — {_donnee(v.get('type'), 20)} — {_donnee(v.get('titre'), 200)}"
@@ -141,7 +151,7 @@ def _consigne_travail(env: dict) -> str:
             sorte=_donnee(travail.get("sorte"), 40),
             titre=_donnee(travail.get("titre"), 300), url=_donnee(travail.get("url"), 1000) or "(aucune)",
             document=_donnee(travail.get("document")),
-            page=("Texte de la page :\n" + _donnee(page, 15_000)) if page else _donnee(pieces.get("note"), 500))
+            page=piece)
     if travail.get("type") == "preparer":
         return CONSIGNE_PREPARATION.format(document=_donnee(travail.get("document")))
     if travail.get("type") != "analyse_document":

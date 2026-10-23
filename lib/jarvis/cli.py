@@ -7,6 +7,7 @@ import getpass
 import json
 import os
 import random
+import re
 import sys
 import time
 from pathlib import Path
@@ -357,6 +358,53 @@ def cmd_telegram_test(a) -> int:
     return _err("Telegram non configuré ou injoignable (jarvis telegram config)")
 
 
+# --- Noeud GPU (Jetson) -------------------------------------------------------
+
+def cmd_noeud_config(a) -> int:
+    refused = _human_only("brancher le noeud GPU")
+    if refused is not None:
+        return refused
+    from . import noeud
+    if not re.fullmatch(r"[a-z_][a-z0-9_-]{0,31}@[A-Za-z0-9.-]{1,253}", a.cible or ""):
+        return _err("cible attendue sous la forme utilisateur@adresse (ex. moi@192.168.1.20)")
+    pub = noeud.creer_cle(config.settings()["noeud"])
+    try:
+        noeud.sante({**config.settings()["noeud"], "cible": a.cible}, hote_connu=False)
+    except noeud.NoeudError:
+        print("Le noeud ne répond pas encore à la clé de Jarvis. Sur la Jetson, depuis services/noeud_jetson :\n")
+        print(f"  echo '{pub}' > jarvis_noeud.pub")
+        print("  bash installer_noeud.sh --cle-jarvis jarvis_noeud.pub\n")
+        print(f"puis relance : jarvis noeud config {a.cible}")
+        return 1
+    try:
+        r = noeud.brancher(a.cible, par="humain")
+    except (noeud.NoeudError, ValueError, OSError) as exc:
+        return _err(f"branchement impossible : {exc}")
+    print(f"✓ Noeud GPU branché : connexion « {r['connexion']} », outils autorisés, mandat {r['mandat']} pour le Board.")
+    print("  L'audio déposé sur le Board sera transcrit sur le noeud. Pour couper : jarvis regler noeud.actif false")
+    return 0
+
+
+def cmd_noeud_etat(a) -> int:
+    from . import noeud
+    ok, raison = noeud.active()
+    if not ok:
+        print(f"○ {raison}")
+        return 0
+    try:
+        s = noeud.sante()
+    except noeud.NoeudError as exc:
+        print(f"✗ Activé mais {exc} : l'audio du Board garde ses seules métadonnées.")
+        return 1
+    m = s.get("mesures") or {}
+    r = noeud.reglages()
+    print(f"● Noeud GPU {r['cible']} (connexion {r['connexion']}) : modèle {s.get('modele')}, "
+          f"{'occupé' if s.get('occupe') else 'libre'}")
+    print(f"  mémoire {m.get('memoire_dispo_mo', '?')}/{m.get('memoire_totale_mo', '?')} Mo libres · "
+          f"GPU {m.get('gpu_c', '?')} °C · CPU {m.get('cpu_c', '?')} °C · audio {s.get('duree_max_s')} s au plus")
+    return 0
+
+
 # --- Réglages -----------------------------------------------------------------
 
 def cmd_regler(a) -> int:
@@ -367,9 +415,12 @@ def cmd_regler(a) -> int:
     section, _, key = a.cle.partition(".")
     if not key or section not in data or section == "telegram":
         return _err("clé inconnue. Exemples : general.max_agents, general.poll_seconds, notifications.windows")
+    if section == "noeud" and key not in ("actif", "langue", "delai_s"):
+        return _err("cible, clé, connexion et mandat du noeud se règlent avec « jarvis noeud config »")
     current = data[section].get(key)
     value: object = a.valeur
-    allowed = {"codex.mode": ("bac-a-sable", "complet"), "plans.validation": ("humain", "auto")}.get(a.cle)
+    allowed = {"codex.mode": ("bac-a-sable", "complet"), "plans.validation": ("humain", "auto"),
+               "noeud.langue": config.LANGUES_NOEUD}.get(a.cle)
     if current is None:
         return _err(f"clé inconnue « {a.cle} » (voir le tableau des réglages du README)")
     if allowed and a.valeur not in allowed:
@@ -2273,6 +2324,12 @@ def build_parser() -> argparse.ArgumentParser:
     s = projet.add_parser("chemin")
     s.add_argument("nom")
     s.set_defaults(fn=cmd_projet_chemin)
+
+    nd = sub.add_parser("noeud", help="noeud GPU (Jetson) : outils sous mandat").add_subparsers(dest="action", required=True)
+    s = nd.add_parser("config")
+    s.add_argument("cible", help="utilisateur@adresse du noeud")
+    s.set_defaults(fn=cmd_noeud_config)
+    nd.add_parser("etat").set_defaults(fn=cmd_noeud_etat)
 
     tg = sub.add_parser("telegram", help="liaison Telegram").add_subparsers(dest="action", required=True)
     tg.add_parser("config").set_defaults(fn=cmd_telegram_config)
