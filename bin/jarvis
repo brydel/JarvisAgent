@@ -34,6 +34,7 @@ ${C_CYAN}Pilotage${C_OFF}
   jarvis etat · jarvis usine            État complet · les ateliers : qui travaille sur quoi
   jarvis plan liste|voir|ok|non         Plans proposés par le chef
   jarvis fil [n]                        Derniers événements
+  jarvis redteam --help                  Audits autorisés, rapports et revues
   jarvis os diagnostic                  Capacités réellement observées (sans appel de modèle)
   jarvis os schemas                     Contrats communs agents, tâches et sessions
   jarvis os mandat --help               Mandats personnels : périmètre, budget et révocation
@@ -629,7 +630,7 @@ main() {
     start)        cmd_start "$@" ;;
     chef)         cmd_chef "$@" ;;
     task|t)       cmd_task "$@" ;;
-    os|cockpit|etat|plan|fil|projet|telegram|noeud|regler|capacite|demander|note|journal|daemon|voir|jetons|veille|\
+    os|redteam|cockpit|etat|plan|fil|projet|telegram|noeud|regler|capacite|demander|note|journal|daemon|voir|jetons|veille|\
     fermer|reprendre|sante|reparer-git|role|modele|tache|verdict|bilan|usine|studio|livrer|livrables|web|\
     admission|pause|profil|lourd|audit|diagnostic|politique|budget|fournisseurs|proposition|\
     budget-jetons|cout|memoire|secrets|eval|rejouer|traces|proxy|rollback|execution|skill|stockage|executant|\

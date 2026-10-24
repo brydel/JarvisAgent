@@ -1,0 +1,4 @@
+# Service séparé uniquement ; aucune dépendance dans lib/jarvis.
+semgrep==1.141.1
+# Compatibilité du MCP embarqué par cette version de Semgrep.
+pydantic==2.11.7

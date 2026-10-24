@@ -78,3 +78,8 @@ python3 -m unittest discover -s tests -p 'test_noeud.py' -v
 ```
 
 Moteur factice et faux `ssh` qui lance le vrai point d'entrée : ni modèle, ni GPU, ni réseau.
+
+## Extension RedTeam
+
+Le moteur d’audit autorisé est optionnel et possède un mandat distinct de l’audio.
+Voir [installation, périmètre et limites](../../docs/redteam/README.md).
