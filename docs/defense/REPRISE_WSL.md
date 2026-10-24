@@ -118,3 +118,14 @@ l'état après bascule, restaurer la copie antérieure vers un emplacement disti
 vérifier la compatibilité avant de reconnecter l'ancien code. Ne pas écraser une
 base active avec une sauvegarde ancienne. Les changements de raccourci, processus
 et service nécessitent eux aussi un accord explicite.
+
+## Références combinées vérifiées dans le cloud
+
+Le banc est proposé séparément en [PR #13](https://github.com/brydel/JarvisAgent/pull/13),
+branche `prep/banc-redteam-19`, SHA `ce72978387b029550cb7656e1a016703a9bb6f09`.
+Le lot Défense est en [PR #14](https://github.com/brydel/JarvisAgent/pull/14).
+Les SHA et résultats de la combinaison sont consignés dans [VALIDATION.md](VALIDATION.md).
+Pour reprendre, comparer les SHA distants à ceux du bilan ; toute divergence impose
+une nouvelle revue. Préparer les deux lots dans le worktree de test, jamais directement
+dans l'installation active. Une combinaison cloud sans conflit textuel ne dit rien
+des changements suivis, non suivis ou privés présents sur le PC inaccessible.

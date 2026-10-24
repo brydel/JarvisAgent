@@ -83,3 +83,50 @@ et contrôle des suppressions PR12 réalisés, sans prétendre remplacer un scan
 Aucun appel fournisseur, modèle téléchargé, scan actif, installation, déploiement ou
 remédiation. Les tests restent synthétiques et ne prouvent pas une protection réelle.
 Les journaux techniques des tests restent hors dépôt ; seul ce bilan est public.
+
+## Publication et combinaison avec le banc #13
+
+Références testées dans un worktree cloud distinct, sans modification des branches
+concurrentes ni fusion des PR :
+
+- Base commune : `12a620909ce5feca9337c67933a0918db8fe87ab`.
+- Défense [PR #14](https://github.com/brydel/JarvisAgent/pull/14) :
+  `5dd777a4c2abb439a459e1c11e84edfc651a2724`.
+- Banc [PR #13](https://github.com/brydel/JarvisAgent/pull/13) :
+  `ce72978387b029550cb7656e1a016703a9bb6f09`.
+- Commit combiné exclusivement local : `98f49145964d1145cd25544e4241e68bc89c363d`.
+
+La fusion locale de test est sans conflit textuel. Le banc ajoute seulement ses
+modifications sur trois fichiers ; aucun fichier privé retiré par PR12 n'est restauré.
+Le code des deux lots reste identique à ces SHA ; les ajouts suivants à la PR #14
+ne modifient que le guide et ce bilan.
+
+Suite générale combinée : **772 tests, 667 réussis, 105 ignorés,
+aucun échec** (140,150 s), incluant les 14 tests Défense. Les tests
+synthétiques existants Board, agents/runtime, passerelle/mandats, transports,
+communauté, stockage et intégration du nœud passent dans cette suite, sous réserve
+des cas ignorés (PostgreSQL et dépendances optionnelles, dont intégrations réelles).
+
+La suite du service `services/noeud_jetson/tests` passe : 35 tests, dont 15 du banc.
+Model Bridge : 11 tests réussis ; Temporal : 17. Syntaxe shell/Python, aide CLI,
+égalité des templates et contrôle du diff passent. Aucun vrai modèle, conteneur
+RedTeam, équipement ou accès Jetson n'est utilisé pour cette validation combinée.
+La disponibilité de `tmux` dans cet environnement permet les tests généraux ; les
+échecs faute de `tmux` rapportés dans l'environnement du banc sont une différence
+de prérequis, pas une régression attribuable à cette combinaison.
+
+CI de la PR #14 au SHA `5dd777a4c2abb439a459e1c11e84edfc651a2724` :
+[exécution 40067427285](https://github.com/brydel/JarvisAgent/actions/runs/40067427285),
+terminée en échec. Build Studio et syntaxe réussis ; job Temporal réussi. Le job
+`verify` échoue sur `test_le_chef_lit_et_alimente_le_board`, argument
+« Plan de la semaine » non reconnu, identique au défaut CI préexistant signalé.
+Les tests navigateur suivants ne sont pas exécutés. Le test et le parseur Board
+sont inchangés par ce lot ; seul le nouveau parseur `defense` est enregistré dans
+le CLI commun. Aucun correctif hors périmètre n'est apporté. Le résultat local
+ne doit pas être présenté comme une CI verte.
+
+Les fonctions existantes sont évaluées par leurs tests synthétiques, pas par un
+parcours du poste réel. Le checkout installé, les changements privés et les services
+WSL/Jetson restent inconnus : aucune garantie d'absence de conflit ou de maintien
+opérationnel sur ces machines. Suivre [REPRISE_WSL.md](REPRISE_WSL.md) avant de
+proposer une bascule ; aucune installation ou activation n'a été effectuée ici.
