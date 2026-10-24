@@ -57,6 +57,8 @@ def catalogue() -> dict:
     tools.extend(courriel.catalogue())
     from . import outils_communaute
     tools.extend(outils_communaute.catalogue())
+    from . import defense
+    tools.extend(defense.catalogue())
     return {"version": 1, "outils": tools, "note": "Un outil disponible exige encore un mandat et un périmètre exacts."}
 
 
@@ -137,6 +139,9 @@ def _valider_schema(valeur, schema, profondeur=0):
 
 def _preparer(requete, *, annulation=None, par=""):
     tool, args = requete["tool"], requete["arguments"]
+    if tool == "security.auth_triage":
+        from . import defense
+        return defense.preparer(args)
     if tool == "web.fetch":
         if not {"url"} <= set(args) <= {"url", "maximum", "timeout"}:
             raise OutilError("web.fetch : url requise ; maximum et timeout facultatifs.")

@@ -1,0 +1,6 @@
+{"timestamp": "2026-01-01T00:00:00Z", "kind": "auth_failure", "host": "machine-synthetique", "source": "192.0.2.10", "account": "compte-fictif", "message": "Exemple exclusivement synthétique"}
+{"timestamp": "2026-01-01T00:00:01Z", "kind": "auth_failure", "host": "machine-synthetique", "source": "192.0.2.10", "account": "compte-fictif", "message": "Exemple exclusivement synthétique"}
+{"timestamp": "2026-01-01T00:00:02Z", "kind": "auth_failure", "host": "machine-synthetique", "source": "192.0.2.10", "account": "compte-fictif", "message": "Exemple exclusivement synthétique"}
+{"timestamp": "2026-01-01T00:00:03Z", "kind": "auth_failure", "host": "machine-synthetique", "source": "192.0.2.10", "account": "compte-fictif", "message": "Exemple exclusivement synthétique"}
+{"timestamp": "2026-01-01T00:00:04Z", "kind": "auth_failure", "host": "machine-synthetique", "source": "192.0.2.10", "account": "compte-fictif", "message": "Exemple exclusivement synthétique"}
+{"timestamp": "2026-01-01T00:00:05Z", "kind": "auth_success", "host": "machine-synthetique", "source": "192.0.2.10", "account": "compte-fictif", "message": "Exemple exclusivement synthétique"}

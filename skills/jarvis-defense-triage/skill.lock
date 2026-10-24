@@ -1,0 +1,6 @@
+# Épinglage Jarvis : toute modification du dossier change l'empreinte. Ne pas éditer à la main.
+nom = "jarvis-defense-triage"
+version = "1"
+empreinte = "sha256:c24e62cbf91634b1513c74f5d985486439db06afb3a3b605416472db37171f5b"
+auteur = "JarvisAgent"
+epingle = "2026-10-24"
