@@ -1,5 +1,8 @@
 # Reprise de Jarvis RedTeam Node sous Ubuntu WSL
 
+**Reprise locale effectuée :** voir [mesures, validations et blocages](VALIDATION_WSL.md).
+Le document ci-dessous conserve le contexte de transfert cloud ; les observations locales le complètent.
+
 Ce fichier transmet le contexte d'une session Codex cloud à une nouvelle session locale. La branche de transfert
 contient un premier incrément SAST, basé sur `feat/board-dessin` au commit `5fd52b8`. L'utilisateur demande de
 continuer sur cette famille de code, sans reprendre d'une branche Board plus ancienne ni importer automatiquement

@@ -50,11 +50,29 @@ Pour un diagnostic SAST en processus hôte, installer `requirements-redteam.txt`
 
 ## Branchement sur une Jetson existante
 
-Aucun SSH, modèle exact, RAM Jetson, JetPack, GPU ou support CUDA n'a pu être observé dans l'environnement de
-livraison. Le déploiement distant et l'image ARM64 restent à tester. Ne pas extrapoler la réussite x86_64.
+La [reprise locale du 23 octobre 2026](VALIDATION_WSL.md) a vérifié les accès SSH et le matériel réel :
+Orin Nano 8 Go, JetPack 6.2.1, CUDA 12.6. Le compte SSH n'a pas accès au daemon Docker ; le scan distant
+et l'image ARM64 restent à tester. L'inférence Gemma essayée a échoué ; ne pas extrapoler la réussite x86_64.
 
-1. Reprendre le branchement SSH à commande forcée décrit dans `services/noeud_jetson/README.md`. L'installateur
-   copie désormais aussi les modules RedTeam ; les fonctions audio et leur mandat restent inchangés.
+Pour refaire l'inventaire sans modifier le nœud, depuis un **accès administratif configuré** (la clé Jarvis
+à commande forcée ne permet pas cette commande) :
+
+```bash
+ssh ACCES_ADMINISTRATIF 'python3 -' < services/noeud_jetson/inventaire_redteam.py
+```
+
+Le script ne lance ni sudo, ni inférence, ni téléchargement. Il relève matériel, versions, accès Docker,
+modèles du catalogue présents, digests et empreinte des licences ; il ne mesure pas la mémoire GPU.
+La sortie `aptitude_scan_distant` ne certifie jamais un déploiement opérationnel.
+
+**Préserver le service installé.** Sur la Jetson reconnue, le point d'entrée MCP possède déjà les outils texte/image
+d'une version plus récente. L'installateur de cette branche le remplacerait par sa version audio/RedTeam.
+Ne pas relancer cet installateur sur ce service : préparer une extension ciblée, sauvegardée et testée
+qui conserve tous ses outils. Aucun module de `feat/jetson-extension` n'a été importé dans cette branche.
+
+1. Reprendre le branchement SSH à commande forcée décrit dans `services/noeud_jetson/README.md`. Pour une
+   installation neuve, l'installateur copie aussi les modules RedTeam. Pour un service existant, comparer
+   et sauvegarder ses fichiers avant toute mise à jour ; son mandat audio reste distinct.
 2. Construire l'image sur le matériel cible, puis mesurer mémoire et temps. Installer Docker et ses droits
    pour le compte du noeud selon la politique du poste. Ne pas exposer son socket sur le réseau.
 3. Sauvegarder le fichier privé `~/.config/jarvis-noeud/env`, puis y ajouter des chemins locaux absolus, par exemple :
