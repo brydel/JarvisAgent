@@ -1,0 +1,17 @@
+{
+  "synthetique": true,
+  "description": "Exemple documentaire, ni mesure réelle ni rapport attesté du moteur.",
+  "scenario": "fixture Python fictive",
+  "resultat_attendu": {
+    "constats": 1,
+    "lab_reproduced": false,
+    "impact_confirmed": false
+  },
+  "mesures_reelles": null,
+  "validation_requise": [
+    "scan positif",
+    "scan négatif",
+    "rejeu idempotent",
+    "revue indépendante"
+  ]
+}

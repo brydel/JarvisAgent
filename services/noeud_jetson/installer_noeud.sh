@@ -51,6 +51,7 @@ for module in redteam_engine redteam_models redteam_cli; do
 done
 install -m 644 "$SOURCE/banc.py" "$DIR/banc.py"
 
+# Chemin générique du produit, pas une preuve du Lab : ne jamais publier env ni les clés.
 # Jeton du service local créé une seule fois, lisible par toi seul ; jamais affiché
 if ! grep -q '^JARVIS_NOEUD_TOKEN=' "$CONF/env" 2>/dev/null; then
   ( umask 077

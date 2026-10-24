@@ -5,12 +5,11 @@ CLI/MCP ; il ne remplace ni le chef, ni l'audio Jetson, ni le Board. Bibliothèq
 L'[installation dans le Jarvis habituel du poste](INSTALLATION_POSTE.md) conserve aussi les mises à jour multimodales
 présentes sur `integration/jetson-live`.
 
-## Fonctionnement vérifié
+## Parcours prévu
 
-`jarvis redteam local` → collecte Python bornée → Semgrep réel → preuves → rapport → demande de revue dans
-la communauté Jarvis. Le chemin passerelle d'outils → mandat → MCP stdio → moteur Docker → rapport → communauté
-est également testé localement. Le premier test utilisait un processus local ; le [parcours SSH/MCP réel
-sur la Jetson ARM64](VALIDATION_JETSON.md) est désormais validé avec les fixtures synthétiques et un mandat de laboratoire.
+`jarvis redteam local` → collecte Python bornée → Semgrep → preuves privées → rapport → revue.
+Le transport distant utilise un mandat et MCP stdio. Les protocoles publics ne certifient aucun déploiement réel.
+Voir la [politique des preuves](CONFIDENTIALITE.md) et l'[exemple synthétique](exemples/rapport-synthetique.json).
 
 Une seule règle est livrée : appels `subprocess` avec `shell=True` (CWE-78, piste OWASP A03). Le résultat est un
 **constat d'outil**, pas une injection exploitable confirmée. Les états `lab_reproduced` et `impact_confirmed`
@@ -53,11 +52,7 @@ Pour un diagnostic SAST en processus hôte, installer `requirements-redteam.txt`
 
 ## Branchement sur une Jetson existante
 
-La [reprise locale du 23 octobre 2026](VALIDATION_WSL.md) a vérifié les accès SSH et le matériel réel :
-Orin Nano 8 Go, JetPack 6.2.1, CUDA 12.6. Le propriétaire a ensuite accordé l'accès Docker : l'image ARM64,
-l'extension et le parcours SAST distant sont [validés en laboratoire](VALIDATION_JETSON.md).
-Après un premier échec mémoire, une inférence Gemma complète a réussi
-avec une sortie bornée à 256 jetons ; cela ne valide pas le scan distant ni le partage de mémoire avec Whisper.
+Vérifier les prérequis sur chaque environnement avant toute installation autorisée.
 
 Pour refaire l'inventaire sans modifier le nœud, depuis un **accès administratif configuré** (la clé Jarvis
 à commande forcée ne permet pas cette commande) :
@@ -70,10 +65,7 @@ Le script ne lance ni sudo, ni inférence, ni téléchargement. Il relève maté
 modèles du catalogue présents, digests et empreinte des licences ; il ne mesure pas la mémoire GPU.
 La sortie `aptitude_scan_distant` ne certifie jamais un déploiement opérationnel.
 
-**Préserver le service installé.** Sur la Jetson reconnue, le point d'entrée MCP possède déjà les outils texte/image
-d'une version plus récente. L'installateur de cette branche le remplacerait par sa version audio/RedTeam.
-Ne pas relancer cet installateur sur ce service : utiliser l'installation ciblée ci-dessous.
-Aucun module de `feat/jetson-extension` n'a été importé dans cette branche.
+**Préserver le service installé.** Comparer les versions et sauvegarder les fichiers avant une mise à jour.
 
 ### Extension ciblée d'un service existant
 
@@ -100,10 +92,6 @@ les trois commandes acceptées restent conservés. Une configuration SSH personn
 Chaque fichier modifié est sauvegardé dans un répertoire voisin `NOM.avant-redteam-*`, privé ; un rejeu identique
 ne le réécrit pas. Pour revenir à l'ancien point d'entrée, restaurer la sauvegarde d'`authorized_keys` après
 comparaison avec les éventuelles modifications intervenues depuis ; les modules ajoutés peuvent rester inactifs.
-
-Cette voie est activée sur la Jetson : les fichiers d'origine et les six outils sont conservés, la santé
-répond et le scan ARM64 passe. Voir les [preuves de déploiement](VALIDATION_JETSON.md).
-Le nouveau mandat a été créé par le propriétaire dans un état Jarvis de laboratoire distinct.
 
 ### Branchement et mandat
 
