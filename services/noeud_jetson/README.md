@@ -47,7 +47,18 @@ Jarvis (poste)                                         Jetson
 
 ## Installation
 
-Sur la Jetson, une fois, avec sudo (toi) :
+Sur la Jetson, une fois, avec sudo (toi) — Ollama, puis la **mémoire unifiée** sans laquelle le GPU ne voit que la
+mémoire hors cache disque et le modèle tourne surtout sur le CPU (mesuré : 7/35 couches et 1,5 jeton/s sans, 35/35
+et 11,7 jetons/s avec, Gemma 3 4B en 15 W) :
+
+```bash
+curl -fsSL https://ollama.com/install.sh | sh
+sudo mkdir -p /etc/systemd/system/ollama.service.d
+printf '[Service]\nEnvironment="GGML_CUDA_ENABLE_UNIFIED_MEMORY=1"\n' | sudo tee /etc/systemd/system/ollama.service.d/jetson.conf
+sudo systemctl daemon-reload && sudo systemctl restart ollama
+```
+
+Puis :
 
 ```bash
 sudo apt install -y ffmpeg python3.10-venv && sudo loginctl enable-linger "$USER"

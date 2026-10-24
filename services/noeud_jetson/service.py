@@ -181,7 +181,9 @@ class Ollama:
             message["images"] = [base64.b64encode(image).decode()]
         r = self._appel("/api/chat", {"model": self.nom, "stream": False, "keep_alive": "10m",
                                       "messages": [{"role": "system", "content": SYSTEME}, message],
-                                      "options": {"num_predict": max_jetons, "num_ctx": 8192, "temperature": 0.2}}, 600)
+                                      # 4 096 : assez pour les tâches du noeud (≤ 24 000 caractères), et le
+                                      # cache KV tient avec le modèle dans la mémoire GPU partagée de la Jetson
+                                      "options": {"num_predict": max_jetons, "num_ctx": 4096, "temperature": 0.2}}, 600)
         self.charge = True
         texte = (r.get("message") or {}).get("content")
         if not isinstance(texte, str):
