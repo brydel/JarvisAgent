@@ -93,6 +93,8 @@ ${C_CYAN}Réglages${C_OFF}
   jarvis projet ajouter <nom> <chemin> [--linear X] [--priorite 1] [--description "…"]
   jarvis projet liste
   jarvis telegram config|test           Relier Jarvis à ton téléphone
+  jarvis noeud config <u@hote>|etat     Étendre Jarvis d'un noeud GPU (Jetson) : outils sous mandat
+  jarvis noeud demander "…" [--fichier F|--image I]  Petite tâche sur le modèle local du noeud
   jarvis regler <clé> <valeur>          ex. general.max_agents 3
   jarvis veille [fait <projet>]         Veille concurrentielle par projet
   jarvis init-project [dossier]         Ajoute AGENTS.md + CLAUDE.md (protocole Linear)
@@ -621,7 +623,7 @@ main() {
     start)        cmd_start "$@" ;;
     chef)         cmd_chef "$@" ;;
     task|t)       cmd_task "$@" ;;
-    os|cockpit|etat|plan|fil|projet|telegram|regler|capacite|demander|note|journal|daemon|voir|jetons|veille|\
+    os|cockpit|etat|plan|fil|projet|telegram|noeud|regler|capacite|demander|note|journal|daemon|voir|jetons|veille|\
     fermer|reprendre|sante|reparer-git|role|modele|tache|verdict|bilan|usine|studio|livrer|livrables|web|\
     admission|pause|profil|lourd|audit|diagnostic|politique|budget|fournisseurs|proposition|\
     budget-jetons|cout|memoire|secrets|eval|rejouer|traces|proxy|rollback|execution|skill|stockage|executant|\

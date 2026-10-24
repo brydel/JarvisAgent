@@ -165,6 +165,19 @@ DEFAULTS: dict = {
         # Dépôt GitHub (owner/nom) dont les issues « jarvis-proposition » sont importées (vide = désactivé).
         "github_depot": "",
     },
+    "noeud": {
+        # Noeud GPU (Jetson, services/noeud_jetson) joint en SSH par une clé à commande forcée. Il étend Jarvis
+        # d'outils GPU appelés par la passerelle sous mandat ; désactivé = l'audio du Board garde ses métadonnées.
+        # Branché par « jarvis noeud config utilisateur@hote » (cible, clé, connexion et mandat).
+        "actif": False,
+        "cible": "",
+        "cle": "",
+        "connexion": "jetson",
+        "mandat_board": "",
+        "commande": "/usr/bin/ssh",
+        "langue": "fr",
+        "delai_s": 900,
+    },
     "telegram": {
         "token": "",
         "chat_id": "",
@@ -215,7 +228,10 @@ _BORNES: dict[tuple[str, str], tuple[type, float, float]] = {
     ("budget_jetons", "estimation_l"): (int, 10_000, 100_000_000),
     ("budget_jetons", "verification_min"): (int, 1, 120),
     ("couts", "taux"): (float, 0, 1000),
+    ("noeud", "delai_s"): (int, 30, 3600),
 }
+# Langues acceptées par le noeud GPU (services/noeud_jetson, LANGUES).
+LANGUES_NOEUD = ("auto", "fr", "en", "es", "de", "it", "pt", "nl", "ar")
 
 
 def valider(s: dict | None = None) -> list[str]:
@@ -233,6 +249,8 @@ def valider(s: dict | None = None) -> list[str]:
             erreurs.append(f"{table}.{cle} = {v} hors bornes [{mini:g}, {maxi:g}]")
     if (s.get("plans") or {}).get("validation") not in ("humain", "auto"):
         erreurs.append("plans.validation doit valoir « humain » ou « auto »")
+    if (s.get("noeud") or {}).get("langue") not in LANGUES_NOEUD:
+        erreurs.append("noeud.langue doit valoir : " + ", ".join(LANGUES_NOEUD))
     import re as _re
     if not _re.fullmatch(r"([01]?\d|2[0-3]):[0-5]\d", str((s.get("bilan") or {}).get("heure", ""))):
         erreurs.append("bilan.heure doit être une heure HH:MM (ex. 08:00)")
