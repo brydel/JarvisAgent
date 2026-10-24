@@ -15,3 +15,11 @@ node_modules/
 reports/board-v2/playwright-sorties/
 reports/board-v2/playwright-resultats.json
 test-results/
+
+# Rapports privés et preuves réelles (exemples publics : docs/redteam/exemples/)
+/docs/redteam/preuves/
+/docs/redteam/prive/
+/work/redteam/
+/.private-lab/
+/gitleaks-report*.json
+/gitleaks-report*.sarif

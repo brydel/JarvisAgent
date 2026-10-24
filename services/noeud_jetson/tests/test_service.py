@@ -180,7 +180,7 @@ class McpTests(Base):
         self.assertEqual(rep[1]["result"]["protocolVersion"], "2025-03-26")
         self.assertEqual({t["name"] for t in rep[2]["result"]["tools"]},
                          {"audio_transcrire", "audio_resultat", "texte_generer", "image_decrire", "travail_resultat",
-                          "noeud_sante"})
+                          "noeud_sante", "redteam_auditer"})
         self.assertEqual(rep[3]["error"]["code"], -32601)
 
     def test_schemas_dans_le_sous_ensemble_de_la_passerelle(self):

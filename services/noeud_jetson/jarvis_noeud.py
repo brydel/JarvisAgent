@@ -37,6 +37,11 @@ _RESULTAT = {"type": "object", "additionalProperties": False, "required": ["trav
                             "attente_s": {"type": "integer", "minimum": 0, "maximum": 15}}}
 
 OUTILS = [
+    {"name": "redteam_auditer",
+     "description": "Audit statique Python dans le répertoire fixé par le propriétaire du noeud. Aucun test réseau.",
+     "inputSchema": {"type": "object", "additionalProperties": False, "required": ["mission_id", "deadline"],
+                     "properties": {"mission_id": {"type": "string", "minLength": 4, "maxLength": 67},
+                                    "deadline": {"type": "number"}}}},
     {"name": "audio_transcrire",
      "description": "Dépose un travail de transcription pour un fichier audio déjà envoyé au noeud (empreinte "
                     "SHA-256). Répond tout de suite avec l'identifiant du travail ; lire le texte avec audio_resultat.",
@@ -86,7 +91,11 @@ def reglages() -> dict:
             valeurs[cle.strip()] = val.strip()
     return {"jeton": valeurs.get("JARVIS_NOEUD_TOKEN", ""), "port": int(valeurs.get("JARVIS_NOEUD_PORT", "7741")),
             "entree": Path(valeurs.get("JARVIS_NOEUD_ENTREE") or Path.home() / ".cache/jarvis-noeud/entree"),
-            "taille_max": int(valeurs.get("JARVIS_NOEUD_MAX_MO", "150")) * MO}
+            "taille_max": int(valeurs.get("JARVIS_NOEUD_MAX_MO", "150")) * MO,
+            "redteam_image": valeurs.get("JARVIS_REDTEAM_IMAGE", ""),
+            "redteam_root": valeurs.get("JARVIS_REDTEAM_ROOT", ""),
+            "redteam_state": valeurs.get("JARVIS_REDTEAM_STATE", ""),
+            "redteam_semgrep": valeurs.get("JARVIS_REDTEAM_SEMGREP", "semgrep")}
 
 
 def _service(r: dict, methode: str, chemin: str, corps: dict | None = None, delai: float = 20) -> dict:
@@ -114,6 +123,16 @@ def _service(r: dict, methode: str, chemin: str, corps: dict | None = None, dela
 def appeler_outil(nom: str, args: dict, r: dict) -> dict:
     if not isinstance(args, dict):
         raise ErreurNoeud("arguments invalides")
+    if nom == "redteam_auditer":
+        from redteam_engine import Engine, Policy
+        if not r.get("redteam_root") or not r.get("redteam_state") or not r.get("redteam_image"):
+            raise ErreurNoeud("RedTeam désactivé : périmètre et image isolée propriétaire requis.")
+        policy = Policy(Path(r["redteam_root"]), Path(r["redteam_state"]), r.get("redteam_semgrep", "semgrep"), r.get("redteam_image", ""))
+        try:
+            return Engine(policy).run(args)
+        except Exception as exc:
+            # Une défaillance d'outil reste une erreur d'appel, sans faire tomber la session MCP.
+            raise ErreurNoeud(f"Audit refusé ou échoué ({type(exc).__name__}).") from None
     if nom == "audio_transcrire":
         sha, langue = args.get("fichier"), args.get("langue", "fr")
         if set(args) - {"fichier", "langue"} or not isinstance(sha, str) or not SHA.fullmatch(sha) or langue not in LANGUES:
@@ -194,7 +213,7 @@ def serveur_mcp(entree=sys.stdin, sortie=sys.stdout) -> int:
             try:
                 r = r or reglages()
                 _repondre(sortie, ident, resultat=_resultat(appeler_outil(params.get("name"), params.get("arguments", {}), r)))
-            except (ErreurNoeud, OSError, ValueError) as exc:
+            except (ErreurNoeud, OSError, ValueError, RuntimeError) as exc:
                 _repondre(sortie, ident, resultat=_resultat({"erreur": str(exc)[:300]}, erreur=True))
         else:
             _repondre(sortie, ident, erreur={"code": -32601, "message": "méthode inconnue"})
