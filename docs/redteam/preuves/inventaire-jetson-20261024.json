@@ -1,0 +1,62 @@
+{
+  "version": 1,
+  "date_utc": "2026-10-24T00:42:55.189330+00:00",
+  "modele": "NVIDIA Jetson Orin Nano Developer Kit",
+  "architecture": "aarch64",
+  "python": "3.10.12",
+  "l4t": "# R36 (release), REVISION: 4.7, GCID: 42132812, BOARD: generic, EABI: aarch64, DATE: Thu Sep 18 22:54:44 UTC 2025\n# KERNEL_VARIANT: oot\nTARGET_USERSPACE_LIB_DIR=nvidia\nTARGET_USERSPACE_LIB_DIR_PATH=usr/lib/aarch64-linux-gnu/nvidia",
+  "jetpack": {
+    "code": 0,
+    "sortie": "6.2.1+b38"
+  },
+  "cuda": {
+    "code": 0,
+    "sortie": "nvcc: NVIDIA (R) Cuda compiler driver\nCopyright (c) 2005-2024 NVIDIA Corporation\nBuilt on Wed_Aug_14_10:14:07_PDT_2024\nCuda compilation tools, release 12.6, V12.6.68\nBuild cuda_12.6.r12.6/compiler.34714021_0\n"
+  },
+  "memoire": {
+    "MemTotal_kio": 7802780,
+    "MemAvailable_kio": 3821836,
+    "SwapTotal_kio": 3901368,
+    "SwapFree_kio": 3751352
+  },
+  "disque": {
+    "total_octets": 249366470656,
+    "libre_octets": 189218099200
+  },
+  "docker": {
+    "code": 1,
+    "sortie": ""
+  },
+  "service_actif": {
+    "code": 0,
+    "sortie": "active\n"
+  },
+  "gpu_memoire_mesuree": false,
+  "aptitude_scan_distant": "bloquée : accès Docker indisponible",
+  "ollama_version": "0.40.10",
+  "modeles": [
+    {
+      "nom": "gemma3:4b",
+      "digest": "68ceab7e468a31c988b44d5a4984a0e21f58c4f7158c6ce29c1804babac38df7",
+      "octets": 3350272403,
+      "details": {
+        "parent_model": "dhiltgen/gemma3:4b-it-q4_K_M-llamacpp",
+        "format": "gguf",
+        "family": "gemma3",
+        "families": [
+          "gemma3",
+          "clip"
+        ],
+        "parameter_size": "3.9B",
+        "quantization_level": "Q4_K_M",
+        "runner": "llamacpp"
+      },
+      "capacites": [
+        "completion",
+        "vision"
+      ],
+      "licence_sha256": "dd084c7d92a3c1c14cc09ae77153b903fd2024b64a100a0cc8ec9316063d2dbc",
+      "licence_presente": true
+    }
+  ]
+}

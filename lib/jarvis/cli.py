@@ -2125,6 +2125,8 @@ def cmd_board(a) -> int:
 def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(prog="jarvis", description="Poste de pilotage des agents IA")
     sub = p.add_subparsers(dest="cmd", required=True)
+    from . import redteam
+    redteam.add_parser(sub)
 
     s = sub.add_parser("os", help="contrats, diagnostic de capacités et mandats personnels")
     s.add_argument("arguments", nargs=argparse.REMAINDER)

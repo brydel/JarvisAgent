@@ -46,6 +46,9 @@ chmod 700 "$CONF" "$HOME/.cache/jarvis-noeud" "$HOME/.cache/jarvis-noeud/entree"
 "$DIR/venv/bin/pip" install -q --disable-pip-version-check "openai-whisper==$WHISPER_VERSION"
 install -m 644 "$SOURCE/service.py" "$DIR/service.py"
 install -m 644 "$SOURCE/jarvis_noeud.py" "$DIR/jarvis_noeud.py"
+for module in redteam_engine redteam_models redteam_cli; do
+  install -m 644 "$SOURCE/$module.py" "$DIR/$module.py"
+done
 install -m 644 "$SOURCE/banc.py" "$DIR/banc.py"
 
 # Jeton du service local créé une seule fois, lisible par toi seul ; jamais affiché

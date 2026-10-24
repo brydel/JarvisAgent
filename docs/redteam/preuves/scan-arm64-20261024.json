@@ -1,0 +1,106 @@
+{
+  "version": 1,
+  "architecture": "aarch64",
+  "positif": {
+    "mission_id": "RT-arm64-1792805473402191592",
+    "steps": [
+      "PLAN",
+      "EXECUTE",
+      "OBSERVE",
+      "VERIFY",
+      "REFLECT",
+      "DELEGATE",
+      "REPORT"
+    ],
+    "verification": {
+      "tool_completed": true,
+      "lab_reproduced": false,
+      "impact_confirmed": false
+    },
+    "audit": {
+      "tool": "semgrep",
+      "version": "1.141.1",
+      "duration_s": 5.612566695999703,
+      "rule_sha256": "c29b02cbef160a1d2c270f574c52b0a0ed574cb049e1e091ecd6c71dee8dca8d",
+      "findings": [
+        {
+          "rule": "jarvis-python-shell",
+          "path": "vulnerable.py",
+          "line": 6,
+          "status": "tool_result",
+          "impact": "non confirme",
+          "reproduced": false,
+          "recommendation": "Passer une liste d'arguments avec shell=False ; vérifier les entrées."
+        }
+      ],
+      "sandbox": {
+        "mode": "docker",
+        "network_isolated": true,
+        "image_id": "sha256:e812d30543dda62a6d786462444d01c0abc05611d8d9211d657da23b4c397b0d",
+        "memory_mb": 768,
+        "cpus": 1,
+        "pids": 128
+      },
+      "coverage": "Python : subprocess avec shell=True uniquement",
+      "network_targets": []
+    },
+    "manifest": [
+      {
+        "path": "fixed.py",
+        "sha256": "6b633f10384e1c6f7f8b0d28888ada6fc1951c5cedf9ce296b0e0d360643b380",
+        "bytes": 188
+      },
+      {
+        "path": "vulnerable.py",
+        "sha256": "b28a6c1ef2b15a8c66e7100e33b584b6f252b1cdea972179ce2e61f4da53200c",
+        "bytes": 195
+      }
+    ],
+    "evidence_sha256": "9de837560acee70908fafe11b563c3b7550c978f0e33cd99f84bbb3d67429ad4"
+  },
+  "corrige": {
+    "mission_id": "RT-arm64-1792805473402191592-fixed",
+    "steps": [
+      "PLAN",
+      "EXECUTE",
+      "OBSERVE",
+      "VERIFY",
+      "REFLECT",
+      "DELEGATE",
+      "REPORT"
+    ],
+    "verification": {
+      "tool_completed": true,
+      "lab_reproduced": false,
+      "impact_confirmed": false
+    },
+    "audit": {
+      "tool": "semgrep",
+      "version": "1.141.1",
+      "duration_s": 4.9825825879997865,
+      "rule_sha256": "c29b02cbef160a1d2c270f574c52b0a0ed574cb049e1e091ecd6c71dee8dca8d",
+      "findings": [],
+      "sandbox": {
+        "mode": "docker",
+        "network_isolated": true,
+        "image_id": "sha256:e812d30543dda62a6d786462444d01c0abc05611d8d9211d657da23b4c397b0d",
+        "memory_mb": 768,
+        "cpus": 1,
+        "pids": 128
+      },
+      "coverage": "Python : subprocess avec shell=True uniquement",
+      "network_targets": []
+    },
+    "manifest": [
+      {
+        "path": "fixed.py",
+        "sha256": "6b633f10384e1c6f7f8b0d28888ada6fc1951c5cedf9ce296b0e0d360643b380",
+        "bytes": 188
+      }
+    ],
+    "evidence_sha256": "75cd7a048af60e2aac35c477dc6490b886fdfff17092b7529c21e278480ce5db"
+  },
+  "rejeu_autre_processus_identique": true,
+  "rejeu_duree_s": 0.18360761499934597,
+  "conteneurs_residuels": false
+}
