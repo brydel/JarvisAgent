@@ -50,9 +50,12 @@ class Ollama:
         if len(raw) > 200000:
             raise ValueError("Réponse modèle trop volumineuse.")
         data = json.loads(raw)
+        if data.get("done") is False or data.get("done_reason") == "length":
+            raise ValueError("Réponse modèle incomplète : budget de sortie épuisé ou génération interrompue.")
         result = json.loads(data["message"]["content"])
         if (not isinstance(result, dict) or set(result) != {"hypotheses"} or not isinstance(result["hypotheses"], list)
                 or len(result["hypotheses"]) > 20 or not all(isinstance(x, str) and len(x) <= 2000 for x in result["hypotheses"])):
             raise ValueError("Sortie structurée du modèle invalide.")
         return {"status": "hypothesis", "model": self.model, "result": result,
-                "metrics": {k: data.get(k) for k in ("total_duration", "load_duration", "prompt_eval_count", "eval_count")}}
+                "metrics": {k: data.get(k) for k in ("total_duration", "load_duration", "prompt_eval_count", "eval_count",
+                                                    "prompt_eval_duration", "eval_duration", "done_reason")}}

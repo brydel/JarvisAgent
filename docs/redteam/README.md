@@ -52,7 +52,8 @@ Pour un diagnostic SAST en processus hôte, installer `requirements-redteam.txt`
 
 La [reprise locale du 23 octobre 2026](VALIDATION_WSL.md) a vérifié les accès SSH et le matériel réel :
 Orin Nano 8 Go, JetPack 6.2.1, CUDA 12.6. Le compte SSH n'a pas accès au daemon Docker ; le scan distant
-et l'image ARM64 restent à tester. L'inférence Gemma essayée a échoué ; ne pas extrapoler la réussite x86_64.
+et l'image ARM64 restent à tester. Après un premier échec mémoire, une inférence Gemma complète a réussi
+avec une sortie bornée à 256 jetons ; cela ne valide pas le scan distant ni le partage de mémoire avec Whisper.
 
 Pour refaire l'inventaire sans modifier le nœud, depuis un **accès administratif configuré** (la clé Jarvis
 à commande forcée ne permet pas cette commande) :
@@ -67,8 +68,39 @@ La sortie `aptitude_scan_distant` ne certifie jamais un déploiement opérationn
 
 **Préserver le service installé.** Sur la Jetson reconnue, le point d'entrée MCP possède déjà les outils texte/image
 d'une version plus récente. L'installateur de cette branche le remplacerait par sa version audio/RedTeam.
-Ne pas relancer cet installateur sur ce service : préparer une extension ciblée, sauvegardée et testée
-qui conserve tous ses outils. Aucun module de `feat/jetson-extension` n'a été importé dans cette branche.
+Ne pas relancer cet installateur sur ce service : utiliser l'installation ciblée ci-dessous.
+Aucun module de `feat/jetson-extension` n'a été importé dans cette branche.
+
+### Extension ciblée d'un service existant
+
+`installer_redteam.py` ajoute les modules et le point d'entrée `jarvis_redteam.py`, qui délègue les commandes
+et outils existants au module installé. Il conserve `jarvis_noeud.py`, `service.py` et la configuration audio,
+sans pip, sudo ni redémarrage. Sa politique est dans un fichier séparé `~/.config/jarvis-noeud/redteam.env`.
+
+Préparer une copie de ce dossier sur la Jetson ainsi que la **clé publique** dédiée de Jarvis. Le compte doit
+déjà avoir accès à Docker et l'image doit avoir été construite localement sur ARM64. Depuis cette copie :
+
+```bash
+docker build --secret id=proxy_ca,src=/etc/ssl/certs/ca-certificates.crt \
+  -f Dockerfile.redteam -t jarvis-redteam-semgrep:1.141.1 .
+python3 installer_redteam.py \
+  --racine "$PWD/labs/python-shell" \
+  --etat "$HOME/.local/state/jarvis-redteam" \
+  --image jarvis-redteam-semgrep:1.141.1 \
+  --cle-jarvis /chemin/vers/jarvis_noeud.pub
+```
+
+Sans `--cle-jarvis`, l'installation prépare seulement les fichiers. Avec cette option, elle raccorde l'unique
+clé existante dont la commande forcée correspond à `jarvis_noeud.py ssh` ; `restrict`, les autres clés et
+les trois commandes acceptées restent conservés. Une configuration SSH personnalisée ou ambiguë est refusée.
+Chaque fichier modifié est sauvegardé dans un répertoire voisin `NOM.avant-redteam-*`, privé ; un rejeu identique
+ne le réécrit pas. Pour revenir à l'ancien point d'entrée, restaurer la sauvegarde d'`authorized_keys` après
+comparaison avec les éventuelles modifications intervenues depuis ; les modules ajoutés peuvent rester inactifs.
+
+Cette voie a été testée contre le vrai module installé **en mémoire**, avec sa santé réelle ; son activation
+et le scan ARM64 attendent encore l'accès Docker. Voir les [preuves de préparation](VALIDATION_WSL.md#suite-de-la-reprise--extension-préparée-et-inférence-réussie).
+
+### Branchement et mandat
 
 1. Reprendre le branchement SSH à commande forcée décrit dans `services/noeud_jetson/README.md`. Pour une
    installation neuve, l'installateur copie aussi les modules RedTeam. Pour un service existant, comparer
@@ -83,6 +115,7 @@ qui conserve tous ses outils. Aucun module de `feat/jetson-extension` n'a été 
    JARVIS_REDTEAM_IMAGE=jarvis-redteam-semgrep:1.141.1
    ```
 
+   Avec l'extension ciblée, employer `redteam.env` au lieu d'`env` ; l'installateur ciblé renseigne ces trois valeurs.
    Le compte du noeud doit pouvoir lire la cible et écrire son état. L'état doit rester hors de la cible.
    Sans ces trois réglages, l'outil distant refuse de lancer un audit. Le fichier est relu à chaque session MCP.
 4. Sur le poste Jarvis, depuis le terminal du propriétaire :

@@ -1,5 +1,8 @@
 # Audit, décisions et prochaines étapes
 
+Ce document conserve les décisions et limites de la livraison cloud. Les observations de la vraie Jetson,
+l'extension préparée et la première inférence Gemma réussie sont dans la [validation WSL](VALIDATION_WSL.md).
+
 ## Reconnaissance
 
 Le checkout initial était `work` à `b4cc7f7` (main). Les branches distantes ont été récupérées, notamment
