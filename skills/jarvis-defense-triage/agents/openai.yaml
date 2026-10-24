@@ -1,0 +1,4 @@
+interface:
+  display_name: "Triage défensif Jarvis"
+  short_description: "Qualifier les journaux fournis sans action"
+  default_prompt: "Utiliser $jarvis-defense-triage pour analyser cet exemple synthétique."

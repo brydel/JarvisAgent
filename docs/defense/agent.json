@@ -1,0 +1,12 @@
+{
+  "version": 1,
+  "id": "AG-defense",
+  "role": "defense-observation",
+  "profile": "outille",
+  "provider": "auto",
+  "model": "",
+  "tools": ["security.auth_triage"],
+  "required_capabilities": ["security.auth_triage"],
+  "budget": {"max_tokens": 0, "max_cost_cents": 0, "max_duration_s": 30},
+  "delegation": {"max_depth": 0, "max_children": 0}
+}
