@@ -2127,6 +2127,8 @@ def build_parser() -> argparse.ArgumentParser:
     sub = p.add_subparsers(dest="cmd", required=True)
     from . import redteam
     redteam.add_parser(sub)
+    from . import defense
+    defense.add_parser(sub)
 
     s = sub.add_parser("os", help="contrats, diagnostic de capacités et mandats personnels")
     s.add_argument("arguments", nargs=argparse.REMAINDER)
