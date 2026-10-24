@@ -1,6 +1,6 @@
 # Noeud GPU (Jetson) : une extension de Jarvis
 
-La Jetson **étend** Jarvis d'outils GPU ; elle ne le duplique pas. Elle n'a ni base, ni Board, ni chef, ni agent,
+La Jetson **étend** Jarvis d'outils GPU ; elle ne le duplique pas. Elle n'héberge ni plan de contrôle Jarvis, ni Board, ni chef, ni agent,
 ni secret de Jarvis, et ne prend aucune initiative. Jarvis (sur le poste principal) reste le seul plan de contrôle :
 missions, mandats, budgets, journal et Board. Éteindre, réinstaller ou remplacer la Jetson retire des capacités,
 jamais des données.
@@ -78,3 +78,11 @@ python3 -m unittest discover -s tests -p 'test_noeud.py' -v
 ```
 
 Moteur factice et faux `ssh` qui lance le vrai point d'entrée : ni modèle, ni GPU, ni réseau.
+
+## Extension RedTeam
+
+Le moteur d’audit autorisé est optionnel et possède un mandat distinct de l’audio.
+Voir [installation, périmètre et limites](../../docs/redteam/README.md).
+Ses checkpoints SQLite et preuves sont locaux au moteur ; ils ne remplacent pas les données du poste Jarvis.
+Le [parcours SSH/MCP ARM64 réel](../../docs/redteam/VALIDATION_JETSON.md) est validé sur les fixtures synthétiques,
+avec une extension qui préserve le module audio/texte/image installé.

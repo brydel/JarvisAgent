@@ -1,0 +1,45 @@
+{
+  "version": 1,
+  "fin_utc": "2026-10-24T00:52:16.258367+00:00",
+  "adaptateur_sha256": "694107184462fa8c893a37743e0ec9620df672236f8737cab877be3ceb83a76e",
+  "model_digest": "68ceab7e468a31c988b44d5a4984a0e21f58c4f7158c6ce29c1804babac38df7",
+  "parametres": {
+    "num_ctx": 4096,
+    "num_predict": 256,
+    "temperature": 0.1,
+    "top_p": 0.9,
+    "top_k": 40,
+    "keep_alive": 0
+  },
+  "entree": {
+    "code": "subprocess.run(user_input, shell=True)",
+    "scope": "fixture synthétique, hypothèses seulement"
+  },
+  "mesure": {
+    "elapsed_s": 26.247242322000602,
+    "result": {
+      "status": "hypothesis",
+      "model": "gemma3:4b",
+      "result": {
+        "hypotheses": [
+          "L'utilisation de `subprocess.run(user_input, shell=True)` introduit un risque de vulnérabilité à l'injection de commandes.  L'entrée utilisateur, `user_input`, est directement exécutée comme une commande shell, ce qui permet à un attaquant d'injecter des commandes malveillantes.",
+          "Le paramètre `shell=True` est particulièrement dangereux car il active l'interprétation de la commande par le shell système. Cela signifie que des constructions comme les guillemets, les caractères spéciaux et les redirections peuvent être exploitées.",
+          "Sans validation et échappement appropriés de `user_input`, l'entrée peut être utilisée pour exécuter des commandes arbitraires sur le système, compromettant potentiellement la sécurité de l'application et de l'hôte.",
+          "Cette approche est susceptible de contourner les mécanismes de sécurité conçus pour empêcher l'exécution de commandes non autorisées."
+        ]
+      },
+      "metrics": {
+        "total_duration": 26244305919,
+        "load_duration": 7245348205,
+        "prompt_eval_count": 70,
+        "eval_count": 219,
+        "prompt_eval_duration": 379180000,
+        "eval_duration": 18609798000,
+        "done_reason": "stop"
+      }
+    }
+  },
+  "memoire_gpu_mesuree": false,
+  "revue_semantique": "non effectuée",
+  "impact_confirme": false
+}
