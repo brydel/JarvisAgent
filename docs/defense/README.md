@@ -89,3 +89,6 @@ Valider les formats réels et faux positifs sur un lot privé, puis les ressourc
 la visibilité du rapport. Examiner séparément toute installation persistante,
 automatisation, connexion Jetson, intégration modèle ou remédiation. Rien de cela
 n'est activé ici. Ne jamais publier inventaire, versions installées ou preuves du Lab.
+
+Préparer une reprise locale avec le [guide WSL](REPRISE_WSL.md), sans remplacer
+le checkout installé ni promettre l’absence de conflits sur un poste non inspecté.
