@@ -1,5 +1,8 @@
 # Reprise locale — 23 octobre 2026
 
+**État suivant :** l'accès Docker a été accordé, l'extension activée et le [parcours Jetson complet validé](VALIDATION_JETSON.md).
+Les blocages ci-dessous décrivent les étapes antérieures de la reprise.
+
 Ces mesures proviennent du poste Ubuntu/WSL et de la vraie Jetson, après la livraison cloud.
 L'inventaire JSON est horodaté le 24 octobre en UTC (soirée du 23 à Toronto).
 

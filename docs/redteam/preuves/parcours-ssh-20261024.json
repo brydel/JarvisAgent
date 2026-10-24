@@ -1,0 +1,84 @@
+{
+  "version": 1,
+  "transport": "ssh/mcp_stdio",
+  "node": "jetson-redteam-lab",
+  "project": "redteam-lab",
+  "mission_id": "RT-jetson-ssh-1792805641160872880",
+  "status": "reported",
+  "durees_cli_s": [
+    5.821105447001173,
+    0.08721304299979238
+  ],
+  "audit": {
+    "tool": "semgrep",
+    "version": "1.141.1",
+    "duration_s": 5.036505809001028,
+    "rule_sha256": "c29b02cbef160a1d2c270f574c52b0a0ed574cb049e1e091ecd6c71dee8dca8d",
+    "findings": [
+      {
+        "rule": "jarvis-python-shell",
+        "path": "vulnerable.py",
+        "line": 6,
+        "status": "tool_result",
+        "impact": "non confirme",
+        "reproduced": false,
+        "recommendation": "Passer une liste d'arguments avec shell=False ; vérifier les entrées."
+      }
+    ],
+    "sandbox": {
+      "mode": "docker",
+      "network_isolated": true,
+      "image_id": "sha256:e812d30543dda62a6d786462444d01c0abc05611d8d9211d657da23b4c397b0d",
+      "memory_mb": 768,
+      "cpus": 1,
+      "pids": 128
+    },
+    "coverage": "Python : subprocess avec shell=True uniquement",
+    "network_targets": []
+  },
+  "manifest": [
+    {
+      "path": "fixed.py",
+      "sha256": "6b633f10384e1c6f7f8b0d28888ada6fc1951c5cedf9ce296b0e0d360643b380",
+      "bytes": 188
+    },
+    {
+      "path": "vulnerable.py",
+      "sha256": "b28a6c1ef2b15a8c66e7100e33b584b6f252b1cdea972179ce2e61f4da53200c",
+      "bytes": 195
+    }
+  ],
+  "evidence_sha256": "624bbea612a2865cdc5398605039fa9e18af20f16a0750f9b4473bccddf51540",
+  "steps": [
+    "PLAN",
+    "EXECUTE",
+    "OBSERVE",
+    "VERIFY",
+    "REFLECT",
+    "DELEGATE",
+    "REPORT"
+  ],
+  "verification": {
+    "tool_completed": true,
+    "lab_reproduced": false,
+    "impact_confirmed": false
+  },
+  "delivery": "published",
+  "review_thread": "CM-0b09d342060ff76064c1b131",
+  "review_status": "pending",
+  "operation_status": "succeeded",
+  "rejeu_identique": true,
+  "actions_mandat_consommees": 1,
+  "mandat_audio_refuse_sans_effet": true,
+  "mandat": {
+    "tools": [
+      "mcp.jetson-redteam-lab.redteam_auditer"
+    ],
+    "destinations": [
+      "mcp:jetson-redteam-lab"
+    ],
+    "expires_at": 1792809206.3857925,
+    "max_actions": 10,
+    "max_cost_cents": 0
+  }
+}

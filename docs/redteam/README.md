@@ -7,7 +7,8 @@ CLI/MCP ; il ne remplace ni le chef, ni l'audio Jetson, ni le Board. Bibliothèq
 
 `jarvis redteam local` → collecte Python bornée → Semgrep réel → preuves → rapport → demande de revue dans
 la communauté Jarvis. Le chemin passerelle d'outils → mandat → MCP stdio → moteur Docker → rapport → communauté
-est également testé localement. Le transport de ce test est un processus local, pas un SSH vers une Jetson.
+est également testé localement. Le premier test utilisait un processus local ; le [parcours SSH/MCP réel
+sur la Jetson ARM64](VALIDATION_JETSON.md) est désormais validé avec les fixtures synthétiques et un mandat de laboratoire.
 
 Une seule règle est livrée : appels `subprocess` avec `shell=True` (CWE-78, piste OWASP A03). Le résultat est un
 **constat d'outil**, pas une injection exploitable confirmée. Les états `lab_reproduced` et `impact_confirmed`
@@ -51,8 +52,9 @@ Pour un diagnostic SAST en processus hôte, installer `requirements-redteam.txt`
 ## Branchement sur une Jetson existante
 
 La [reprise locale du 23 octobre 2026](VALIDATION_WSL.md) a vérifié les accès SSH et le matériel réel :
-Orin Nano 8 Go, JetPack 6.2.1, CUDA 12.6. Le compte SSH n'a pas accès au daemon Docker ; le scan distant
-et l'image ARM64 restent à tester. Après un premier échec mémoire, une inférence Gemma complète a réussi
+Orin Nano 8 Go, JetPack 6.2.1, CUDA 12.6. Le propriétaire a ensuite accordé l'accès Docker : l'image ARM64,
+l'extension et le parcours SAST distant sont [validés en laboratoire](VALIDATION_JETSON.md).
+Après un premier échec mémoire, une inférence Gemma complète a réussi
 avec une sortie bornée à 256 jetons ; cela ne valide pas le scan distant ni le partage de mémoire avec Whisper.
 
 Pour refaire l'inventaire sans modifier le nœud, depuis un **accès administratif configuré** (la clé Jarvis
@@ -97,8 +99,9 @@ Chaque fichier modifié est sauvegardé dans un répertoire voisin `NOM.avant-re
 ne le réécrit pas. Pour revenir à l'ancien point d'entrée, restaurer la sauvegarde d'`authorized_keys` après
 comparaison avec les éventuelles modifications intervenues depuis ; les modules ajoutés peuvent rester inactifs.
 
-Cette voie a été testée contre le vrai module installé **en mémoire**, avec sa santé réelle ; son activation
-et le scan ARM64 attendent encore l'accès Docker. Voir les [preuves de préparation](VALIDATION_WSL.md#suite-de-la-reprise--extension-préparée-et-inférence-réussie).
+Cette voie est activée sur la Jetson : les fichiers d'origine et les six outils sont conservés, la santé
+répond et le scan ARM64 passe. Voir les [preuves de déploiement](VALIDATION_JETSON.md).
+Le nouveau mandat a été créé par le propriétaire dans un état Jarvis de laboratoire distinct.
 
 ### Branchement et mandat
 

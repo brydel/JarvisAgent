@@ -2,6 +2,8 @@
 
 Ce document conserve les décisions et limites de la livraison cloud. Les observations de la vraie Jetson,
 l'extension préparée et la première inférence Gemma réussie sont dans la [validation WSL](VALIDATION_WSL.md).
+Le [parcours Jetson réel](VALIDATION_JETSON.md) complète ces observations : image ARM64, activation ciblée,
+mandat propriétaire et retour du rapport par SSH/MCP validés sur le laboratoire synthétique.
 
 ## Reconnaissance
 
@@ -80,8 +82,9 @@ même budget ; conserver le modèle de base si l'adaptation dégrade un critère
 
 ## Backlog priorisé
 
-- **P0 — matériel réel** : accès SSH configuré, modèle Jetson/RAM/L4T/JetPack/GPU/CUDA mesurés, Docker ARM64 et
-  Semgrep compatibles, temps de scan sous limite MCP, Ollama réel, intégration des créneaux GPU avec Whisper.
+- **P0 — matériel réel** : accès SSH, Orin Nano 8 Go/L4T/JetPack/CUDA, Docker/Semgrep ARM64 et scan sous limite
+  MCP désormais vérifiés en laboratoire ; une inférence Gemma réelle a réussi. Restent les mesures de mémoire
+  GPU, la répétabilité sous charge et l'intégration des créneaux GPU avec Whisper.
 - **P0 — service permanent** : battement authentifié et capacités mesurées, admission/baux distribués, quotas de
   missions/rapports et de stockage, purge des temporaires après kill brutal, archivage/chiffrement des preuves.
   Ajouter annulation et nettoyage après mort du parent/processus hôte : `finally` ne survit pas à SIGKILL.

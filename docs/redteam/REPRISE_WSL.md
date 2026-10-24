@@ -1,6 +1,7 @@
 # Reprise de Jarvis RedTeam Node sous Ubuntu WSL
 
 **Reprise locale effectuée :** voir [mesures, validations et blocages](VALIDATION_WSL.md).
+Le [déploiement et le parcours SSH/MCP ARM64](VALIDATION_JETSON.md) sont maintenant validés sur le laboratoire synthétique.
 Le document ci-dessous conserve le contexte de transfert cloud ; les observations locales le complètent.
 
 Ce fichier transmet le contexte d'une session Codex cloud à une nouvelle session locale. La branche de transfert
