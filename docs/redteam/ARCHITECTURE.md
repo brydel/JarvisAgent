@@ -1,25 +1,6 @@
-# Audit, décisions et prochaines étapes
+# Architecture et limites
 
-Ce document conserve les décisions et limites de la livraison cloud. Les observations de la vraie Jetson,
-l'extension préparée et la première inférence Gemma réussie sont dans la [validation WSL](VALIDATION_WSL.md).
-Le [parcours Jetson réel](VALIDATION_JETSON.md) complète ces observations : image ARM64, activation ciblée,
-mandat propriétaire et retour du rapport par SSH/MCP validés sur le laboratoire synthétique.
-
-## Reconnaissance
-
-Le checkout initial était `work` à `b4cc7f7` (main). Les branches distantes ont été récupérées, notamment
-`feat/jarvis-board-v2` (`81a875a`), `feat/jetson-extension` (`ef6afd1`) et la base explicitement demandée
-`feat/board-dessin` (`5fd52b8`). Les premiers ajouts isolés ont été reportés sur cette dernière. Aucun code
-multimodal de l'autre branche n'a été importé. Aucune modification du rôle `chef/CLAUDE.md`, des assets ou du design.
-
-Inventaire du dépôt, historique, services et tests examinés ; analyse ciblée de l'orchestration `missions`,
-`coureur`, `agent_runtime`, des exécutants, contrats, mandats, connexions, passerelle, transport MCP, communauté,
-mémoire, stockage et service Jetson. Les assets générés du frontend n'ont pas été relus intégralement.
-
-`executants.py` est un registre avec expiration, pas un ordonnanceur distribué. Le transport distant existant
-est `noeud.commande_ssh` : clé dédiée, hôte connu, commande forcée sans shell, MCP sous mandat. Le noeud de cette
-branche sert l'audio Whisper ; la version Ollama multimodale appartient à une autre branche. L'absence d'accès SSH
-configuré a empêché toute reconnaissance matérielle réelle ; aucune adresse personnelle ou clé n'a été supposée.
+Les protocoles publics ne constituent pas des preuves de déploiement. Les observations réelles restent privées.
 
 ## Décisions
 
@@ -82,9 +63,7 @@ même budget ; conserver le modèle de base si l'adaptation dégrade un critère
 
 ## Backlog priorisé
 
-- **P0 — matériel réel** : accès SSH, Orin Nano 8 Go/L4T/JetPack/CUDA, Docker/Semgrep ARM64 et scan sous limite
-  MCP désormais vérifiés en laboratoire ; une inférence Gemma réelle a réussi. Restent les mesures de mémoire
-  GPU, la répétabilité sous charge et l'intégration des créneaux GPU avec Whisper.
+- **P0 — validation matérielle** : mesurer la compatibilité, les ressources et le parcours distant dans un rapport privé ; ne pas déduire la disponibilité du matériel de la documentation publique.
 - **P0 — service permanent** : battement authentifié et capacités mesurées, admission/baux distribués, quotas de
   missions/rapports et de stockage, purge des temporaires après kill brutal, archivage/chiffrement des preuves.
   Ajouter annulation et nettoyage après mort du parent/processus hôte : `finally` ne survit pas à SIGKILL.

@@ -1,0 +1,7 @@
+# Configuration proposée uniquement : aucun hook installé.
+repos:
+  - repo: https://github.com/gitleaks/gitleaks
+    rev: v8.24.3
+    hooks:
+      - id: gitleaks
+        args: [--redact=100, --config=.gitleaks.toml]
