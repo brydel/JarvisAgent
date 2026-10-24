@@ -30,12 +30,20 @@ class NoeudVisibleTest(unittest.TestCase):
              mock.patch.object(noeud, "sante", return_value=SANTE) as sante:
             joignable, texte = noeud.texte_etat()
             self.assertTrue(joignable)
-            self.assertIn("modèle small, libre", texte)
+            self.assertIn("audio small, libre", texte)
             self.assertIn("5482/7619 Mo", texte)
             noeud.texte_etat()
             self.assertEqual(sante.call_count, 1, "/etat ne relance pas SSH à chaque affichage")
             noeud.texte_etat(cache_s=0)
             self.assertEqual(sante.call_count, 2, "la commande explicite mesure toujours")
+
+    def test_modele_texte_distinct_du_modele_audio(self):
+        sante = {**SANTE, "modeles": {"audio": "small", "moteur_audio": "whisper", "llm": "qwen3.5:4b",
+                                      "contexte": 8192, "charge": None}}
+        with mock.patch.object(noeud, "reglages", return_value=ACTIF), \
+             mock.patch.object(noeud, "sante", return_value=sante):
+            _, texte = noeud.texte_etat(cache_s=0)
+        self.assertIn("audio whisper:small · texte/image qwen3.5:4b (contexte 8192), libre", texte)
 
     def test_injoignable(self):
         with mock.patch.object(noeud, "reglages", return_value=ACTIF), \

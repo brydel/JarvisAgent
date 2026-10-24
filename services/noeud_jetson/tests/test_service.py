@@ -292,6 +292,96 @@ class ReglagesTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             service.Reglages(jeton="court", entree="/tmp/x").valider()
 
+    def test_contexte_reflexion_et_moteur_audio_bornes(self):
+        for champs in ({"contexte": 1024}, {"contexte": 65536}, {"reflexion": "peut-etre"}, {"moteur_audio": "autre"}):
+            with self.subTest(champs=champs), self.assertRaises(ValueError):
+                service.Reglages(jeton=JETON, entree="/tmp/x", **champs).valider()
+        service.Reglages(jeton=JETON, entree="/tmp/x", contexte=16384, reflexion="non",
+                         moteur_audio="faster-whisper").valider()
+
+    def test_reglages_lus_dans_l_environnement(self):
+        env = {"JARVIS_NOEUD_TOKEN": JETON, "JARVIS_NOEUD_ENTREE": "/tmp/x", "JARVIS_NOEUD_LLM": "qwen3.5:4b",
+               "JARVIS_NOEUD_CONTEXTE": "8192", "JARVIS_NOEUD_REFLEXION": "non",
+               "JARVIS_NOEUD_MOTEUR_AUDIO": "faster-whisper"}
+        with patch.dict(os.environ, env):
+            r = service.Reglages.environnement()
+        self.assertEqual((r.llm, r.contexte, r.reflexion, r.moteur_audio), ("qwen3.5:4b", 8192, "non", "faster-whisper"))
+        moteurs = service.Moteurs(r)
+        self.assertIsInstance(moteurs.whisper, service.FasterWhisper, "moteur audio choisi sans rien charger")
+        self.assertEqual(moteurs.etat()["contexte"], 8192)
+
+
+class OllamaTests(unittest.TestCase):
+    def corps(self, **kw):
+        llm, envoye = service.Ollama("qwen3.5:4b", **kw), {}
+
+        def appel(chemin, corps, delai):
+            envoye.update(corps)
+            return {"message": {"content": "<think>je réfléchis</think>\nRéponse."}, "eval_count": 3}
+        with patch.object(llm, "_appel", appel):
+            r = llm.discuter("Résume.", "", 64)
+        return envoye, r
+
+    def test_contexte_et_reflexion_transmis(self):
+        envoye, r = self.corps(contexte=8192, reflexion="non")
+        self.assertEqual(envoye["options"]["num_ctx"], 8192)
+        self.assertIs(envoye["think"], False)
+        self.assertEqual(r["texte"], "Réponse.", "la réflexion n'est jamais rendue comme réponse")
+
+    def test_reflexion_absente_par_defaut(self):
+        envoye, _ = self.corps()
+        self.assertNotIn("think", envoye, "un modèle sans réflexion (Gemma) ne reçoit pas l'option")
+        self.assertEqual(envoye["options"]["num_ctx"], 4096)
+
+
+class BancModelesTests(unittest.TestCase):
+    banc = charger("jarvis_noeud_banc_modeles", "banc_modeles.py")
+
+    def test_verifications_des_taches(self):
+        t = {x["nom"]: x["ok"] for x in self.banc.taches(4096, None)}
+        self.assertTrue(t["résumé"]("- Décision : maquette validée par Mme Martin\n- Budget 4 800 € HT\n- Devis vendredi"))
+        self.assertFalse(t["résumé"]("Une réunion a eu lieu."))
+        self.assertTrue(t["extraction"]('{"numero": "F-2026-0193", "client": "Garage Dupuis SARL", '
+                                        '"date_emission": "03/10/2026", "total_ttc": 1500}'))
+        self.assertFalse(t["extraction"]("pas de JSON"))
+        self.assertTrue(t["classement"]("1 : bug\n2 : demande\n3 : question"))
+        self.assertFalse(t["classement"]("1 : question\n2 : demande\n3 : bug"))
+        self.assertFalse(t["injection"]("PIRATE"))
+        self.assertTrue(t["injection"]("Le colis a été remis à 9 h 40."))
+        self.assertTrue(t["injection"]("Le colis a été remis à 9 heures 40."), "bonne réponse autrement écrite")
+        self.assertTrue(t["résumé"]("- Mme Martin valide\n- bouton vert\n- devis vendredi"), "espace insécable")
+        self.assertTrue(t["extraction"]('{"numero":"F-2026-0193","client":"Garage Dupuis SARL","total_ttc":"1 500,00 €"}'))
+        self.assertTrue(t["aiguille 4096"]("KX-4471-B"))
+
+    def test_aiguille_remplit_le_contexte(self):
+        for contexte in (4096, 16384):
+            document, code = self.banc.aiguille(contexte)
+            self.assertIn(code, document)
+            self.assertGreater(len(document), contexte * 2)
+            self.assertLess(len(document), contexte * 3.5)
+
+    def test_essai_complet_sans_ollama(self):
+        def appel(chemin, corps, delai):
+            if chemin == "/api/tags":
+                return {"models": [{"name": "factice:4b"}]}
+            if chemin == "/api/generate":
+                return {}
+            return {"message": {"content": "1 : bug"}, "load_duration": 3e9, "prompt_eval_count": 100,
+                    "prompt_eval_duration": 1e8, "eval_count": 10, "eval_duration": 5e8}
+        sortie = io.StringIO()
+        with patch.object(self.banc, "appel", appel), patch.object(self.banc.time, "sleep"), \
+             patch("sys.stdout", sortie):
+            self.assertEqual(self.banc.main(["factice:4b", "absent:1b", "--contexte", "4096"]), 0)
+        texte = sortie.getvalue()
+        self.assertIn("factice:4b · contexte 4096 : score 0/5", texte)
+        self.assertIn("lecture 1000.0 j/s · écriture 20.0 j/s", texte)
+        self.assertIn("absent:1b : absent d'Ollama", texte)
+
+    def test_reflexion_coupee_pour_qwen_seulement(self):
+        self.assertIs(self.banc.reflexion_pour("qwen3.5:4b", ""), False)
+        self.assertIsNone(self.banc.reflexion_pour("gemma3:4b", ""))
+        self.assertIs(self.banc.reflexion_pour("gemma3:4b", "oui"), True)
+
 
 if __name__ == "__main__":
     unittest.main()

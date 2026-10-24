@@ -79,18 +79,55 @@ ajoute la clé avec sa commande forcée (copie de l'ancien `authorized_keys` à 
 `jarvis noeud config …` : connexion enregistrée, outils découverts et autorisés, mandat créé.
 
 ```bash
-jarvis noeud etat                    # modèle, occupation, mémoire et températures
+jarvis noeud etat                    # modèles audio et texte, contexte, occupation, mémoire, températures
 jarvis regler noeud.actif false      # retour exact au comportement sans noeud
 ```
 
 Réserve l'adresse IP de la Jetson dans ta box : WSL ne résout pas les noms `.local`.
 
-## Banc d'essai
+## Réglages du modèle local et de l'audio
+
+Tous passent par l'installateur (relançable ; une option absente garde le réglage déjà présent dans
+`~/.config/jarvis-noeud/env`) :
+
+| Option | Réglage | Défaut |
+|---|---|---|
+| `--llm` | modèle Ollama texte et image | `gemma3:4b` |
+| `--contexte` | taille du contexte (2048 à 32768) | `4096` |
+| `--reflexion oui\|non` | réflexion des modèles qui en ont une | `non` pour les Qwen, sinon défaut du modèle |
+| `--moteur-audio` | `whisper` (PyTorch) ou `faster-whisper` (CTranslate2) | `whisper` |
+| `--modele` | modèle audio (`small`, `turbo`, `large-v3-turbo`…) | `small` |
+
+Passage à Qwen 3.5 une fois le banc favorable :
+
+```bash
+ollama pull qwen3.5:4b
+bash installer_noeud.sh --llm qwen3.5:4b --contexte 8192
+```
+
+Les roues CTranslate2 de PyPI pour ARM64 n'ont pas CUDA : l'installateur prévient si faster-whisper tournerait
+sur le processeur, et `banc.py` affiche l'appareil réellement utilisé. Plus de mémoire pour un plus grand contexte :
+bureau désactivé (`sudo systemctl set-default multi-user.target`, environ 800 Mo) et JetPack 6.2.2, qui corrige
+l'échec d'allocation CUDA de L4T 36.4.7.
+
+## Bancs d'essai
+
+Audio, moteurs et modèles (`moteur:modèle`, un nom seul vaut `whisper:nom`) :
 
 ```bash
 systemctl --user stop jarvis-noeud
-~/.local/share/jarvis-noeud/venv/bin/python ~/.local/share/jarvis-noeud/banc.py memo.m4a small turbo
+~/.local/share/jarvis-noeud/venv/bin/python ~/.local/share/jarvis-noeud/banc.py memo.m4a small turbo faster-whisper:small
 systemctl --user start jarvis-noeud
+```
+
+Modèles texte et image, sur cinq tâches du noeud vérifiées automatiquement (résumé, extraction JSON, classement,
+injection ignorée, aiguille dans un document qui remplit 70 % du contexte), avec chargement, jetons/s, mémoire libre
+minimale et températures :
+
+```bash
+ollama pull qwen3.5:4b
+python3 ~/.local/share/jarvis-noeud/banc_modeles.py gemma3:4b qwen3.5:4b --contexte 4096 8192 \
+  --image capture.png --json ~/banc-$(date +%F).json
 ```
 
 ## Vérification sans GPU
