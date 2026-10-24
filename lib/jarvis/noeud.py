@@ -84,6 +84,36 @@ def sante(r: dict | None = None, *, hote_connu: bool = True) -> dict:
     return _json(p.stdout)
 
 
+_dernier_etat: tuple[float, bool | None, str] = (0.0, None, "")
+
+
+def texte_etat(*, cache_s: float = 60) -> tuple[bool | None, str]:
+    """État lisible du noeud GPU (pour `jarvis noeud etat`, /etat et le chef) : (joignable, texte).
+    joignable vaut None si le noeud n'est pas configuré. Mis en cache `cache_s` secondes : /etat ne relance pas
+    une connexion SSH à chaque affichage."""
+    global _dernier_etat
+    if cache_s and time.time() - _dernier_etat[0] < cache_s:
+        return _dernier_etat[1], _dernier_etat[2]
+    r = reglages()
+    ok, raison = active(r)
+    if not ok:
+        resultat: tuple[bool | None, str] = (None, f"○ {raison}")
+    else:
+        try:
+            s = sante(r)
+            m = s.get("mesures") or {}
+            resultat = (True, f"● Noeud GPU {r['cible']} (connexion {r['connexion']}) : modèle {s.get('modele')}, "
+                              f"{'occupé' if s.get('occupe') else 'libre'}\n"
+                              f"  mémoire {m.get('memoire_dispo_mo', '?')}/{m.get('memoire_totale_mo', '?')} Mo libres · "
+                              f"GPU {m.get('gpu_c', '?')} °C · CPU {m.get('cpu_c', '?')} °C · "
+                              f"audio {s.get('duree_max_s')} s au plus")
+        except NoeudError as exc:
+            resultat = (False, f"✗ Noeud GPU {r.get('cible', '?')} activé mais {exc} : les tâches qui l'utilisent "
+                               "retombent sur leur chemin habituel.")
+    _dernier_etat = (time.time(), *resultat)
+    return resultat
+
+
 def deposer(chemin: Path, *, delai: float, r: dict | None = None) -> str:
     """Envoie un fichier dans la file d'entrée du noeud ; renvoie son empreinte, vérifiée côté noeud."""
     r = r or reglages()

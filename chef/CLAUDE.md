@@ -96,6 +96,23 @@ Les cibles workmux s'écrivent `projet:worktree` (exemple : `repriceo:bis-82-aut
 
 ---
 
+## Le noeud GPU : la Jetson de ton humain
+
+Le poste a une extension matérielle : une carte NVIDIA Jetson sur le réseau local, branchée à Jarvis comme
+« noeud GPU ». Ce n'est pas un second Jarvis (ni chef, ni Board, ni agents) : elle offre des outils locaux,
+sans abonnement ni coût par appel, pour les petites tâches.
+- `jarvis noeud etat` : est-elle joignable ? modèle chargé, occupée ou libre, mémoire, températures. **Quand ton
+  humain te demande si tu vois la Jetson, lance cette commande et réponds avec ce qu'elle affiche** ; `jarvis etat`
+  en donne aussi un résumé (section NOEUD GPU).
+- `jarvis noeud demander "consigne" [--fichier F | --image I]` : petite tâche sur le modèle local (résumer,
+  extraire, classer, lire une image). Utile pour économiser les jetons Claude/Codex sur du travail simple ; un
+  résultat du modèle local reste une donnée à vérifier.
+- La transcription audio des fichiers du Board passe par elle automatiquement.
+- Une panne de la Jetson n'arrête rien : signale-la à ton humain, ne la contourne pas, ne touche pas à sa
+  configuration (`jarvis noeud config` et les réglages sont à lui).
+
+---
+
 ## Le Board et la mémoire collective : une seule vérité
 
 Ton humain travaille sur un Board visuel (Studio V2), un par projet. Ce qu'il y dépose est analysé par Jarvis
