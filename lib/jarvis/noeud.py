@@ -101,8 +101,13 @@ def texte_etat(*, cache_s: float = 60) -> tuple[bool | None, str]:
     else:
         try:
             s = sante(r)
-            m = s.get("mesures") or {}
-            resultat = (True, f"● Noeud GPU {r['cible']} (connexion {r['connexion']}) : modèle {s.get('modele')}, "
+            m, mod = s.get("mesures") or {}, s.get("modeles") or {}
+            # « small » est le modèle audio (Whisper), pas le modèle texte : les deux sont nommés pour que le chef
+            # ne prenne pas l'un pour l'autre
+            audio = f"{mod['moteur_audio']}:{s.get('modele')}" if mod.get("moteur_audio") else s.get("modele")
+            texte = f" · texte/image {mod['llm']}" if mod.get("llm") else ""
+            texte += f" (contexte {mod['contexte']})" if texte and mod.get("contexte") else ""
+            resultat = (True, f"● Noeud GPU {r['cible']} (connexion {r['connexion']}) : audio {audio}{texte}, "
                               f"{'occupé' if s.get('occupe') else 'libre'}\n"
                               f"  mémoire {m.get('memoire_dispo_mo', '?')}/{m.get('memoire_totale_mo', '?')} Mo libres · "
                               f"GPU {m.get('gpu_c', '?')} °C · CPU {m.get('cpu_c', '?')} °C · "

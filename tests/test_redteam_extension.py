@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import os
+import importlib
 import io
 import json
 import sys
@@ -89,10 +90,27 @@ class ExtensionTests(unittest.TestCase):
 
     def test_refuse_existing_redteam_tool(self):
         original = Mock()
-        node = types.SimpleNamespace(OUTILS=[jarvis_redteam.OUTIL], appeler_outil=original)
+        autre = {**jarvis_redteam.OUTIL, "inputSchema": {"type": "object", "properties": {"cible": {"type": "string"}}}}
+        node = types.SimpleNamespace(OUTILS=[autre], appeler_outil=original)
         with self.assertRaises(ValueError):
             jarvis_redteam.activer(node)
         self.assertIs(node.appeler_outil, original)
+
+    def test_reprend_l_outil_natif_de_meme_schema(self):
+        """Le jarvis_noeud.py du dépôt déclare déjà redteam_auditer : l'extension ne casse plus le point d'entrée."""
+        original = Mock(return_value={"travail": "existant"})
+        natif = {**jarvis_redteam.OUTIL, "description": "version native"}
+        node = types.SimpleNamespace(OUTILS=[natif, {"name": "noeud_sante"}], appeler_outil=original, ErreurNoeud=ValueError)
+        jarvis_redteam.activer(node)
+        self.assertEqual([t["name"] for t in node.OUTILS], ["noeud_sante", "redteam_auditer"])
+        self.assertEqual(node.OUTILS[-1], jarvis_redteam.OUTIL)
+        self.assertEqual(node.appeler_outil("noeud_sante", {}, {}), {"travail": "existant"})
+
+    def test_point_d_entree_du_depot_accepte(self):
+        noeud = importlib.import_module("jarvis_noeud")
+        copie = types.SimpleNamespace(OUTILS=list(noeud.OUTILS), appeler_outil=Mock(), ErreurNoeud=ValueError)
+        jarvis_redteam.activer(copie)
+        self.assertEqual(sum(t["name"] == "redteam_auditer" for t in copie.OUTILS), 1)
 
     def test_scan_error_remains_mcp_error(self):
         class ErreurNoeud(Exception):

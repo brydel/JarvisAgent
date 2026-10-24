@@ -39,7 +39,10 @@ def politique():
 def activer(noeud) -> None:
     if getattr(noeud, "_extension_redteam", False):
         return
-    if any(tool.get("name") == OUTIL["name"] for tool in noeud.OUTILS):
+    existants = [tool for tool in noeud.OUTILS if tool.get("name") == OUTIL["name"]]
+    # Le point d'entrée du dépôt déclare désormais le même outil : même schéma, l'extension le reprend avec sa
+    # politique (redteam.env). Un outil homonyme au schéma différent reste à comparer à la main.
+    if any(tool.get("inputSchema") != OUTIL["inputSchema"] for tool in existants):
         raise ValueError("Un outil RedTeam existe déjà ; comparaison manuelle requise.")
     original = noeud.appeler_outil
 
@@ -53,7 +56,7 @@ def activer(noeud) -> None:
             # Le serveur installé ne capture pas forcément les erreurs de scan.
             raise noeud.ErreurNoeud("Audit RedTeam échoué : " + type(exc).__name__) from None
 
-    noeud.OUTILS = [*noeud.OUTILS, OUTIL]
+    noeud.OUTILS = [*(tool for tool in noeud.OUTILS if tool.get("name") != OUTIL["name"]), OUTIL]
     noeud.appeler_outil = appeler
     noeud._extension_redteam = True
 
