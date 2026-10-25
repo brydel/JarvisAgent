@@ -409,22 +409,9 @@ def cmd_noeud_demander(a) -> int:
 
 def cmd_noeud_etat(a) -> int:
     from . import noeud
-    ok, raison = noeud.active()
-    if not ok:
-        print(f"○ {raison}")
-        return 0
-    try:
-        s = noeud.sante()
-    except noeud.NoeudError as exc:
-        print(f"✗ Activé mais {exc} : l'audio du Board garde ses seules métadonnées.")
-        return 1
-    m = s.get("mesures") or {}
-    r = noeud.reglages()
-    print(f"● Noeud GPU {r['cible']} (connexion {r['connexion']}) : modèle {s.get('modele')}, "
-          f"{'occupé' if s.get('occupe') else 'libre'}")
-    print(f"  mémoire {m.get('memoire_dispo_mo', '?')}/{m.get('memoire_totale_mo', '?')} Mo libres · "
-          f"GPU {m.get('gpu_c', '?')} °C · CPU {m.get('cpu_c', '?')} °C · audio {s.get('duree_max_s')} s au plus")
-    return 0
+    joignable, texte = noeud.texte_etat(cache_s=0)  # commande explicite : toujours une mesure fraîche
+    print(texte)
+    return 1 if joignable is False else 0
 
 
 # --- Réglages -----------------------------------------------------------------
@@ -2125,6 +2112,10 @@ def cmd_board(a) -> int:
 def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(prog="jarvis", description="Poste de pilotage des agents IA")
     sub = p.add_subparsers(dest="cmd", required=True)
+    from . import redteam
+    redteam.add_parser(sub)
+    from . import defense
+    defense.add_parser(sub)
 
     s = sub.add_parser("os", help="contrats, diagnostic de capacités et mandats personnels")
     s.add_argument("arguments", nargs=argparse.REMAINDER)

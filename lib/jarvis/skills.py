@@ -10,7 +10,8 @@ Une skill exécute du code sur ton poste : on ne l'active jamais sans savoir exa
   ensuite ton approbation (bouton Telegram ou `jarvis skill approuver` au terminal) : action de niveau 3.
 - `decider(ok)` : contrôle que la quarantaine n'a pas changé depuis la demande, puis active (dossier
   ~/.local/share/jarvis/skills/<nom>, liens pour Claude et Codex, lock écrit) ou supprime la copie.
-- `auditer()` : état de chaque skill (épinglée, modifiée, non épinglée, signature invalide, hors registre).
+- `auditer()` : état de chaque skill (épinglée, modifiée, non épinglée, signature invalide, hors registre), après
+  avoir purgé les `__pycache__` que Python écrit quand un agent lance les scripts d'une skill.
 
 Signature : un fichier `~/.config/jarvis/skills_signataires` au format « allowed_signers » d'OpenSSH liste les
 auteurs de confiance. Sans lui (ou sans ssh-keygen), une skill est épinglée par empreinte, marquée « non signée ».
@@ -340,11 +341,30 @@ def epingler(nom: str, *, version: str = "", auteur: str = "", cle: str = "") ->
     dossier = next((d / nom for d in (depot_dir(), installees_dir()) if (d / nom).is_dir()), None)
     if not dossier:
         raise SkillError(f"skill « {nom} » introuvable")
+    purger_caches(dossier)
     ancien = lire_lock(dossier) or {}
     lock = {"nom": nom, "version": version or str(ancien.get("version") or "1"),
             "empreinte": empreinte(dossier), "auteur": auteur or str(ancien.get("auteur") or "inconnu")}
     signature = signer(lock, cle) if cle else ""
     return ecrire_lock(dossier, nom=nom, version=lock["version"], auteur=lock["auteur"], signature=signature)
+
+
+def purger_caches(dossier: Path) -> int:
+    """Supprime les `__pycache__` que Python écrit dans une skill activée quand un agent lance ses scripts.
+    Seul un cache qui ne contient que des `<module>.*.pyc` dont le `<module>.py` (épinglé) est à côté est
+    supprimé : effacer ne fait jamais exécuter quoi que ce soit. Tout autre contenu reste, et l'audit le signale."""
+    n = 0
+    for cache in sorted(dossier.rglob("__pycache__"), reverse=True):
+        if cache.is_symlink() or not cache.is_dir():
+            continue
+        fichiers = list(cache.iterdir())
+        if fichiers and all(f.is_file() and not f.is_symlink() and f.suffix == ".pyc"
+                            and (cache.parent / (f.name.split(".", 1)[0] + ".py")).is_file() for f in fichiers):
+            shutil.rmtree(cache)
+            n += 1
+    if n:
+        _journal("systeme", dossier.name, "cache_purge", f"{n} __pycache__ supprimé(s)")
+    return n
 
 
 def auditer() -> list[dict]:
@@ -355,6 +375,7 @@ def auditer() -> list[dict]:
         if not base.is_dir():
             continue
         for d in sorted(p for p in base.iterdir() if p.is_dir() and ".bak." not in p.name):
+            purger_caches(d)
             out.append({**etat(d), "origine": origine})
             connus.add(d.resolve())
     vus = set()

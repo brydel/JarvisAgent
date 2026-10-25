@@ -459,6 +459,13 @@ Le lot 1 de l'autonomie (voir `docs/autonomy/`) ajoute un **point d'admission co
 - Les messages tapés au chef attendent en file si une demande de permission est affichée : une touche Entrée ne valide jamais une permission à ta place.
 - Commence avec `max_agents = 2` ou `3`. Au-delà, tu atteins les limites des abonnements, et tu dois pouvoir relire tout ce qui sort.
 
+## Défense en observation
+
+`bin/jarvis defense triage <fichier>` analyse uniquement un lot explicitement fourni,
+sans collecte ni remédiation. Le moteur déterministe, les deux skills et leurs limites
+sont décrits dans [le guide Défense](docs/defense/README.md). Les exemples sont synthétiques ;
+ce premier lot ne promet pas une protection opérationnelle.
+
 ## Tests
 
 ```bash

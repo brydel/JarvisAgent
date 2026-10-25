@@ -167,6 +167,13 @@ def text(snap: dict | None = None, detail: bool = True) -> str:
             out += ["", bloc]
     except Exception as exc:  # noqa: BLE001 — l'état des agents reste lisible même si la base est indisponible
         out += ["", f"MISSIONS DU BOARD : illisibles ({exc})"]
+    try:  # le noeud GPU (Jetson) fait partie du poste : visible dans /etat dès qu'il est configuré
+        from . import noeud
+        joignable, texte = noeud.texte_etat()
+        if joignable is not None:
+            out += ["", "NOEUD GPU (JETSON)", *("  " + ln.strip() for ln in texte.splitlines())]
+    except Exception as exc:  # noqa: BLE001
+        out += ["", f"NOEUD GPU (JETSON) : état illisible ({type(exc).__name__})"]
 
     out.append("")
     out.append("JETONS")

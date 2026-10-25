@@ -1,0 +1,4 @@
+interface:
+  display_name: "Revue défensive Jarvis"
+  short_description: "Préparer une décision humaine documentée"
+  default_prompt: "Utiliser $jarvis-defense-incident pour qualifier ce rapport défensif."
