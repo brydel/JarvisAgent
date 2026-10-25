@@ -164,6 +164,20 @@ class SkillsTest(unittest.TestCase):
         skills.decider("propre2", True, par="humain")
         (skills.installees_dir() / "propre2" / "outil.pyc").write_bytes(b"\x00")
         self.assertEqual(skills.etat(skills.installees_dir() / "propre2")["etat"], "illisible")
+        # Le cache que Python écrit en lançant les scripts d'une skill active est purgé par l'audit ;
+        # un .pyc sans source épinglée à côté reste signalé.
+        _skill(self.src, "outillee")
+        skills.installer(str(self.src / "outillee"))
+        skills.decider("outillee", True, par="humain")
+        cache = skills.installees_dir() / "outillee" / "scripts" / "__pycache__"
+        cache.mkdir()
+        (cache / "outil.cpython-314.pyc").write_bytes(b"\x00code")
+        self.assertNotIn("outillee", [s["nom"] for s in skills.problemes()])
+        self.assertFalse(cache.exists())
+        cache.mkdir()
+        (cache / "inconnu.cpython-314.pyc").write_bytes(b"\x00code")
+        self.assertIn("outillee", [s["nom"] for s in skills.problemes()])
+        self.assertTrue((cache / "inconnu.cpython-314.pyc").exists())
         self.assertEqual(skills.sans_identifiants("https://moi:ghp_secret@github.com/x/y.git"), "https://github.com/x/y.git")
         with self.assertRaises(skills.SkillError) as cm:
             skills.installer("https://moi:ghp_secret@exemple.invalid/x/y.git")
