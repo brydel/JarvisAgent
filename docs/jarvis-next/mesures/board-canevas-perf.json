@@ -1,0 +1,272 @@
+{
+ "avant_5000": {
+  "date": "2026-11-11T20:01:00.000Z",
+  "navigateur": "Chromium 156.0.8078.4 (Playwright, sans GPU, WSL2)",
+  "viewport": "1672×941",
+  "objets": 5009,
+  "chargement_ms": 2774,
+  "vue_de_travail": {
+   "zoom": "80%",
+   "noeuds_rendus": 11,
+   "panoramique": {
+    "images": 198,
+    "duree_geste_ms": 3314,
+    "ips_moyen": 60,
+    "mediane_ms": 16.7,
+    "p95_ms": 16.8,
+    "max_ms": 16.8,
+    "images_longues_50ms": 0
+   },
+   "zoom_molette": {
+    "images": 122,
+    "duree_geste_ms": 2051,
+    "ips_moyen": 60,
+    "mediane_ms": 16.7,
+    "p95_ms": 16.8,
+    "max_ms": 16.8,
+    "images_longues_50ms": 0
+   }
+  },
+  "vue_d_ensemble": {
+   "zoom": "15%",
+   "noeuds_rendus": 234,
+   "panoramique": {
+    "images": 284,
+    "duree_geste_ms": 4844,
+    "ips_moyen": 58.6,
+    "mediane_ms": 16.7,
+    "p95_ms": 16.8,
+    "max_ms": 33.4,
+    "images_longues_50ms": 0
+   },
+   "zoom_molette": {
+    "images": 138,
+    "duree_geste_ms": 2316,
+    "ips_moyen": 60,
+    "mediane_ms": 16.7,
+    "p95_ms": 16.7,
+    "max_ms": 16.8,
+    "images_longues_50ms": 0
+   }
+  }
+ },
+ "apres_passe1_5000": {
+  "date": "2026-11-11T21:30:31.643Z",
+  "navigateur": "Chromium 156.0.8078.4 (Playwright, sans GPU, WSL2)",
+  "viewport": "1672×941",
+  "objets": 5009,
+  "chargement_ms": 2691,
+  "vue_de_travail": {
+   "zoom": "80%",
+   "noeuds_rendus": 11,
+   "panoramique": {
+    "images": 206,
+    "duree_geste_ms": 3486,
+    "ips_moyen": 59.4,
+    "mediane_ms": 16.7,
+    "p95_ms": 16.8,
+    "max_ms": 33.4,
+    "images_longues_50ms": 0
+   },
+   "zoom_molette": {
+    "images": 122,
+    "duree_geste_ms": 2043,
+    "ips_moyen": 60,
+    "mediane_ms": 16.7,
+    "p95_ms": 16.7,
+    "max_ms": 16.8,
+    "images_longues_50ms": 0
+   }
+  },
+  "vue_d_ensemble": {
+   "zoom": "5%",
+   "noeuds_rendus": 1989,
+   "panoramique": {
+    "images": 315,
+    "duree_geste_ms": 5877,
+    "ips_moyen": 53.5,
+    "mediane_ms": 16.7,
+    "p95_ms": 33.3,
+    "max_ms": 33.4,
+    "images_longues_50ms": 0
+   },
+   "zoom_molette": {
+    "images": 153,
+    "duree_geste_ms": 2737,
+    "ips_moyen": 55.6,
+    "mediane_ms": 16.7,
+    "p95_ms": 33.3,
+    "max_ms": 50,
+    "images_longues_50ms": 0
+   }
+  },
+  "vue_a_15_pour_cent": {
+   "zoom": "15%",
+   "noeuds_rendus": 223,
+   "panoramique": {
+    "images": 272,
+    "duree_geste_ms": 4581,
+    "ips_moyen": 59.3,
+    "mediane_ms": 16.7,
+    "p95_ms": 16.8,
+    "max_ms": 33.4,
+    "images_longues_50ms": 0
+   },
+   "zoom_molette": {
+    "images": 141,
+    "duree_geste_ms": 2433,
+    "ips_moyen": 58.3,
+    "mediane_ms": 16.7,
+    "p95_ms": 16.7,
+    "max_ms": 33.4,
+    "images_longues_50ms": 0
+   }
+  }
+ },
+ "apres_passe2_5000": {
+  "date": "2026-11-11T21:31:06.229Z",
+  "navigateur": "Chromium 156.0.8078.4 (Playwright, sans GPU, WSL2)",
+  "viewport": "1672×941",
+  "objets": 5009,
+  "chargement_ms": 2562,
+  "vue_de_travail": {
+   "zoom": "80%",
+   "noeuds_rendus": 11,
+   "panoramique": {
+    "images": 215,
+    "duree_geste_ms": 3634,
+    "ips_moyen": 59.4,
+    "mediane_ms": 16.7,
+    "p95_ms": 16.7,
+    "max_ms": 33.3,
+    "images_longues_50ms": 0
+   },
+   "zoom_molette": {
+    "images": 120,
+    "duree_geste_ms": 2024,
+    "ips_moyen": 60,
+    "mediane_ms": 16.7,
+    "p95_ms": 16.8,
+    "max_ms": 16.8,
+    "images_longues_50ms": 0
+   }
+  },
+  "vue_d_ensemble": {
+   "zoom": "5%",
+   "noeuds_rendus": 1989,
+   "panoramique": {
+    "images": 305,
+    "duree_geste_ms": 5751,
+    "ips_moyen": 52.7,
+    "mediane_ms": 16.7,
+    "p95_ms": 33.3,
+    "max_ms": 33.5,
+    "images_longues_50ms": 0
+   },
+   "zoom_molette": {
+    "images": 147,
+    "duree_geste_ms": 2662,
+    "ips_moyen": 55.5,
+    "mediane_ms": 16.7,
+    "p95_ms": 33.3,
+    "max_ms": 50,
+    "images_longues_50ms": 0
+   }
+  },
+  "vue_a_15_pour_cent": {
+   "zoom": "15%",
+   "noeuds_rendus": 223,
+   "panoramique": {
+    "images": 271,
+    "duree_geste_ms": 4528,
+    "ips_moyen": 59.8,
+    "mediane_ms": 16.7,
+    "p95_ms": 16.7,
+    "max_ms": 33.4,
+    "images_longues_50ms": 0
+   },
+   "zoom_molette": {
+    "images": 131,
+    "duree_geste_ms": 2264,
+    "ips_moyen": 58.2,
+    "mediane_ms": 16.7,
+    "p95_ms": 16.7,
+    "max_ms": 33.4,
+    "images_longues_50ms": 0
+   }
+  }
+ },
+ "apres_passe3_5000": {
+  "date": "2026-11-11T21:31:41.044Z",
+  "navigateur": "Chromium 156.0.8078.4 (Playwright, sans GPU, WSL2)",
+  "viewport": "1672×941",
+  "objets": 5009,
+  "chargement_ms": 2576,
+  "vue_de_travail": {
+   "zoom": "80%",
+   "noeuds_rendus": 11,
+   "panoramique": {
+    "images": 213,
+    "duree_geste_ms": 3625,
+    "ips_moyen": 59.2,
+    "mediane_ms": 16.7,
+    "p95_ms": 16.7,
+    "max_ms": 33.4,
+    "images_longues_50ms": 0
+   },
+   "zoom_molette": {
+    "images": 123,
+    "duree_geste_ms": 2065,
+    "ips_moyen": 60,
+    "mediane_ms": 16.7,
+    "p95_ms": 16.8,
+    "max_ms": 16.8,
+    "images_longues_50ms": 0
+   }
+  },
+  "vue_d_ensemble": {
+   "zoom": "5%",
+   "noeuds_rendus": 1989,
+   "panoramique": {
+    "images": 302,
+    "duree_geste_ms": 5801,
+    "ips_moyen": 52.1,
+    "mediane_ms": 16.7,
+    "p95_ms": 33.4,
+    "max_ms": 33.5,
+    "images_longues_50ms": 0
+   },
+   "zoom_molette": {
+    "images": 155,
+    "duree_geste_ms": 2714,
+    "ips_moyen": 57.1,
+    "mediane_ms": 16.7,
+    "p95_ms": 16.8,
+    "max_ms": 50,
+    "images_longues_50ms": 0
+   }
+  },
+  "vue_a_15_pour_cent": {
+   "zoom": "15%",
+   "noeuds_rendus": 223,
+   "panoramique": {
+    "images": 274,
+    "duree_geste_ms": 4565,
+    "ips_moyen": 60,
+    "mediane_ms": 16.7,
+    "p95_ms": 16.8,
+    "max_ms": 16.8,
+    "images_longues_50ms": 0
+   },
+   "zoom_molette": {
+    "images": 136,
+    "duree_geste_ms": 2334,
+    "ips_moyen": 58.7,
+    "mediane_ms": 16.7,
+    "p95_ms": 16.8,
+    "max_ms": 33.4,
+    "images_longues_50ms": 0
+   }
+  }
+ }
+}
