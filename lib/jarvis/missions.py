@@ -34,6 +34,7 @@ import os
 import secrets
 import sqlite3
 import sys
+import threading
 import time
 from pathlib import Path
 from typing import Callable, Iterator
@@ -196,6 +197,30 @@ COLONNES_AJOUTEES = {
     "reglages_tenant": (("board_actions_auto", "INTEGER NOT NULL DEFAULT 1"),),
 }
 
+# « Fondations du Board » : ajouts COMPATIBLES avec le code plus ancien (colonnes facultatives, index). Ils ne
+# changent pas SCHEMA_VERSION : une version antérieure de Jarvis continue d'ouvrir la même base (retour arrière
+# possible). Suivis à part dans meta.schema_ajouts.
+AJOUTS_VERSION = 1
+COLONNES_AJOUTS = {
+    "board_objets": (("travail_ref", "TEXT"),),  # référence d'une carte de travail du chef (ex-recherche meta LIKE)
+    "board_liens": (("version", "INTEGER NOT NULL DEFAULT 1"),),  # détection de conflit sur les relations
+    "evenements": (("espace", "TEXT"),),  # Board concerné : filtre du flux côté serveur (NULL = pas lié à un Board)
+}
+INDEX_AJOUTS = (
+    "CREATE INDEX IF NOT EXISTS board_objets_espace ON board_objets (tenant_id, espace, supprime)",
+    "CREATE INDEX IF NOT EXISTS board_objets_mission ON board_objets (tenant_id, mission_id)",
+    "CREATE INDEX IF NOT EXISTS board_objets_ref ON board_objets (tenant_id, travail_ref)",
+    "CREATE INDEX IF NOT EXISTS board_liens_espace ON board_liens (tenant_id, espace, supprime)",
+    "CREATE INDEX IF NOT EXISTS board_liens_source ON board_liens (tenant_id, source_id)",
+    "CREATE INDEX IF NOT EXISTS board_liens_cible ON board_liens (tenant_id, cible_id)",
+    "CREATE INDEX IF NOT EXISTS board_commentaires_objet ON board_commentaires (tenant_id, objet_id, cree)",
+    "CREATE INDEX IF NOT EXISTS evenements_mission ON evenements (tenant_id, mission_id, type)",
+    "CREATE INDEX IF NOT EXISTS taches_mission ON taches (tenant_id, mission_id)",
+    "CREATE INDEX IF NOT EXISTS tentatives_tache ON tentatives (tenant_id, tache_id)",
+    "CREATE INDEX IF NOT EXISTS artefacts_mission ON artefacts (tenant_id, mission_id)",
+    "CREATE INDEX IF NOT EXISTS approbations_tache ON approbations (tenant_id, tache_id, statut)",
+)
+
 
 def chemin_base():
     config.STATE_DIR.mkdir(parents=True, exist_ok=True)
@@ -209,26 +234,81 @@ class BackendSQLite:
     nom = "sqlite"
     verrou_file = ""  # BEGIN IMMEDIATE sérialise déjà les écritures
 
+    # Fichiers dont le schéma a déjà été vérifié par CE processus : (chemin, périphérique, inode) → cookie du schéma.
+    # Un fichier supprimé puis recréé (tests, restauration) repasse par la préparation.
+    _prets: dict = {}
+    _verrou_schema = threading.Lock()
+
     def connecter(self, tenant_id: str | None):
-        c = sqlite3.connect(chemin_base(), timeout=30, isolation_level=None)
+        chemin = chemin_base()
+        c = sqlite3.connect(chemin, timeout=30, isolation_level=None)
         c.row_factory = sqlite3.Row
-        c.execute("PRAGMA journal_mode=WAL")
         c.execute("PRAGMA busy_timeout=30000")
         c.execute("PRAGMA foreign_keys=ON")
+        try:
+            st = os.stat(chemin)
+            cle = (str(chemin), st.st_dev, st.st_ino)
+            # « cookie » du schéma (en-tête du fichier) : il change dès qu'une table, une colonne ou un index change.
+            # Le comparer coûte quelques microsecondes et détecte aussi un fichier remplacé qui aurait repris le même inode.
+            if self._prets.get(cle) != c.execute("PRAGMA schema_version").fetchone()[0]:
+                with self._verrou_schema:
+                    self._preparer(c)
+                    st = os.stat(chemin)
+                    self._prets[(str(chemin), st.st_dev, st.st_ino)] = c.execute("PRAGMA schema_version").fetchone()[0]
+        except BaseException:
+            c.close()
+            raise
+        return c
+
+    def _preparer(self, c) -> None:
+        """Schéma et migrations, UNE fois par processus et par fichier (et non à chaque connexion).
+
+        Idempotent et sûr en concurrence : les CREATE … IF NOT EXISTS le sont par nature ; les ALTER TABLE et les
+        index sont faits sous BEGIN IMMEDIATE (un seul écrivain à la fois, y compris entre processus), après
+        relecture de l'état réel de la base. Deux processus qui démarrent ensemble ne se gênent donc pas."""
+        # WAL : réglage persistant du fichier, inutile de le redire à chaque connexion. Le changement de mode
+        # n'attend pas les verrous (busy_timeout ne s'y applique pas) : on réessaie si un autre processus le fait déjà.
+        fin = time.monotonic() + 30
+        while c.execute("PRAGMA journal_mode").fetchone()[0].lower() != "wal":
+            try:
+                c.execute("PRAGMA journal_mode=WAL")
+            except sqlite3.OperationalError:
+                if time.monotonic() > fin:
+                    raise
+                time.sleep(0.02)
         c.executescript(_SCHEMA)
         ligne = c.execute("SELECT valeur FROM meta WHERE cle='schema_version'").fetchone()
         if ligne is not None and int(ligne["valeur"]) > SCHEMA_VERSION:
-            c.close()
             raise MissionError("schema", f"base missions en version {ligne['valeur']}, ce code connaît {SCHEMA_VERSION}")
-        if ligne is None or int(ligne["valeur"]) < SCHEMA_VERSION:
-            for table, colonnes in COLONNES_AJOUTEES.items():
-                presentes = {r["name"] for r in c.execute(f"PRAGMA table_info({table})")}
-                for nom, definition in colonnes:
-                    if nom not in presentes:
-                        c.execute(f"ALTER TABLE {table} ADD COLUMN {nom} {definition}")
-            c.execute("INSERT INTO meta VALUES ('schema_version', ?) ON CONFLICT (cle) DO UPDATE SET valeur=excluded.valeur",
-                      (str(SCHEMA_VERSION),))
-        return c
+        ajouts = c.execute("SELECT valeur FROM meta WHERE cle='schema_ajouts'").fetchone()
+        if ligne is not None and int(ligne["valeur"]) == SCHEMA_VERSION and ajouts is not None \
+                and int(ajouts["valeur"]) >= AJOUTS_VERSION:
+            return  # cas courant : rien à faire, aucune écriture
+        c.execute("BEGIN IMMEDIATE")
+        try:
+            for groupe in (COLONNES_AJOUTEES, COLONNES_AJOUTS):
+                for table, colonnes in groupe.items():
+                    presentes = {r["name"] for r in c.execute(f"PRAGMA table_info({table})")}
+                    for nom, definition in colonnes:
+                        if nom not in presentes:
+                            c.execute(f"ALTER TABLE {table} ADD COLUMN {nom} {definition}")
+            for index in INDEX_AJOUTS:
+                c.execute(index)
+            # cartes de travail du chef déjà posées : leur référence passe de meta à la colonne indexée
+            for r in c.execute("SELECT id, meta FROM board_objets WHERE travail_ref IS NULL AND meta LIKE '%\"travail_ref\"%'").fetchall():
+                try:
+                    ref = json.loads(r["meta"]).get("travail_ref")
+                except (ValueError, AttributeError):
+                    ref = None
+                if isinstance(ref, str) and ref:
+                    c.execute("UPDATE board_objets SET travail_ref=? WHERE id=?", (ref[:200], r["id"]))
+            for cle, valeur in (("schema_version", SCHEMA_VERSION), ("schema_ajouts", AJOUTS_VERSION)):
+                c.execute("INSERT INTO meta VALUES (?, ?) ON CONFLICT (cle) DO UPDATE SET valeur=excluded.valeur",
+                          (cle, str(valeur)))
+            c.execute("COMMIT")
+        except BaseException:
+            c.execute("ROLLBACK")
+            raise
 
     def debut(self, c) -> None:
         c.execute("BEGIN IMMEDIATE")
@@ -252,6 +332,7 @@ class BackendSQLite:
 
     def reinitialiser(self) -> None:
         """Tests seulement : efface la base."""
+        self._prets.clear()
         for suffixe in ("", "-wal", "-shm"):
             try:
                 (config.STATE_DIR / (FICHIER + suffixe)).unlink()
@@ -321,9 +402,14 @@ def _empreinte(valeur: object) -> str:
 
 
 def _evenement(c: sqlite3.Connection, tenant_id: str, type_: str, *, mission_id: str | None = None,
-               tache_id: str | None = None, now: float, **donnees) -> None:
-    c.execute("INSERT INTO evenements (tenant_id, mission_id, tache_id, type, donnees, ts) VALUES (?,?,?,?,?,?)",
-              (tenant_id, mission_id, tache_id, type_, json.dumps(donnees, ensure_ascii=False), now))
+               tache_id: str | None = None, now: float, espace: str | None = None, **donnees) -> None:
+    """Écrit un événement du journal. `espace` : Board concerné — rangé dans sa colonne (filtre du flux côté serveur)
+    et dans les données (le client ignore ce qui n'est pas son Board). Les événements board_* portent de quoi
+    appliquer un delta : identifiant d'objet ou de lien, espace, version après l'écriture."""
+    if espace is not None:
+        donnees["espace"] = espace
+    c.execute("INSERT INTO evenements (tenant_id, mission_id, tache_id, type, donnees, ts, espace) VALUES (?,?,?,?,?,?,?)",
+              (tenant_id, mission_id, tache_id, type_, json.dumps(donnees, ensure_ascii=False), now, espace))
 
 
 def _transition(c: sqlite3.Connection, tache: sqlite3.Row | dict, vers: str, *, now: float, raison: str = "",
@@ -940,6 +1026,7 @@ def board_ajouter(tenant_id: str, espace: str, type_: str, contenu: str, *, aute
     if len(meta_txt) > 20_000:
         raise MissionError("board", "métadonnées trop volumineuses")
     now = now or time.time()
+    ref = reference_travail(meta)
     oid = _id("BO")
     with transaction(tenant_id) as c:
         reglages = _reglages(c, tenant_id)
@@ -952,10 +1039,10 @@ def board_ajouter(tenant_id: str, espace: str, type_: str, contenu: str, *, aute
         z = (c.execute("SELECT COALESCE(MAX(z), 0) AS z FROM board_objets WHERE tenant_id=? AND espace=?",
                        (tenant_id, espace)).fetchone()["z"] or 0) + 1
         c.execute("INSERT INTO board_objets (id, tenant_id, espace, type, contenu, x, y, auteur, cree, largeur, hauteur, "
-                  "z, priorite, meta, asset_id, mission_id, maj) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                  "z, priorite, meta, asset_id, mission_id, maj, travail_ref) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
                   (oid, tenant_id, espace, type_, contenu, x, y, auteur, now, max(0.0, float(largeur)),
-                   max(0.0, float(hauteur)), z, priorite, meta_txt, asset_id, mission_id, now))
-        _evenement(c, tenant_id, "board_objet", now=now, objet_id=oid, type=type_, espace=espace)
+                   max(0.0, float(hauteur)), z, priorite, meta_txt, asset_id, mission_id, now, ref))
+        _evenement(c, tenant_id, "board_objet", now=now, objet_id=oid, type=type_, espace=espace, version=1)
         auto = type_ in ANALYSABLES if analyser is None else analyser and type_ in ANALYSABLES
         declenche = bool(reglages["board_auto_analyse"]) and auto and not mission_id
         contexte = bool(reglages["board_auto_analyse"]) and contextualiser and type_ in CONTEXTUALISABLES and not mission_id
@@ -970,9 +1057,22 @@ def board_ajouter(tenant_id: str, espace: str, type_: str, contenu: str, *, aute
               "travail": {"objet_id": oid, "document": contenu}}],
             source="board", demandeur=f"board:{auteur}", cle_idempotence=f"board:{oid}", now=now)
         with transaction(tenant_id) as c:
-            c.execute("UPDATE board_objets SET mission_id=? WHERE id=? AND tenant_id=?",
-                      (mission["mission_id"], oid, tenant_id))
+            _rattacher_mission(c, tenant_id, oid, espace, mission["mission_id"], now)
     return {"objet_id": oid, "mission_id": mission["mission_id"] if mission else None}
+
+
+def reference_travail(meta: dict | None) -> str | None:
+    """Référence d'une carte de travail du chef (meta.travail_ref), rangée dans sa colonne indexée."""
+    ref = (meta or {}).get("travail_ref")
+    return ref[:200] if isinstance(ref, str) and ref else None
+
+
+def _rattacher_mission(c, tenant_id: str, objet_id: str, espace: str, mission_id: str, now: float) -> None:
+    """Lie une carte à sa mission et le dit dans le journal : un client qui suit le flux relit CETTE carte (la
+    version ne change pas : aucun champ modifiable par un client n'a bougé, ses écritures en cours restent valables)."""
+    c.execute("UPDATE board_objets SET mission_id=? WHERE id=? AND tenant_id=?", (mission_id, objet_id, tenant_id))
+    _evenement(c, tenant_id, "board_maj", mission_id=mission_id, now=now, objet_id=objet_id, champs=["mission_id"],
+               espace=espace, par="jarvis")
 
 
 def lancer_contextualisation(tenant_id: str, objet_id: str, *, auteur: str, relance: bool = False,
@@ -1020,7 +1120,7 @@ def lancer_contextualisation(tenant_id: str, objet_id: str, *, auteur: str, rela
                       [{"type": "contextualiser", "niveau": "L1", "capacites": ["analyse"], "travail": travail}],
                       source="board-contexte", demandeur=f"board:{auteur}", cle_idempotence=cle, now=now)
     with transaction(tenant_id) as c:
-        c.execute("UPDATE board_objets SET mission_id=? WHERE id=? AND tenant_id=?", (m["mission_id"], objet_id, tenant_id))
+        _rattacher_mission(c, tenant_id, objet_id, o["espace"], m["mission_id"], now)
     return m["mission_id"]
 
 
@@ -1141,18 +1241,20 @@ def decider_proposition(tenant_id: str, objet_id: str, index: int, decision: str
                           "hauteur, z, priorite, meta, mission_id, maj) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
                           (oid, tenant_id, o["espace"], "mission", "", x, y, "jarvis", now, 452, 362, z,
                            o["priorite"] or "", json.dumps(carte_meta, ensure_ascii=False), m["mission_id"], now))
-                _evenement(c, tenant_id, "board_objet", now=now, objet_id=oid, type="mission", espace=o["espace"])
+                _evenement(c, tenant_id, "board_objet", now=now, objet_id=oid, type="mission", espace=o["espace"], version=1)
                 c.execute("INSERT INTO board_liens (id, tenant_id, espace, source_id, cible_id, libelle, style, cree, maj, auteur) "
                           "VALUES (?,?,?,?,?,?,?,?,?,?)", (lid, tenant_id, o["espace"], objet_id, oid,
                                                           "proposé par Jarvis", "alimente", now, now, "jarvis"))
-                _evenement(c, tenant_id, "board_lien", now=now, lien_id=lid, source_id=objet_id, cible_id=oid, par="jarvis")
+                _evenement(c, tenant_id, "board_lien", now=now, lien_id=lid, source_id=objet_id, cible_id=oid, par="jarvis",
+                           espace=o["espace"], version=1)
                 p.update(statut="lancee", mission_id=m["mission_id"], carte_id=oid, par=par)
                 sortie.update(mission_id=m["mission_id"], carte_id=oid)
             else:
                 p.update(statut="ecartee", par=par)
             c.execute("UPDATE board_objets SET meta=?, version=version+1, maj=? WHERE id=? AND tenant_id=?",
                       (json.dumps(meta, ensure_ascii=False), now, objet_id, tenant_id))
-            _evenement(c, tenant_id, "board_proposition", now=now, objet_id=objet_id, index=index, decision=decision, par=par)
+            _evenement(c, tenant_id, "board_proposition", now=now, objet_id=objet_id, index=index, decision=decision, par=par,
+                       espace=o["espace"], version=o["version"] + 1)
             outbox.enregistrer(c, tenant_id, "synchro.decision",
                                {"objet_id": objet_id, "index": index, "decision": decision, "par": par,
                                 "snapshot": _instantane_notification(o, meta)},
@@ -1196,7 +1298,7 @@ def _enregistrer_propositions(c, t, contenu: str, now: float) -> None:
     if o["mission_id"] != t["mission_id"]:
         # L'artefact appartient toujours à sa mission, mais la carte est désormais suivie par une autre analyse.
         _evenement(c, t["tenant_id"], "board_projection_perimee", mission_id=t["mission_id"], now=now,
-                   objet_id=oid, mission_courante=o["mission_id"])
+                   objet_id=oid, mission_courante=o["mission_id"], espace=o["espace"], version=o["version"])
         return
     resume, actions = extraire_propositions(contenu)
     meta = json.loads(o["meta"] or "{}")
@@ -1216,10 +1318,10 @@ def _enregistrer_propositions(c, t, contenu: str, now: float) -> None:
                   "VALUES (?,?,?,?,?,?,?,?,?,?)", (lid, t["tenant_id"], o["espace"], oid, l["cible"],
                                                     NATURES_LIEN[l["nature"]], l["nature"], now, now, "jarvis"))
         _evenement(c, t["tenant_id"], "board_lien", now=now, lien_id=lid, source_id=oid, cible_id=l["cible"], par="jarvis",
-                   pourquoi=l["pourquoi"])
+                   pourquoi=l["pourquoi"], espace=o["espace"], version=1)
         liens += 1
     _evenement(c, t["tenant_id"], "board_propositions", mission_id=t["mission_id"], now=now, objet_id=oid,
-               n=len(actions), liens=liens)
+               n=len(actions), liens=liens, espace=o["espace"], version=o["version"] + 1)
     tenant = t["tenant_id"]
     outbox.enregistrer(c, tenant, "feed",
                        {"type": "chef", "texte": f"Board : « {travail.get('titre', oid)} » contextualisé — {len(actions)} action(s) proposée(s)"
@@ -1282,40 +1384,56 @@ def _poser_livrable(c, t, contenu: str, now: float) -> str | None:
               "VALUES (?,?,?,?,?,?,?,?,?,?)", (lid, t["tenant_id"], carte["espace"], carte["id"], oid, "livrable",
                                                 "alimente", now, now, "jarvis"))
     _evenement(c, t["tenant_id"], "board_objet", mission_id=t["mission_id"], now=now, objet_id=oid, type="note",
-               espace=carte["espace"], livrable=True)
+               espace=carte["espace"], livrable=True, version=1)
+    _evenement(c, t["tenant_id"], "board_lien", mission_id=t["mission_id"], now=now, lien_id=lid, source_id=carte["id"],
+               cible_id=oid, par="jarvis", espace=carte["espace"], version=1)
     return oid
 
 
 def board(tenant_id: str, espace: str) -> list[dict]:
-    """Objets du Board avec l'état de leur mission et les artefacts produits (ce que le Studio affiche)."""
+    """Objets du Board avec l'état de leur mission et les artefacts produits (ce que le Studio affiche).
+    Nombre de requêtes constant, quel que soit le nombre de cartes."""
     c = _connecter(tenant_id)
     try:
-        out = []
-        for o in c.execute("SELECT * FROM board_objets WHERE tenant_id=? AND espace=? AND supprime=0 ORDER BY cree",
-                           (tenant_id, espace)):
-            d = dict(o)
-            if o["mission_id"]:
-                m = c.execute("SELECT statut FROM missions WHERE id=? AND tenant_id=?",
-                              (o["mission_id"], tenant_id)).fetchone()
-                d["mission_statut"] = m["statut"] if m else None
-                d["artefacts"] = [dict(a) for a in c.execute(
-                    "SELECT id, tache_id, type, contenu, fournisseur, factice, revue, cree FROM artefacts "
-                    "WHERE mission_id=? AND tenant_id=? ORDER BY cree", (o["mission_id"], tenant_id))]
-            out.append(d)
-        return out
+        objets = [dict(o) for o in c.execute(
+            "SELECT * FROM board_objets WHERE tenant_id=? AND espace=? AND supprime=0 ORDER BY cree", (tenant_id, espace))]
+        if any(o["mission_id"] for o in objets):
+            du_board = ("(SELECT mission_id FROM board_objets WHERE tenant_id=? AND espace=? AND supprime=0 "
+                        "AND mission_id IS NOT NULL)")
+            statuts = {m["id"]: m["statut"] for m in c.execute(
+                f"SELECT id, statut FROM missions WHERE tenant_id=? AND id IN {du_board}", (tenant_id, tenant_id, espace))}
+            artefacts: dict[str, list] = {}
+            for a in c.execute("SELECT id, mission_id, tache_id, type, contenu, fournisseur, factice, revue, cree FROM artefacts "
+                               f"WHERE tenant_id=? AND mission_id IN {du_board} ORDER BY cree", (tenant_id, tenant_id, espace)):
+                d = dict(a)
+                artefacts.setdefault(d.pop("mission_id"), []).append(d)
+            for o in objets:
+                if o["mission_id"]:
+                    o["mission_statut"] = statuts.get(o["mission_id"])
+                    o["artefacts"] = artefacts.get(o["mission_id"], [])
+        return objets
     finally:
         c.close()
 
 
-def board_deplacer(tenant_id: str, objet_id: str, x: float, y: float, *, par: str, now: float | None = None) -> None:
-    """Position d'un objet sur le canevas (bornée) ; l'événement permet aux autres onglets de suivre."""
+def board_deplacer(tenant_id: str, objet_id: str, x: float, y: float, *, par: str, version: int | None = None,
+                   now: float | None = None) -> dict:
+    """Position d'un objet sur le canevas (bornée). Le déplacement est VERSIONNÉ comme toute autre écriture : la
+    version avance, et si `version` est fournie et périmée, le déplacement est refusé (code `conflit`).
+    L'événement permet aux autres onglets de suivre."""
     now = now or time.time()
     x, y = max(-100_000.0, min(100_000.0, float(x))), max(-100_000.0, min(100_000.0, float(y)))
     with transaction(tenant_id) as c:
-        n = c.execute("UPDATE board_objets SET x=?, y=? WHERE id=? AND tenant_id=?", (x, y, objet_id, tenant_id)).rowcount
-        if not n:
+        o = c.execute("SELECT espace, version FROM board_objets WHERE id=? AND tenant_id=?", (objet_id, tenant_id)).fetchone()
+        if o is None:
             raise MissionError("inconnue", f"objet inconnu : {objet_id}")
-        _evenement(c, tenant_id, "board_deplace", now=now, objet_id=objet_id, x=x, y=y, par=par)
+        if version is not None and int(version) != o["version"]:
+            raise MissionError("conflit", f"l'objet a été modifié ailleurs (version {o['version']}, reçue {version})")
+        c.execute("UPDATE board_objets SET x=?, y=?, version=version+1, maj=? WHERE id=? AND tenant_id=?",
+                  (x, y, now, objet_id, tenant_id))
+        _evenement(c, tenant_id, "board_deplace", now=now, objet_id=objet_id, x=x, y=y, par=par, espace=o["espace"],
+                   version=o["version"] + 1)
+        return {"version": o["version"] + 1}
 
 
 # --- Lecture (toujours filtrée par tenant) -----------------------------------------------
@@ -1409,14 +1527,106 @@ def approbations_en_attente(tenant_id: str) -> list[dict]:
         c.close()
 
 
-def evenements(tenant_id: str, apres: int = 0, limite: int = 200) -> list[dict]:
-    """Journal ordonné du tenant après le numéro `apres` : ce que le Studio rejoue à la reconnexion."""
+def _requete_evenements(espace: str | None) -> str:
+    # un événement sans espace (mission, tâche, réglages…) concerne tous les Boards du tenant
+    return ("SELECT seq, tenant_id, mission_id, tache_id, type, donnees, ts FROM evenements WHERE tenant_id=? AND seq > ?"
+            + (" AND (espace IS NULL OR espace = ?)" if espace is not None else ""))
+
+
+def _evenement_public(r) -> dict:
+    return {"seq": r["seq"], "tenant_id": r["tenant_id"], "mission_id": r["mission_id"], "tache_id": r["tache_id"],
+            "type": r["type"], "donnees": json.loads(r["donnees"]), "ts": r["ts"]}
+
+
+def evenements(tenant_id: str, apres: int = 0, limite: int = 200, *, espace: str | None = None,
+               derniers: int | None = None) -> list[dict]:
+    """Journal ordonné du tenant après le numéro `apres` : ce que le Studio rejoue à la reconnexion.
+    `espace` : seulement ce qui concerne ce Board (et ce qui n'est lié à aucun). `derniers` : les N plus récents
+    (toujours rendus du plus ancien au plus récent) au lieu des premiers après `apres`."""
     c = _connecter(tenant_id)
     try:
-        return [{**dict(r), "donnees": json.loads(r["donnees"])} for r in c.execute(
-            "SELECT * FROM evenements WHERE tenant_id=? AND seq > ? ORDER BY seq LIMIT ?", (tenant_id, apres, limite))]
+        params = (tenant_id, apres, *((espace,) if espace is not None else ()))
+        if derniers is not None:
+            lignes = c.execute(_requete_evenements(espace) + " ORDER BY seq DESC LIMIT ?",
+                               (*params, max(0, min(int(derniers), 1000)))).fetchall()[::-1]
+        else:
+            lignes = c.execute(_requete_evenements(espace) + " ORDER BY seq LIMIT ?", (*params, limite)).fetchall()
+        return [_evenement_public(r) for r in lignes]
     finally:
         c.close()
+
+
+def _curseur(c, tenant_id: str) -> int:
+    r = c.execute("SELECT MAX(seq) AS s FROM evenements WHERE tenant_id=?", (tenant_id,)).fetchone()
+    return int(r["s"] or 0)
+
+
+def curseur(tenant_id: str) -> int:
+    """Numéro du dernier événement du tenant : le flux d'un client qui vient de charger son Board repart de là."""
+    c = _connecter(tenant_id)
+    try:
+        return _curseur(c, tenant_id)
+    finally:
+        c.close()
+
+
+class LecteurEvenements:
+    """Lecture répétée du journal pour un flux (SSE) : UNE connexion gardée pour toute la durée du flux, et sur
+    SQLite un tour à vide ne touche aucune table (PRAGMA data_version ne change que si une autre connexion a écrit).
+    Le sondage reste nécessaire — les écritures viennent d'autres processus (démon, exécutants, CLI) — mais il ne
+    coûte presque plus rien."""
+
+    def __init__(self, tenant_id: str, *, espace: str | None = None):
+        self.tenant_id, self.espace = tenant_id, espace
+        self._c = None
+        self._version = None
+        self._sqlite = backend().nom == "sqlite"
+
+    def _connexion(self):
+        if self._c is None:
+            self._c = _connecter(self.tenant_id)
+            self._version = None
+        return self._c
+
+    def fermer(self) -> None:
+        if self._c is not None:
+            try:
+                self._c.close()
+            finally:
+                self._c = None
+
+    def curseur(self) -> int:
+        return _curseur(self._connexion(), self.tenant_id)
+
+    def lire(self, apres: int, limite: int = 200) -> tuple[list[dict], int]:
+        """(événements du flux après `apres`, numéro jusqu'où le journal a été examiné). Le second avance même quand
+        tout ce qui est récent concerne d'autres Boards : le client reprendra de là, pas de plus loin."""
+        try:
+            c = self._connexion()
+            if self._sqlite:
+                version = c.execute("PRAGMA data_version").fetchone()[0]
+                if version == self._version:
+                    return [], apres  # personne n'a écrit depuis le dernier tour
+            # fin du journal lue AVANT les événements : tout ce qui était validé jusque-là est dans la réponse
+            haut = _curseur(c, self.tenant_id) if self.espace is not None else apres
+            lignes = c.execute(_requete_evenements(self.espace) + " ORDER BY seq LIMIT ?",
+                               (self.tenant_id, apres, *((self.espace,) if self.espace is not None else ()), limite)).fetchall()
+            if len(lignes) >= limite:
+                examine = lignes[-1]["seq"]  # il en reste peut-être : on relira au tour suivant sans attendre
+            else:
+                examine = max(apres, haut, lignes[-1]["seq"] if lignes else 0)
+                if self._sqlite:
+                    self._version = version
+            return [_evenement_public(r) for r in lignes], examine
+        except Exception:  # noqa: BLE001 — base déplacée, connexion perdue : on rouvrira au tour suivant
+            self.fermer()
+            raise
+
+    def retard(self, apres: int, plafond: int) -> bool:
+        """Vrai si plus de `plafond` événements du tenant attendent après `apres` (reprise trop lointaine)."""
+        r = self._connexion().execute("SELECT COUNT(*) AS n FROM (SELECT 1 FROM evenements WHERE tenant_id=? AND seq > ? "
+                                      "LIMIT ?) AS recents", (self.tenant_id, apres, plafond + 1)).fetchone()
+        return r["n"] > plafond
 
 
 def texte_mission(m: dict) -> str:

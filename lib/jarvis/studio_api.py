@@ -58,6 +58,7 @@ TYPES_V2 = {".html": "text/html; charset=utf-8", ".js": "text/javascript; charse
             ".svg": "image/svg+xml", ".json": "application/json", ".mp3": "audio/mpeg", ".mp4": "video/mp4",
             ".webp": "image/webp", ".wav": "audio/wav", ".pdf": "application/pdf"}
 MO_FLUX = 256 * 1024
+RETARD_FLUX_MAX = 2000  # au-delà de ce retard, un flux de Board demande une relecture complète plutôt qu'un rejeu
 
 _sessions: dict[str, float] = {}
 _verrou = threading.Lock()
@@ -245,13 +246,27 @@ class Handler(BaseHTTPRequestHandler):
                 self._json(200, missions.etat_execution(org))
             elif route == "/api/evenements":
                 apres = int((q.get("apres") or ["0"])[0] or 0)
-                self._json(200, {"evenements": missions.evenements(org, apres=apres)})
+                # « espace » et « dernier » (Board V2) : l'activité récente d'un Board, lue une fois au chargement
+                espace = board.nom_espace(q["espace"][0]) if q.get("espace") else None
+                derniers = int(q["dernier"][0]) if q.get("dernier") else None
+                self._json(200, {"evenements": missions.evenements(org, apres=apres, espace=espace, derniers=derniers)})
             elif route == "/api/flux":
+                # reprise : Last-Event-ID (reconnexion du navigateur) l'emporte sur ?apres= ; « fin » = à partir de maintenant
                 apres = self.headers.get("Last-Event-ID") or (q.get("apres") or ["0"])[0]
-                self._flux(org, int(apres or 0))
+                espace = board.nom_espace(q["espace"][0]) if q.get("espace") else None
+                self._flux(org, None if apres == "fin" else int(apres or 0), espace)
             elif route == "/api/v2/board":
                 self._json(200, {**board.objets(org, board.nom_espace((q.get("espace") or ["accueil"])[0])),
                                  "reglages": missions.reglages_board(org)})
+            elif route == "/api/v2/objets":
+                # lecture ciblée (delta) : ?ids=BO-…,BO-…&liens=BL-…&espace=… — ce qu'un client relit après un événement
+                ids = [i for i in (q.get("ids") or [""])[0].split(",") if i]
+                liens = [i for i in (q.get("liens") or [""])[0].split(",") if i]
+                if not all(re.fullmatch(r"BO-[0-9a-f]{12}", i) for i in ids) \
+                        or not all(re.fullmatch(r"BL-[0-9a-f]{12}", i) for i in liens):
+                    raise ValueError
+                self._json(200, {**board.lire(org, board.nom_espace((q.get("espace") or ["accueil"])[0]),
+                                              objets=ids, liens=liens), "reglages": missions.reglages_board(org)})
             elif route == "/api/v2/espaces":
                 self._json(200, {"espaces": board.espaces(org)})
             elif route == "/api/v2/activite":
@@ -392,8 +407,16 @@ class Handler(BaseHTTPRequestHandler):
         except apercus.ApercuRefuse as exc:
             self._json(422, {"erreur": str(exc), "url": url})
 
-    def _flux(self, org: str, apres: int) -> None:
-        """Server-Sent Events : chaque événement porte son numéro ; le navigateur reprend où il s'était arrêté."""
+    def _flux(self, org: str, apres: int | None, espace: str | None = None) -> None:
+        """Server-Sent Events : chaque événement porte son numéro ; le navigateur reprend où il s'était arrêté.
+
+        Sans `espace` (Studio V1, vues produit) : tout le journal du tenant après `apres`, comme toujours.
+        Avec `espace` (Board V2) : seulement ce Board et ce qui n'est lié à aucun ; chaque message porte `prec`, le
+        numéro du message précédent du flux (le client détecte un trou) ; des messages « curseur » font avancer le
+        point de reprise quand tout ce qui est récent concernait d'autres Boards ; « resync » demande une relecture
+        complète quand la reprise est impossible (journal vidé) ou trop lointaine.
+        Le journal est sondé (les écritures viennent aussi d'autres processus), mais un tour à vide ne coûte presque
+        rien : une connexion gardée, et aucune table lue tant que personne n'a écrit (missions.LecteurEvenements)."""
         self.send_response(200)
         self.send_header("Content-Type", "text/event-stream; charset=utf-8")
         self.send_header("Cache-Control", "no-store")
@@ -403,22 +426,52 @@ class Handler(BaseHTTPRequestHandler):
         self.close_connection = True
         dernier_signe = time.time()
         arret = getattr(self.server, "arret", None)
+        lecteur = missions.LecteurEvenements(org, espace=espace)
         try:
             self.wfile.write(b"retry: 2000\n\n")
+            fin = lecteur.curseur()
+            if apres is None:
+                apres = fin
+            elif espace is not None and (apres > fin or lecteur.retard(apres, RETARD_FLUX_MAX)):
+                # reprise impossible (base réinitialisée) ou trop lointaine : le client relit son Board, puis suit d'ici
+                apres = fin
+                self.wfile.write(f"event: resync\nid: {fin}\ndata: {json.dumps({'seq': fin})}\n\n".encode())
+            self.wfile.flush()
+            envoye = apres  # dernier numéro connu du client (message ou curseur)
             while not (arret and arret.is_set()) and _session_valide(self._cookie()):
-                lot = missions.evenements(org, apres=apres)
+                try:
+                    lot, examine = lecteur.lire(apres)
+                except (BrokenPipeError, ConnectionResetError):
+                    raise
+                except Exception:  # noqa: BLE001 — base momentanément indisponible : on réessaie au tour suivant
+                    lot, examine = [], apres
                 for e in lot:
-                    apres = e["seq"]
+                    if espace is not None:
+                        e["prec"] = envoye
+                    envoye = e["seq"]
                     self.wfile.write(f"id: {e['seq']}\ndata: {json.dumps(e, ensure_ascii=False)}\n\n".encode())
+                apres = max(apres, examine)
+                if espace is not None and apres > envoye:
+                    # le journal a avancé sans rien pour ce Board : le client note où reprendre
+                    self.wfile.write(f"event: curseur\nid: {apres}\ndata: "
+                                     f"{json.dumps({'seq': apres, 'prec': envoye})}\n\n".encode())
+                    envoye = apres
+                    self.wfile.flush()
+                    dernier_signe = time.time()
                 if lot:
                     self.wfile.flush()
+                    dernier_signe = time.time()
+                    if len(lot) >= 200:
+                        continue  # il en reste : pas d'attente
                 elif time.time() - dernier_signe > 15:
                     self.wfile.write(b": battement\n\n")
                     self.wfile.flush()
                     dernier_signe = time.time()
-                time.sleep(getattr(self.server, "intervalle_flux", 0.5))
+                time.sleep(getattr(self.server, "intervalle_flux", 0.25))
         except (BrokenPipeError, ConnectionResetError, OSError):
             pass
+        finally:
+            lecteur.fermer()
 
     # --- écritures ---
     def _ecriture_autorisee(self) -> bool:
@@ -466,8 +519,10 @@ class Handler(BaseHTTPRequestHandler):
                                            auteur="studio", x=float(corps.get("x") or 0), y=float(corps.get("y") or 0))
                 self._json(201, o)
             elif m := re.match(r"^/api/board/(BO-[0-9a-f]{12})/position$", route):
-                missions.board_deplacer(org, m.group(1), corps.get("x", 0), corps.get("y", 0), par="studio")
-                self._json(200, {"ok": True})
+                # déplacement versionné ; « version » facultative (le Studio V1 ne l'envoie pas) : périmée → 409
+                r = missions.board_deplacer(org, m.group(1), corps.get("x", 0), corps.get("y", 0), par="studio",
+                                            version=corps.get("version"))
+                self._json(200, {"ok": True, **r})
             elif m := re.match(r"^/api/approbations/(AP-[0-9a-f]{12})$", route):
                 accord = corps.get("accord")
                 if not isinstance(accord, bool):
@@ -525,7 +580,14 @@ class Handler(BaseHTTPRequestHandler):
             self._json(200, {"resultats": board.mettre_a_jour_lot(org, mods, par="studio")})
         elif route == "/api/v2/objets/supprimer":
             ids = [str(i) for i in corps.get("ids") or [] if isinstance(i, str)]
-            self._json(200, {"n": board.supprimer(org, ids, par="studio", restaurer=bool(corps.get("restaurer")))})
+            versions = corps.get("versions")
+            if versions is not None and not (isinstance(versions, dict) and all(
+                    isinstance(v, int) and not isinstance(v, bool) for v in versions.values())):
+                self._erreur(400, "« versions » : objet {identifiant: version} attendu")
+                return
+            # « versions » (Board V2) : une carte modifiée ailleurs depuis n'est pas supprimée (409, rien n'est touché)
+            r = board.supprimer_detail(org, ids, par="studio", restaurer=bool(corps.get("restaurer")), versions=versions)
+            self._json(200, {"n": r["n"], "versions": r["versions"]})
         elif m := re.match(r"^/api/v2/objets/(BO-[0-9a-f]{12})$", route):
             champs = corps.get("champs")
             if not isinstance(champs, dict):
@@ -555,10 +617,11 @@ class Handler(BaseHTTPRequestHandler):
                                               libelle=str(corps.get("libelle") or ""),
                                               style=str(corps.get("style") or "defaut"), par="studio")})
         elif m := re.match(r"^/api/v2/liens/(BL-[0-9a-f]{12})$", route):
-            board.modifier_lien(org, m.group(1), libelle=corps.get("libelle"), style=corps.get("style"),
-                                supprime=corps.get("supprime") if isinstance(corps.get("supprime"), bool) else None,
-                                par="studio")
-            self._json(200, {"ok": True})
+            # « version » facultative : périmée → 409, comme pour un objet
+            r = board.modifier_lien(org, m.group(1), libelle=corps.get("libelle"), style=corps.get("style"),
+                                    supprime=corps.get("supprime") if isinstance(corps.get("supprime"), bool) else None,
+                                    version=corps.get("version"), par="studio")
+            self._json(200, {"ok": True, **r})
         elif route == "/api/v2/apercu":
             self._apercu(org, str(corps.get("url") or ""))
         elif route == "/api/v2/missions":
@@ -615,7 +678,7 @@ def serveur(port: int = PORT_DEFAUT) -> ThreadingHTTPServer:
     ThreadingHTTPServer.daemon_threads = True
     httpd = ServeurStudio(("127.0.0.1", port), Handler)
     httpd.arret = threading.Event()
-    httpd.intervalle_flux = 0.5
+    httpd.intervalle_flux = 0.25  # un tour à vide ne lit aucune table (voir _flux)
     return httpd
 
 

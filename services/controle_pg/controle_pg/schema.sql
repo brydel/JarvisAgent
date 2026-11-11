@@ -95,6 +95,24 @@ CREATE TABLE IF NOT EXISTS board_commentaires (
 
 ALTER TABLE board_liens ADD COLUMN IF NOT EXISTS auteur TEXT NOT NULL DEFAULT 'humain';
 
+-- Fondations du Board (ajouts seulement, compatibles avec le code plus ancien : schema_version inchangée).
+-- Mêmes colonnes et mêmes index que SQLite (lib/jarvis/missions.py : COLONNES_AJOUTS, INDEX_AJOUTS).
+ALTER TABLE board_objets ADD COLUMN IF NOT EXISTS travail_ref TEXT;                     -- référence d'une carte de travail
+ALTER TABLE board_liens ADD COLUMN IF NOT EXISTS version INTEGER NOT NULL DEFAULT 1;    -- conflits sur les relations
+ALTER TABLE evenements ADD COLUMN IF NOT EXISTS espace TEXT;                            -- filtre du flux par Board
+CREATE INDEX IF NOT EXISTS board_objets_espace ON board_objets (tenant_id, espace, supprime);
+CREATE INDEX IF NOT EXISTS board_objets_mission ON board_objets (tenant_id, mission_id);
+CREATE INDEX IF NOT EXISTS board_objets_ref ON board_objets (tenant_id, travail_ref);
+CREATE INDEX IF NOT EXISTS board_liens_espace ON board_liens (tenant_id, espace, supprime);
+CREATE INDEX IF NOT EXISTS board_liens_source ON board_liens (tenant_id, source_id);
+CREATE INDEX IF NOT EXISTS board_liens_cible ON board_liens (tenant_id, cible_id);
+CREATE INDEX IF NOT EXISTS board_commentaires_objet ON board_commentaires (tenant_id, objet_id, cree);
+CREATE INDEX IF NOT EXISTS evenements_mission ON evenements (tenant_id, mission_id, type);
+CREATE INDEX IF NOT EXISTS taches_mission ON taches (tenant_id, mission_id);
+CREATE INDEX IF NOT EXISTS tentatives_tache ON tentatives (tenant_id, tache_id);
+CREATE INDEX IF NOT EXISTS artefacts_mission ON artefacts (tenant_id, mission_id);
+CREATE INDEX IF NOT EXISTS approbations_tache ON approbations (tenant_id, tache_id, statut);
+
 -- Version 4 : intentions et reçus persistés avec les changements métier.
 CREATE TABLE IF NOT EXISTS effets_outbox (
     id TEXT PRIMARY KEY, tenant_id TEXT NOT NULL REFERENCES organisations(id), cle TEXT NOT NULL,

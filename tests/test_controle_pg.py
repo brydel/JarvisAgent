@@ -13,6 +13,7 @@ import unittest
 from pathlib import Path
 
 import test_jarvis  # noqa: F401 — environnement isolé
+import test_board_fondations
 import test_board_v2
 import test_missions
 import test_studio
@@ -73,7 +74,10 @@ def _rejouer(*classes):
 _rejouer(test_missions.MachineEtatsTest, test_missions.TrancheVerticaleTest, test_missions.ReprisesTest,
          test_missions.IsolationTest, test_missions.PolitiqueTest, test_missions.FournisseursTest,
          test_missions.CliTest, test_studio.StudioTest, test_board_v2.ObjetsTest, test_board_v2.FichiersTest, test_board_v2.ChefTest,
-         test_board_v2.ApiV2Test)
+         test_board_v2.ApiV2Test,
+         # fondations du Board : versions, lecture ciblée, flux filtré et références, sur le schéma PostgreSQL réel
+         test_board_fondations.RequetesConstantesTest, test_board_fondations.VersionsTest, test_board_fondations.DeltaTest,
+         test_board_fondations.LecteurTest, test_board_fondations.ReferenceTest, test_board_fondations.ApiFondationsTest)
 
 
 @unittest.skipUnless(DISPONIBLE, RAISON)

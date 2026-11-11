@@ -1,5 +1,11 @@
 """Board V2 : objets spatiaux (géométrie, priorité, métadonnées), relations, fichiers multimédias, commentaires.
 
+Lecture : `objets()` rend tout un Board en un nombre CONSTANT de requêtes (agrégats groupés, jamais une requête
+par carte) avec le curseur du journal ; `lire()` rend quelques objets ou relations par identifiant — c'est la
+lecture ciblée qu'un client applique en delta quand le flux lui signale un changement.
+Écriture : objets ET relations portent une version ; une écriture qui fournit une version périmée est refusée
+(code `conflit`), et chaque événement board_* porte identifiant, espace et nouvelle version.
+
 S'appuie sur le moteur de missions (mêmes transactions, mêmes backends SQLite / PostgreSQL, même journal
 d'événements, contrôle du tenant à chaque requête). Règles :
 - validation serveur de chaque champ (types, bornes, priorité P1–P3) ; versions pour détecter les conflits ;
@@ -22,7 +28,7 @@ import time
 from pathlib import Path
 
 from . import config
-from .missions import MissionError, PRIORITES, _evenement, _id, transaction, _connecter
+from .missions import MissionError, PRIORITES, _curseur, _evenement, _id, reference_travail, transaction, _connecter
 
 ESPACE_MAX = 80
 MO = 1024 * 1024
@@ -289,10 +295,14 @@ def mettre_a_jour(tenant_id: str, objet_id: str, champs: dict, *, version: int |
             nouvelle = json.loads(propres["meta"])
             nouvelle.update({k: ancienne[k] for k in CLES_CHEF if k in ancienne})
             propres["meta"] = json.dumps(nouvelle, ensure_ascii=False)
-        sets = ", ".join(f"{k}=?" for k in propres)
+        colonnes = dict(propres)
+        if "meta" in propres:  # la référence d'une carte de travail suit meta (colonne indexée, voir travail_board)
+            colonnes["travail_ref"] = reference_travail(nouvelle)
+        sets = ", ".join(f"{k}=?" for k in colonnes)
         c.execute(f"UPDATE board_objets SET {sets}, version=version+1, maj=? WHERE id=? AND tenant_id=?",
-                  (*propres.values(), now, objet_id, tenant_id))
-        _evenement(c, tenant_id, "board_maj", now=now, objet_id=objet_id, champs=sorted(propres), par=par)
+                  (*colonnes.values(), now, objet_id, tenant_id))
+        _evenement(c, tenant_id, "board_maj", now=now, objet_id=objet_id, champs=sorted(propres), par=par,
+                   espace=o["espace"], version=o["version"] + 1)
         a_contextualiser = ("contenu" in propres and o["type"] in ("note", "texte") and not o["mission_id"]
                             and propres["contenu"].strip() not in ("", "Nouvelle note"))
     if a_contextualiser:  # première vraie écriture d'une note créée vide : le chef la lit
@@ -310,54 +320,54 @@ def mettre_a_jour_lot(tenant_id: str, modifications: list[dict], *, par: str) ->
         try:
             v = mettre_a_jour(tenant_id, str(m.get("id")), m.get("champs") or {}, version=m.get("version"), par=par)
             sorties.append({"id": m.get("id"), "ok": True, **v})
-        except (MissionError, TypeError, ValueError) as exc:
-            sorties.append({"id": m.get("id"), "ok": False, "erreur": str(exc)})
+        except MissionError as exc:  # `code` : le client distingue un conflit de version (il relit l'objet)
+            sorties.append({"id": m.get("id"), "ok": False, "erreur": str(exc), "code": exc.code})
+        except (TypeError, ValueError) as exc:
+            sorties.append({"id": m.get("id"), "ok": False, "erreur": str(exc), "code": "invalide"})
     return sorties
 
 
-def supprimer(tenant_id: str, ids: list[str], *, par: str, restaurer: bool = False, now: float | None = None) -> int:
-    """Suppression douce (ou restauration) d'objets et des relations qui les touchent."""
+def supprimer(tenant_id: str, ids: list[str], *, par: str, restaurer: bool = False, now: float | None = None,
+              versions: dict | None = None) -> int:
+    """Suppression douce (ou restauration) d'objets et des relations qui les touchent. Renvoie le nombre d'objets."""
+    return supprimer_detail(tenant_id, ids, par=par, restaurer=restaurer, now=now, versions=versions)["n"]
+
+
+def supprimer_detail(tenant_id: str, ids: list[str], *, par: str, restaurer: bool = False, now: float | None = None,
+                     versions: dict | None = None) -> dict:
+    """Comme `supprimer`, avec le détail : {"n", "versions": {id: nouvelle version}, "liens": [ids touchés]}.
+
+    `versions` ({id: version connue du client}) : si l'un des objets a changé depuis, RIEN n'est supprimé (code
+    `conflit`) — on ne supprime pas une carte que quelqu'un vient de modifier sans l'avoir vue.
+    Un événement par espace touché, avec tous les identifiants : un client retire ou relit exactement ces cartes."""
     now = now or time.time()
     if not ids or len(ids) > 500:
         raise MissionError("board", "1 à 500 objets")
     etat = 0 if restaurer else 1
+    ids = list(dict.fromkeys(str(i) for i in ids))
+    marques = ",".join("?" * len(ids))
     with transaction(tenant_id) as c:
-        n = 0
+        presents = {r["id"]: r for r in c.execute(
+            f"SELECT id, espace, version, supprime FROM board_objets WHERE tenant_id=? AND id IN ({marques})", (tenant_id, *ids))}
+        for oid, connue in (versions or {}).items():
+            o = presents.get(oid)
+            if o is not None and connue is not None and int(connue) != o["version"]:
+                raise MissionError("conflit", f"l'objet {oid} a été modifié ailleurs (version {o['version']}, reçue {connue})")
+        c.execute(f"UPDATE board_objets SET supprime=?, version=version+1, maj=? WHERE tenant_id=? AND id IN ({marques})",
+                  (etat, now, tenant_id, *ids))
+        liens = [r["id"] for r in c.execute(
+            f"SELECT id FROM board_liens WHERE tenant_id=? AND (source_id IN ({marques}) OR cible_id IN ({marques}))",
+            (tenant_id, *ids, *ids))]
+        c.execute(f"UPDATE board_liens SET supprime=?, version=version+1, maj=? WHERE tenant_id=? AND "
+                  f"(source_id IN ({marques}) OR cible_id IN ({marques}))", (etat, now, tenant_id, *ids, *ids))
+        par_espace: dict[str, list[str]] = {}
         for oid in ids:
-            n += c.execute("UPDATE board_objets SET supprime=?, version=version+1, maj=? WHERE id=? AND tenant_id=?",
-                           (etat, now, oid, tenant_id)).rowcount
-            c.execute("UPDATE board_liens SET supprime=?, maj=? WHERE tenant_id=? AND (source_id=? OR cible_id=?)",
-                      (etat, now, tenant_id, oid, oid))
-        _evenement(c, tenant_id, "board_restaure" if restaurer else "board_supprime", now=now, objets=ids[:50], par=par)
-        return n
-
-
-def _mission_resume(c, tenant_id: str, mission_id: str) -> dict | None:
-    m = c.execute("SELECT id, objectif, statut, cree FROM missions WHERE id=? AND tenant_id=?",
-                  (mission_id, tenant_id)).fetchone()
-    if m is None:
-        return None
-    taches = [dict(t) for t in c.execute(
-        "SELECT id, type, niveau, statut, fournisseur_choisi, fournisseur, essais, raison FROM taches "
-        "WHERE mission_id=? AND tenant_id=? ORDER BY cree, id", (mission_id, tenant_id))]
-    faites = sum(1 for t in taches if t["statut"] == "SUCCEEDED")
-    agents = [dict(a) for a in c.execute(
-        "SELECT a.id, a.tache_id, a.fournisseur, a.issue, a.debut, a.fin, e.nom AS executant, t.type AS role, "
-        "t.statut AS statut_tache FROM tentatives a JOIN taches t ON t.id=a.tache_id "
-        "LEFT JOIN executants e ON e.id=a.executant_id WHERE a.tenant_id=? AND t.mission_id=? "
-        "ORDER BY a.debut DESC", (tenant_id, mission_id))]
-    attente = c.execute("SELECT COUNT(*) AS n FROM approbations WHERE tenant_id=? AND statut='en_attente' AND tache_id IN "
-                        "(SELECT id FROM taches WHERE mission_id=?)", (tenant_id, mission_id)).fetchone()["n"]
-    outils: dict[str, list] = {}
-    for e in c.execute("SELECT donnees FROM evenements WHERE tenant_id=? AND mission_id=? AND type='outils'",
-                       (tenant_id, mission_id)):
-        d = json.loads(e["donnees"])
-        outils[d.get("tentative_id", "")] = d.get("outils") or []
-    for a in agents:
-        a["outils"] = outils.get(a["id"], [])
-    return {**dict(m), "taches": taches, "faites": faites, "total": len(taches),
-            "progression": round(100 * faites / len(taches)) if taches else 0, "agents": agents,
-            "approbations_en_attente": attente}
+            if oid in presents:
+                par_espace.setdefault(presents[oid]["espace"], []).append(oid)
+        for espace, objets_espace in par_espace.items():
+            _evenement(c, tenant_id, "board_restaure" if restaurer else "board_supprime", now=now, objets=objets_espace,
+                       par=par, espace=espace)
+        return {"n": len(presents), "versions": {oid: o["version"] + 1 for oid, o in presents.items()}, "liens": liens}
 
 
 def nom_espace(v: object) -> str:
@@ -385,31 +395,137 @@ def espaces(tenant_id: str) -> list[dict]:
                   key=lambda e: (e["nom"] != "accueil", not e["projet"], e["nom"].lower()))
 
 
+def _resumes_missions(c, tenant_id: str, choix: str, params: tuple) -> tuple[dict, dict]:
+    """Résumés ({mission_id: résumé}) et artefacts ({mission_id: [artefacts]}) des missions des objets choisis, en
+    six requêtes groupées quel que soit le nombre de missions. `choix` : sous-requête rendant les mission_id."""
+    missions = {m["id"]: {**dict(m), "taches": [], "agents": [], "approbations_en_attente": 0} for m in c.execute(
+        f"SELECT id, objectif, statut, cree FROM missions WHERE tenant_id=? AND id IN ({choix})", (tenant_id, *params))}
+    artefacts: dict[str, list] = {}
+    if not missions:
+        return missions, artefacts
+    for t in c.execute("SELECT id, mission_id, type, niveau, statut, fournisseur_choisi, fournisseur, essais, raison FROM taches "
+                       f"WHERE tenant_id=? AND mission_id IN ({choix}) ORDER BY cree, id", (tenant_id, *params)):
+        d = dict(t)
+        m = missions.get(d.pop("mission_id"))
+        if m is not None:
+            m["taches"].append(d)
+    for a in c.execute(
+            "SELECT a.id, a.tache_id, a.fournisseur, a.issue, a.debut, a.fin, e.nom AS executant, t.type AS role, "
+            "t.statut AS statut_tache, t.mission_id AS mission_id FROM tentatives a JOIN taches t ON t.id=a.tache_id "
+            f"LEFT JOIN executants e ON e.id=a.executant_id WHERE a.tenant_id=? AND t.mission_id IN ({choix}) "
+            "ORDER BY a.debut DESC", (tenant_id, *params)):
+        d = dict(a)
+        m = missions.get(d.pop("mission_id"))
+        if m is not None:
+            d["outils"] = []
+            m["agents"].append(d)
+    for r in c.execute("SELECT t.mission_id AS mission_id, COUNT(*) AS n FROM approbations a JOIN taches t ON t.id=a.tache_id "
+                       f"WHERE a.tenant_id=? AND a.statut='en_attente' AND t.mission_id IN ({choix}) GROUP BY t.mission_id",
+                       (tenant_id, *params)):
+        if r["mission_id"] in missions:
+            missions[r["mission_id"]]["approbations_en_attente"] = r["n"]
+    outils: dict[str, list] = {}
+    for e in c.execute(f"SELECT donnees FROM evenements WHERE tenant_id=? AND type='outils' AND mission_id IN ({choix}) "
+                       "ORDER BY seq", (tenant_id, *params)):
+        d = json.loads(e["donnees"])
+        outils[d.get("tentative_id", "")] = d.get("outils") or []
+    for m in missions.values():
+        faites = sum(1 for t in m["taches"] if t["statut"] == "SUCCEEDED")
+        m.update(faites=faites, total=len(m["taches"]),
+                 progression=round(100 * faites / len(m["taches"])) if m["taches"] else 0)
+        for a in m["agents"]:
+            a["outils"] = outils.get(a["id"], [])
+    for a in c.execute(f"SELECT id, mission_id, fournisseur, factice, revue, contenu FROM artefacts WHERE tenant_id=? "
+                       f"AND mission_id IN ({choix}) ORDER BY cree", (tenant_id, *params)):
+        d = dict(a)
+        artefacts.setdefault(d.pop("mission_id"), []).append(d)
+    return missions, artefacts
+
+
+def _mission_resume(c, tenant_id: str, mission_id: str) -> dict | None:
+    """Résumé d'une mission (compatibilité : même forme que les résumés groupés)."""
+    return _resumes_missions(c, tenant_id, "?", (mission_id,))[0].get(mission_id)
+
+
+def _completer(c, tenant_id: str, lignes: list, filtre: str, params: tuple) -> list[dict]:
+    """Objets enrichis (fichier, mission, artefacts, nombre de commentaires). `filtre` désigne les mêmes lignes de
+    board_objets que `lignes` : il sert de sous-requête aux agrégats — une requête par SORTE de donnée, pas par carte."""
+    objs = [dict(o) for o in lignes]
+    assets = {a["id"]: _asset_public(dict(a)) for a in c.execute(
+        f"SELECT * FROM board_assets WHERE tenant_id=? AND id IN (SELECT asset_id FROM board_objets WHERE {filtre} "
+        "AND asset_id IS NOT NULL)", (tenant_id, *params))} if any(o.get("asset_id") for o in objs) else {}
+    commentaires = {r["objet_id"]: r["n"] for r in c.execute(
+        f"SELECT objet_id, COUNT(*) AS n FROM board_commentaires WHERE tenant_id=? AND objet_id IN "
+        f"(SELECT id FROM board_objets WHERE {filtre}) GROUP BY objet_id", (tenant_id, *params))} if objs else {}
+    missions, artefacts = _resumes_missions(
+        c, tenant_id, f"SELECT mission_id FROM board_objets WHERE {filtre} AND mission_id IS NOT NULL", params) \
+        if any(o.get("mission_id") for o in objs) else ({}, {})
+    for d in objs:
+        d["meta"] = json.loads(d.get("meta") or "{}")
+        d.pop("travail_ref", None)  # détail de stockage : la référence reste lisible dans meta
+        if d.get("asset_id"):
+            d["asset"] = assets.get(d["asset_id"])
+        if d.get("mission_id"):
+            d["mission"] = missions.get(d["mission_id"])
+            d["artefacts"] = artefacts.get(d["mission_id"], [])
+        d["commentaires"] = commentaires.get(d["id"], 0)
+    return objs
+
+
 def objets(tenant_id: str, espace: str) -> dict:
-    """Tout le Board d'un espace : objets (avec fichier et résumé de mission réels), relations, compteurs."""
+    """Tout le Board d'un espace : objets (avec fichier et résumé de mission réels), relations, compteurs, et le
+    `curseur` du journal lu AVANT les données (le flux d'un client repart de là : rien n'est rejoué, rien n'est perdu).
+    Nombre de requêtes constant, quel que soit le nombre de cartes (test : tests/test_board_fondations.py)."""
     c = _connecter(tenant_id)
     try:
-        objs = []
-        for o in c.execute("SELECT * FROM board_objets WHERE tenant_id=? AND espace=? AND supprime=0 ORDER BY z, cree",
-                           (tenant_id, espace)):
-            d = dict(o)
-            d["meta"] = json.loads(d.get("meta") or "{}")
-            if d.get("asset_id"):
-                a = c.execute("SELECT * FROM board_assets WHERE id=? AND tenant_id=?",
-                              (d["asset_id"], tenant_id)).fetchone()
-                d["asset"] = _asset_public(dict(a)) if a else None
-            if d.get("mission_id"):
-                d["mission"] = _mission_resume(c, tenant_id, d["mission_id"])
-                arts = c.execute("SELECT id, fournisseur, factice, revue, contenu FROM artefacts WHERE mission_id=? "
-                                 "AND tenant_id=? ORDER BY cree", (d["mission_id"], tenant_id)).fetchall()
-                d["artefacts"] = [dict(a) for a in arts]
-            d["commentaires"] = c.execute("SELECT COUNT(*) AS n FROM board_commentaires WHERE tenant_id=? AND objet_id=?",
-                                          (tenant_id, d["id"])).fetchone()["n"]
-            objs.append(d)
+        curseur = _curseur(c, tenant_id)
+        filtre, params = "tenant_id=? AND espace=? AND supprime=0", (tenant_id, espace)
+        lignes = c.execute(f"SELECT * FROM board_objets WHERE {filtre} ORDER BY z, cree", params).fetchall()
+        objs = _completer(c, tenant_id, lignes, filtre, params)
         liens = [dict(l) for l in c.execute(
             "SELECT * FROM board_liens WHERE tenant_id=? AND espace=? AND supprime=0 ORDER BY cree",
             (tenant_id, espace))]
-        return {"espace": espace, "objets": objs, "liens": liens}
+        return {"espace": espace, "objets": objs, "liens": liens, "curseur": curseur}
+    finally:
+        c.close()
+
+
+LIRE_MAX = 200
+
+
+def lire(tenant_id: str, espace: str, *, objets: list[str] | None = None, liens: list[str] | None = None) -> dict:
+    """Lecture ciblée (delta) : quelques objets et relations d'un espace, par identifiant.
+
+    Rend les objets demandés encore présents dans CET espace (même forme que `objets()`), les relations demandées
+    et toutes celles qui touchent un objet demandé, et dans `absents` les identifiants qui n'y sont plus (supprimés,
+    inconnus, d'un autre espace) : pour un objet demandé, la réponse fait foi. Nombre de requêtes constant."""
+    ids = list(dict.fromkeys(str(i) for i in objets or []))
+    ids_liens = list(dict.fromkeys(str(i) for i in liens or []))
+    if len(ids) > LIRE_MAX or len(ids_liens) > LIRE_MAX:
+        raise MissionError("board", f"{LIRE_MAX} identifiants au plus par lecture")
+    c = _connecter(tenant_id)
+    try:
+        curseur = _curseur(c, tenant_id)
+        objs: list[dict] = []
+        trouves: list[dict] = []
+        if ids:
+            marques = ",".join("?" * len(ids))
+            filtre, params = f"tenant_id=? AND espace=? AND supprime=0 AND id IN ({marques})", (tenant_id, espace, *ids)
+            lignes = c.execute(f"SELECT * FROM board_objets WHERE {filtre} ORDER BY z, cree", params).fetchall()
+            objs = _completer(c, tenant_id, lignes, filtre, params)
+            trouves = [dict(l) for l in c.execute(
+                f"SELECT * FROM board_liens WHERE tenant_id=? AND espace=? AND supprime=0 AND "
+                f"(source_id IN ({marques}) OR cible_id IN ({marques})) ORDER BY cree", (tenant_id, espace, *ids, *ids))]
+        if ids_liens:
+            marques = ",".join("?" * len(ids_liens))
+            deja = {l["id"] for l in trouves}
+            trouves += [dict(l) for l in c.execute(
+                f"SELECT * FROM board_liens WHERE tenant_id=? AND espace=? AND supprime=0 AND id IN ({marques}) "
+                "ORDER BY cree", (tenant_id, espace, *ids_liens)) if l["id"] not in deja]
+        presents, liens_presents = {o["id"] for o in objs}, {l["id"] for l in trouves}
+        return {"espace": espace, "objets": objs, "liens": trouves, "curseur": curseur,
+                "absents": {"objets": [i for i in ids if i not in presents],
+                            "liens": [i for i in ids_liens if i not in liens_presents]}}
     finally:
         c.close()
 
@@ -437,12 +553,15 @@ def lier(tenant_id: str, espace: str, source_id: str, cible_id: str, *, libelle:
         c.execute("INSERT INTO board_liens (id, tenant_id, espace, source_id, cible_id, libelle, style, cree, maj, auteur) "
                   "VALUES (?,?,?,?,?,?,?,?,?,?)", (lid, tenant_id, espace, source_id, cible_id, libelle[:60], style, now, now,
                                                     "jarvis" if par.startswith("jarvis") else "humain"))
-        _evenement(c, tenant_id, "board_lien", now=now, lien_id=lid, source_id=source_id, cible_id=cible_id, par=par)
+        _evenement(c, tenant_id, "board_lien", now=now, lien_id=lid, source_id=source_id, cible_id=cible_id, par=par,
+                   espace=espace, version=1)
         return lid
 
 
 def modifier_lien(tenant_id: str, lien_id: str, *, libelle: str | None = None, style: str | None = None,
-                  supprime: bool | None = None, par: str, now: float | None = None) -> None:
+                  supprime: bool | None = None, version: int | None = None, par: str, now: float | None = None) -> dict:
+    """Renomme, restyle, supprime ou restaure une relation. `version` : si fournie et périmée, conflit (code
+    `conflit`), comme pour un objet. Renvoie {"version": nouvelle version}."""
     now = now or time.time()
     if style is not None and style not in STYLES_LIEN:
         raise MissionError("board", f"style de relation inconnu : {style}")
@@ -450,10 +569,15 @@ def modifier_lien(tenant_id: str, lien_id: str, *, libelle: str | None = None, s
         l = c.execute("SELECT * FROM board_liens WHERE id=? AND tenant_id=?", (lien_id, tenant_id)).fetchone()
         if l is None:
             raise MissionError("inconnue", "relation inconnue")
-        c.execute("UPDATE board_liens SET libelle=?, style=?, supprime=?, maj=? WHERE id=? AND tenant_id=?",
-                  ((libelle if libelle is not None else l["libelle"])[:60], style or l["style"],
-                   int(supprime) if supprime is not None else l["supprime"], now, lien_id, tenant_id))
-        _evenement(c, tenant_id, "board_lien_maj", now=now, lien_id=lien_id, par=par)
+        if version is not None and int(version) != l["version"]:
+            raise MissionError("conflit", f"la relation a été modifiée ailleurs (version {l['version']}, reçue {version})")
+        etat = int(supprime) if supprime is not None else l["supprime"]
+        c.execute("UPDATE board_liens SET libelle=?, style=?, supprime=?, version=version+1, maj=? WHERE id=? AND tenant_id=?",
+                  (str(libelle if libelle is not None else l["libelle"])[:60], style or l["style"], etat, now, lien_id,
+                   tenant_id))
+        _evenement(c, tenant_id, "board_lien_maj", now=now, lien_id=lien_id, par=par, espace=l["espace"],
+                   version=l["version"] + 1, supprime=bool(etat))
+        return {"version": l["version"] + 1}
 
 
 # --- Commentaires ------------------------------------------------------------------------------------------
@@ -464,12 +588,16 @@ def commenter(tenant_id: str, objet_id: str, texte: str, *, auteur: str, now: fl
     if not texte or len(texte) > 4000:
         raise MissionError("board", "commentaire vide ou trop long (4 000 caractères au plus)")
     with transaction(tenant_id) as c:
-        if not c.execute("SELECT 1 FROM board_objets WHERE id=? AND tenant_id=? AND supprime=0",
-                         (objet_id, tenant_id)).fetchone():
+        o = c.execute("SELECT espace FROM board_objets WHERE id=? AND tenant_id=? AND supprime=0",
+                      (objet_id, tenant_id)).fetchone()
+        if o is None:
             raise MissionError("inconnue", f"objet inconnu : {objet_id}")
         cid = _id("CM")
-        c.execute("INSERT INTO board_commentaires VALUES (?,?,?,?,?,?)", (cid, tenant_id, objet_id, auteur, texte, now))
-        _evenement(c, tenant_id, "board_commentaire", now=now, objet_id=objet_id, commentaire_id=cid, par=auteur)
+        c.execute("INSERT INTO board_commentaires (id, tenant_id, objet_id, auteur, texte, cree) VALUES (?,?,?,?,?,?)",
+                  (cid, tenant_id, objet_id, auteur, texte, now))
+        # sans version : le compteur de commentaires change, pas l'objet — un client relit quand même la carte
+        _evenement(c, tenant_id, "board_commentaire", now=now, objet_id=objet_id, commentaire_id=cid, par=auteur,
+                   espace=o["espace"])
         return cid
 
 

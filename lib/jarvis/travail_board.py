@@ -7,8 +7,12 @@ Ce module le rend visible sur le Board du projet, sans rien lancer lui-même :
 - une carte « équipe » par projet, qui n'apparaît que lorsqu'il y a du travail : chaque agent avec son rôle, son
   modèle et ce qu'il fait, reliée aux tâches en cours.
 
-Les cartes sont retrouvées par leur référence (meta.travail_ref) : la synchronisation est idempotente et ne
-réécrit une carte que si son contenu change. Une carte supprimée par l'humain n'est jamais recréée.
+Les cartes sont retrouvées par leur référence : la colonne indexée board_objets.travail_ref (copie de
+meta.travail_ref, tenue à jour à chaque écriture de meta). La synchronisation est idempotente et ne réécrit une
+carte que si son contenu change. Une carte supprimée par l'humain n'est jamais recréée.
+
+Migration douce : les cartes posées avant l'existence de la colonne sont reprises une fois (SQLite : à la
+préparation du schéma, voir missions.BackendSQLite._preparer ; PostgreSQL : au premier passage de ce module).
 """
 
 from __future__ import annotations
@@ -27,19 +31,50 @@ STATUTS_FICHE = {"lancee": "lancée", "en_cours": "travaille", "attente": "atten
 RECENT_S = 12 * 3600  # une tâche finie reste visible 12 h (un plan décidé : 24 h)
 
 
+_REPRIS: set = set()  # (backend, tenant) dont les anciennes cartes ont déjà été reprises par ce processus
+
+
+def migrer_references(tenant: str) -> int:
+    """Reprend les cartes de travail posées avant la colonne `travail_ref` (référence seulement dans meta).
+    Idempotent ; ne fait rien dès que toutes les cartes ont leur colonne. Renvoie le nombre de cartes reprises."""
+    with missions.transaction(tenant) as c:
+        anciennes = c.execute("SELECT id, meta FROM board_objets WHERE tenant_id=? AND travail_ref IS NULL "
+                              "AND meta LIKE ?", (tenant, '%"travail_ref"%')).fetchall()  # motif en paramètre (PostgreSQL)
+        n = 0
+        for r in anciennes:
+            try:
+                ref = missions.reference_travail(json.loads(r["meta"]))
+            except ValueError:
+                ref = None
+            if ref:
+                c.execute("UPDATE board_objets SET travail_ref=? WHERE id=? AND tenant_id=?", (ref, r["id"], tenant))
+                n += 1
+        return n
+
+
+def _reprendre(tenant: str) -> None:
+    cle = (missions.backend().nom, tenant)
+    if cle in _REPRIS or cle[0] == "sqlite":  # SQLite : déjà fait, une fois, à la préparation du schéma
+        return
+    migrer_references(tenant)
+    _REPRIS.add(cle)
+
+
 def _references(tenant: str) -> set[str]:
     """Références des cartes de travail déjà posées (supprimées comprises : on ne les recrée pas)."""
+    _reprendre(tenant)
     c = missions._connecter(tenant)
     try:
-        return {json.loads(r["meta"]).get("travail_ref", "") for r in c.execute(
-            "SELECT meta FROM board_objets WHERE tenant_id=? AND meta LIKE '%travail_ref%'", (tenant,))}
+        return {r["travail_ref"] for r in c.execute(
+            "SELECT travail_ref FROM board_objets WHERE tenant_id=? AND travail_ref IS NOT NULL", (tenant,))}
     finally:
         c.close()
 
 
 def _trouver(c, tenant: str, espace: str, ref: str):
-    return c.execute("SELECT id, meta, supprime, x, y, largeur, hauteur FROM board_objets WHERE tenant_id=? AND espace=? "
-                     "AND meta LIKE ? ORDER BY cree LIMIT 1", (tenant, espace, f'%"travail_ref": "{ref}"%')).fetchone()
+    """La carte de travail `ref` de cet espace (la plus ancienne), par l'index (tenant_id, travail_ref)."""
+    return c.execute("SELECT id, meta, supprime, x, y, largeur, hauteur, espace, version FROM board_objets WHERE tenant_id=? "
+                     "AND travail_ref=? AND espace=? ORDER BY cree LIMIT 1", (tenant, ref, espace)).fetchone()
 
 
 def _carte(tenant: str, espace: str, ref: str, type_: str, meta: dict, *, pres_de: str | None = None,
@@ -66,9 +101,12 @@ def _carte(tenant: str, espace: str, ref: str, type_: str, meta: dict, *, pres_d
         nouvelle = {**ancienne, **meta}
         if nouvelle != ancienne:  # aucune écriture (ni rechargement du Studio) si rien n'a changé
             with missions.transaction(tenant) as c:
-                c.execute("UPDATE board_objets SET meta=?, version=version+1, maj=? WHERE id=? AND tenant_id=?",
-                          (json.dumps(nouvelle, ensure_ascii=False), now, o["id"], tenant))
-                missions._evenement(c, tenant, "board_maj", now=now, objet_id=o["id"], champs=["meta"], par="jarvis")
+                # version relue dans la transaction : l'événement porte celle que la carte a réellement après l'écriture
+                v = c.execute("SELECT version FROM board_objets WHERE id=? AND tenant_id=?", (o["id"], tenant)).fetchone()
+                c.execute("UPDATE board_objets SET meta=?, travail_ref=?, version=version+1, maj=? WHERE id=? AND tenant_id=?",
+                          (json.dumps(nouvelle, ensure_ascii=False), ref, now, o["id"], tenant))
+                missions._evenement(c, tenant, "board_maj", now=now, objet_id=o["id"], champs=["meta"], par="jarvis",
+                                    espace=espace, version=(v["version"] if v else o["version"]) + 1)
         return o["id"]
     if x is None:
         x, y = synchro.position_libre(tenant, espace, *taille)
@@ -203,6 +241,7 @@ def termines(tenant: str, espace: str) -> list[dict]:
     """Cartes de travail finies d'un Board : tâches non actives, équipe au repos, plans approuvés sans tâche active.
     Un plan encore à valider et tout ce qui est en cours restent."""
     from . import board
+    _reprendre(tenant)
     objs = [o for o in board.objets(tenant, espace)["objets"] if o["meta"].get("travail_ref")]
     actives_par_plan = {}
     for o in objs:
