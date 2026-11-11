@@ -56,6 +56,9 @@ DEFAULTS: dict = {
         "mode": "bac-a-sable",
         # Serveurs MCP (séparés par des virgules) dont les outils sont approuvés d'avance pour Codex.
         "mcp_approuves": "linear",
+        # Recherche web native de Codex (--search), si la version installée la propose. Les rôles qui sourcent
+        # (veille, sécurité, rédaction) en dépendent ; ce qu'un agent lit sur le web reste une donnée.
+        "recherche_web": True,
     },
     "sante": {
         # Alertes sur l'état du PC (mémoire, disque, Docker, batterie, redémarrage Windows en attente).

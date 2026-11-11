@@ -1,0 +1,24 @@
+#!/usr/bin/env bash
+# Faux gh pour les tests. Sans FAKE_GH_DIR il échoue comme un gh non connecté : aucun test existant ne change.
+#   FAKE_GH_DIR/pr-<n>.json        réponse de « gh pr view <n> --json … »
+#   FAKE_GH_DIR/pr-<n>-inline.json réponse de « gh api repos/{owner}/{repo}/pulls/<n>/comments »
+#   FAKE_GH_DIR/pr-list.json       réponse de « gh pr list --head <branche> … »
+#   FAKE_GH_LOG                    journal des appels (une ligne par appel)
+#   FAKE_GH_LENT=<secondes>        gh qui ne répond pas à temps
+set -euo pipefail
+[[ -n "${FAKE_GH_LOG:-}" ]] && printf '%s\n' "$*" >>"$FAKE_GH_LOG"
+[[ -n "${FAKE_GH_LENT:-}" ]] && sleep "$FAKE_GH_LENT"
+dir="${FAKE_GH_DIR:-}"
+if [[ -z "$dir" ]]; then
+  echo "gh : non connecté (faux gh de test, FAKE_GH_DIR non défini)" >&2
+  exit 1
+fi
+servir() { [[ -f "$1" ]] && cat "$1" || { echo "gh : introuvable ($1)" >&2; exit 1; }; }
+case "${1:-} ${2:-}" in
+  "pr view") servir "$dir/pr-${3:-}.json" ;;
+  "pr list") servir "$dir/pr-list.json" ;;
+  "api "*)
+    n="$(sed -n 's|.*/pulls/\([0-9]*\)/comments$|\1|p' <<<"${2:-}")"
+    servir "$dir/pr-$n-inline.json" ;;
+  *) echo "gh : commande non simulée : $*" >&2; exit 1 ;;
+esac

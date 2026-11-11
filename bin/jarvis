@@ -425,13 +425,21 @@ cmd_task() {
     codex)  agent="cx"; rules="AGENTS.md" ;;
     *) abandon "affectation illisible pour $issue (agent « $who »)." ;;
   esac
-  [[ -f "$root/$rules" ]] || warn "$rules absent de ce projet : lance « jarvis init-project » pour ajouter le protocole Linear."
+  # Le protocole de l'usine est dans le prompt lui-même ; le fichier de règles du projet apporte en plus sa
+  # stack et ses commandes de vérification. S'il manque, le prompt le dit à l'agent, qui les déduit du dépôt.
+  local sans_regles=0
+  if [[ ! -f "$root/$rules" ]]; then
+    sans_regles=1
+    warn "$rules absent de ce projet : l'agent reçoit le protocole dans son prompt, mais devra deviner les commandes de vérification. Lance « jarvis init-project » pour les lui donner."
+  fi
 
   prompt_file="$(mktemp --suffix=.md)"
   local brief_file
   brief_file="$(mktemp)"
   local -a pargs=(--projet "$projet" --issue "$issue" --branche "$branch" --regles "$rules" --role "${F[role]:-}"
-                  --brief-sortie "$brief_file")
+                  --brief-sortie "$brief_file" --agent "$who" --modele "${F[modele]:-}" --effort "${F[effort]:-}"
+                  --taille "${F[taille]:-M}" --jetons-max "${F[jetons_max]:-}")
+  ((sans_regles)) && pargs+=(--sans-regles)
   [[ -n "$revue" ]] && pargs+=(--revue "$revue")
   [[ -n "$consignes" ]] && pargs+=(--consignes "$consignes")
   py prompt-construire "${pargs[@]}" >"$prompt_file" || abandon "impossible de préparer le prompt de l'agent."

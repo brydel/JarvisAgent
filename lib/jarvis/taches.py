@@ -19,7 +19,8 @@ OUVERTS = ("lancee", "en_cours", "attente", "silencieuse", "inconnue")
 STATUTS = {"lancee": "lancée", "en_cours": "en cours", "attente": "attend", "silencieuse": "silencieuse",
            "inconnue": "état inconnu", "terminee": "terminée", "perdue": "interrompue"}
 VERDICTS = {"pret": "prêt", "corrections": "corrections demandées"}
-DEMARRAGE_MAX = 15 * 60  # une fiche « lancée » jamais vue par workmux après ce délai est perdue
+NOTE_VERDICT_MAX = 1500  # la note d'un verdict « corrections » est remise à l'agent relancé (prompt_agent.py)
+DEMARRAGE_MAX = 15 * 60 # une fiche « lancée » jamais vue par workmux après ce délai est perdue
 ABSENCE_MAX = 120         # secondes sans voir la fenêtre d'un agent au travail avant de le dire interrompu
 
 # Classes d'échec d'un essai. « quota » et « bloque » se constatent seuls (démon) ; les trois autres se
@@ -137,7 +138,7 @@ def noter_verdict(projet: str, issue: str, verdict: str, note: str = "") -> dict
     def _set(data):
         for t in reversed(data["taches"]):
             if t["projet"] == projet and t["issue"] == issue.upper() and not t.get("revue") and t["role"] != "revue":
-                t["verdict"], t["verdict_note"], t["verdict_ts"] = verdict, note.strip()[:500], time.time()
+                t["verdict"], t["verdict_note"], t["verdict_ts"] = verdict, note.strip()[:NOTE_VERDICT_MAX], time.time()
                 return dict(t)
         return None
 
@@ -146,6 +147,43 @@ def noter_verdict(projet: str, issue: str, verdict: str, note: str = "") -> dict
         from . import evenements
         evenements.sans_echec(t["id"], "verdict", verdict=verdict, note=note.strip()[:120] or None)
     return t
+
+
+def dernier_verdict(projet: str, issue: str, role: str = "", liste: list[dict] | None = None) -> dict | None:
+    """Fiche de production la plus récente qui porte un verdict de relecture, ou None.
+
+    Avec `role` : dans l'unité de travail (projet, issue, rôle) ; sans : sur toute l'issue (pour un relecteur)."""
+    liste = toutes() if liste is None else liste
+    fiches = unite(projet, issue, role, liste) if role else [
+        t for t in liste if t["projet"] == projet and t["issue"] == issue.upper()]
+    return next((t for t in reversed(fiches) if t.get("verdict") and not t.get("revue") and t["role"] != "revue"), None)
+
+
+def pr_connue(projet: str, issue: str, liste: list[dict] | None = None) -> str:
+    """Numéro de la PR de l'issue quand le registre le connaît (dernière relecture lancée avec --revue), sinon ''."""
+    liste = toutes() if liste is None else liste
+    for t in reversed(liste):
+        if t["projet"] == projet and t["issue"] == issue.upper() and str(t.get("revue") or "").isdigit():
+            return str(t["revue"])
+    return ""
+
+
+def historique(projet: str, issue: str, role: str, liste: list[dict] | None = None) -> list[dict]:
+    """Essais déjà faits sur l'unité de travail, du plus ancien au plus récent, résumés pour un prompt d'agent.
+
+    Chaque essai : {"id", "essai", "agent", "modele", "statut", "classe", "classe_note", "verdict",
+    "verdict_note", "jetons", "worktree"}. Les lancements jamais démarrés ne comptent pas."""
+    out = []
+    for t in unite(projet, issue, role, liste):
+        if t.get("jamais_demarre"):
+            continue
+        e = t.get("echec") or {}
+        out.append({"id": t["id"], "essai": t.get("essai") or len(out) + 1, "agent": t.get("agent") or "",
+                    "modele": t.get("modele") or "", "statut": t["statut"], "classe": e.get("classe") or "",
+                    "classe_note": e.get("note") or "", "verdict": t.get("verdict") or "",
+                    "verdict_note": t.get("verdict_note") or "", "jetons": _total(t.get("jetons")),
+                    "worktree": t.get("worktree") or ""})
+    return out
 
 
 def _trouver(t: dict, par_chemin: dict, par_cle: dict, par_nom: dict) -> dict | None:

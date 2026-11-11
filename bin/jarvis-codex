@@ -7,6 +7,7 @@
 #    et dans les caches de paquets (pnpm, npm, uv, pip) ;
 #  - --ask-for-approval never : aucune demande, une action non prévue échoue proprement ;
 #  - accès réseau dans le bac à sable (tests, API, gh) ;
+#  - recherche web native (--search) quand ce Codex la propose (réglage codex.recherche_web) ;
 #  - outils MCP déjà configurés (Linear…) approuvés d'avance : sinon « never » les refuse ;
 #  - git push et gh pr passent par ~/.codex/rules/jarvis.rules (config/codex/jarvis.rules) ;
 #  - modèle et effort de raisonnement : ceux de la tâche enregistrée pour ce worktree (routeur) ;
@@ -123,4 +124,14 @@ if [[ "${1:-}" == "--tester-commit-dedans" ]]; then
   exit 0
 fi
 
-exec codex "${sandbox[@]}" ${mcp[@]+"${mcp[@]}"} ${modele[@]+"${modele[@]}"} "$@"
+# Recherche web native de Codex (--search) : sans elle un agent Codex ne peut rien sourcer, alors que la veille,
+# la sécurité (avis sur les dépendances) et la rédaction en dépendent. Ajoutée seulement si ce Codex connaît
+# l'option (une option inconnue empêcherait l'agent de démarrer) ; « jarvis regler codex.recherche_web non » la coupe.
+recherche=()
+reglage_recherche="$(PYTHONPATH="$JARVIS_HOME/lib" python3 -m jarvis reglage-lire codex.recherche_web 2>/dev/null || true)"
+if [[ "$reglage_recherche" != "false" && "$reglage_recherche" != "non" ]] \
+   && codex --help 2>/dev/null | grep -q -- '--search'; then
+  recherche=(--search)
+fi
+
+exec codex "${sandbox[@]}" ${recherche[@]+"${recherche[@]}"} ${mcp[@]+"${mcp[@]}"} ${modele[@]+"${modele[@]}"} "$@"

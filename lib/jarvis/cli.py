@@ -755,64 +755,29 @@ def cmd_modele_decision(a, ok: bool) -> int:
 # --- Registre des tâches, bilan, usine ------------------------------------------------------------
 
 def cmd_prompt_construire(a) -> int:
-    """Écrit le prompt d'un agent : mission, brief de son rôle, poste de travail, consignes du chef."""
-    from . import livrables, roles
+    """Écrit le prompt d'un agent (lib/jarvis/prompt_agent.py) : mission, corrections exigées, brief du rôle,
+    poste, consignes du chef, contexte utile, protocole, définition de « fini » et format du compte rendu."""
+    from . import prompt_agent, roles, versions_roles
     role = roles.ou_defaut(a.role)
     issue = a.issue.upper()
-    dossier = livrables.dossier(a.projet, issue)
-    out = [f"Tu travailles dans l'usine Jarvis en tant que **{role['titre']}** (équipe {role['equipe']}).", ""]
-    out.append("## Mission")
-    if a.revue:
-        out += [f"Mission de RELECTURE uniquement : relis la PR #{a.revue} liée à l'issue Linear {issue}.",
-                "Ne modifie aucun fichier, ne crée aucun commit, n'ouvre aucune PR.",
-                "Vérifie point par point les critères d'acceptation de l'issue, la sécurité, les tests et la lisibilité.",
-                f"Publie tes remarques avec « gh pr review {a.revue} --comment --body-file <fichier> »,",
-                "puis résume ton verdict dans l'issue Linear (commentaire « ✅ REVUE » ou « ❓ REVUE »)."]
-    elif role["nom"] == "revue":
-        out += [f"Mission de RELECTURE uniquement : relis le travail livré pour l'issue Linear {issue}.",
-                "Ne modifie aucun fichier, ne crée aucun commit, n'ouvre aucune PR.",
-                f"Ce travail est soit une PR liée à l'issue, soit des fichiers déposés dans `{dossier}` : l'issue et son "
-                "commentaire ✅ TERMINÉ te disent lesquels. Pour une vidéo ou un visuel, lance le contrôle "
-                "(`jarvis studio verifier <fichier>`), regarde la planche-contact avec ton outil de lecture d'image, "
-                "et vérifie chaque affirmation contre le produit réel.",
-                "Publie ton verdict dans l'issue Linear (commentaire « ✅ REVUE » ou « ❓ REVUE »)."]
-    else:
-        out += [f"Traite l'issue Linear {issue}. Lis-la en entier via l'outil Linear avant de commencer,",
-                f"puis suis à la lettre le protocole décrit dans {a.regles} (statut, commentaires ❓/✅, PR).",
-                "Ne fusionne jamais dans main."]
-        if role["livrable"] != "pr":
-            out += ["Ton livrable principal est un ensemble de fichiers, pas du code : dépose-les dans le dossier des "
-                    "livrables ci-dessous. La PR ne contient que les sources utiles à versionner (scénarios, "
-                    "storyboards, textes) ; s'il n'y en a aucune, ne crée pas de PR et dis-le dans ton commentaire final."]
-    from . import versions_roles
     version, corps_candidat = versions_roles.choisir(role["nom"], a.projet, issue)  # essai progressif d'un brief
     if getattr(a, "brief_sortie", ""):
         Path(a.brief_sortie).write_text(version, encoding="utf-8")  # la fiche de tâche notera la version reçue
-    corps = corps_candidat if corps_candidat is not None else role["corps"]
-    if corps:
-        out += ["", f"## Ton rôle : {role['titre']}", "", corps]
-    out += ["", "## Ton poste", "",
-            f"- Projet : {a.projet} · issue : {issue} · branche : {a.branche}",
-            f"- Livrables hors dépôt (captures, vidéos, rapports) : `{dossier}` (variable `$JARVIS_LIVRABLES`). "
-            "Ne les committe jamais.",
-            f"- Outils de l'usine : `{config.JARVIS_HOME}` (variable `$JARVIS_HOME`), dont le studio "
-            "`skills/jarvis-studio/`.",
-            "- Ton commentaire final dans Linear cite ton rôle et liste les fichiers déposés dans les livrables.",
-            "- Tu ne livres rien toi-même à l'humain : le chef d'orchestre contrôle puis envoie."]
+    consignes = ""
     if a.consignes:
         try:
-            texte = Path(a.consignes).read_text(encoding="utf-8")
+            consignes = Path(a.consignes).read_text(encoding="utf-8")
         except OSError as exc:
             return _err(f"consignes illisibles : {exc}")
-        out += ["", "## Consignes du chef d'orchestre", "", texte.rstrip()]
-    from . import specifications
-    spec = specifications.pour_prompt(role=role["nom"], projet=a.projet, issue=issue, branche=a.branche)
-    out += ["", "## Contrat commun de la session", "",
-            "Ce contrat décrit le profil et les livrables. Il n'accorde aucun outil ni mandat supplémentaire.",
-            "```json", json.dumps(spec, ensure_ascii=False, sort_keys=True), "```"]
-    from . import communaute_runtime
-    out += ["", communaute_runtime.contexte(a.projet)]
-    print("\n".join(out))
+    try:
+        jetons_max = int(getattr(a, "jetons_max", "") or 0)
+    except ValueError:
+        jetons_max = 0
+    print(prompt_agent.construire(
+        projet=a.projet, issue=issue, branche=a.branche, regles=a.regles, role=role, corps=corps_candidat,
+        revue=a.revue, consignes=consignes, agent=getattr(a, "agent", ""), modele=getattr(a, "modele", ""),
+        effort=getattr(a, "effort", ""), taille=getattr(a, "taille", ""), jetons_max=jetons_max,
+        regles_presentes=not getattr(a, "sans_regles", False)))
     return 0
 
 
@@ -2592,8 +2557,9 @@ def build_parser() -> argparse.ArgumentParser:
     s = sub.add_parser("prompt-construire", help=argparse.SUPPRESS)
     for opt in ("projet", "issue", "branche", "regles"):
         s.add_argument(f"--{opt}", required=True)
-    for opt in ("role", "revue", "consignes", "brief-sortie"):
+    for opt in ("role", "revue", "consignes", "brief-sortie", "agent", "modele", "effort", "taille", "jetons-max"):
         s.add_argument(f"--{opt}", default="")
+    s.add_argument("--sans-regles", action="store_true")  # le projet n'a ni CLAUDE.md ni AGENTS.md
     s.set_defaults(fn=cmd_prompt_construire)
     s = sub.add_parser("verdict", help="enregistrer le verdict d'une contre-relecture")
     s.add_argument("projet")

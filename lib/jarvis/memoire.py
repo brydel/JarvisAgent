@@ -58,6 +58,11 @@ def _expurger(texte: str) -> str:
     return t.strip()
 
 
+def expurger(texte: str) -> str:
+    """Texte sans ce qui ressemble à un secret : à appliquer aussi à la lecture, avant de citer dans un prompt."""
+    return _expurger(texte)
+
+
 def _normal(texte: str) -> str:
     t = unicodedata.normalize("NFD", str(texte or "").lower())
     return "".join(c for c in t if unicodedata.category(c) != "Mn")
