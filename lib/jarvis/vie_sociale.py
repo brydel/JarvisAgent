@@ -8,7 +8,8 @@ s'entraident, proposent des idées et répondent quand l'humain écrit. Chaque p
 Ce qui ne change pas : parler n'accorde aucun droit. Un message ne lance aucune tâche, ne modifie ni code ni prompt
 ni politique ; une idée reste une idée tant que l'humain ou le chef ne la planifie pas.
 
-Rythme réglable (communaute.vie : off | calme | active) et borné par jour ; rien ne part pendant une pause Jarvis
+Coupée par défaut (communaute.vie : off | calme | active) : chaque prise de parole d'une persona consomme les
+abonnements sans produire de travail. Activée, elle reste bornée par jour ; rien ne part pendant une pause Jarvis
 (batterie, quota, pause humaine).
 """
 
@@ -28,6 +29,7 @@ MODES = {  # nouvelle discussion spontanée au plus toutes les N secondes ; fils
     "calme": {"cadence_s": 3 * 3600, "fils_jour": 6, "tours_jour": 30},
     "active": {"cadence_s": 45 * 60, "fils_jour": 20, "tours_jour": 100},
 }
+MODE_DEFAUT = "off"      # les personas simulées ne parlent que si ton humain le demande (réglage ou Studio)
 TOURS_FIL = 4           # prises de parole par fil lancé par l'usine (une réponse de l'humain en relance une)
 EN_VOL_MAX = 2          # tours de conversation en attente ou en cours en même temps
 TYPES_SOCIAUX = ("discussion", "felicitation", "critique", "entraide", "debat", "idee", "question")
@@ -45,10 +47,10 @@ SUJETS_OUVERTS = (
 
 def mode() -> str:
     try:
-        m = str(config.settings().get("communaute", {}).get("vie", "calme"))
+        m = str(config.settings().get("communaute", {}).get("vie", MODE_DEFAUT))
     except Exception:  # noqa: BLE001
-        m = "calme"
-    return m if m in MODES else "calme"
+        m = MODE_DEFAUT
+    return m if m in MODES else MODE_DEFAUT
 
 
 def regler(nouveau: str) -> str:

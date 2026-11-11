@@ -12,7 +12,7 @@ import test_board_v2
 import test_missions
 
 from jarvis import adaptateurs as ad, board, communaute, coureur, missions as mi, pauses, plans, store, taches  # noqa: E402
-from jarvis import travail_board, vie_sociale  # noqa: E402
+from jarvis import config, travail_board, vie_sociale  # noqa: E402
 
 
 def agent(worktree, status="working", projet="repriceo"):
@@ -136,6 +136,22 @@ class VieSocialeTest(test_board_v2.Base):
         fil = communaute.fil("", humain["id"], tenant_id=self.org)
         reponses = [m for m in fil["messages"] if m["auteur"].startswith("agent:")]
         self.assertGreaterEqual(len(reponses), 1)
+
+    def test_coupee_par_defaut(self):
+        """Sans réglage ni choix de l'humain, aucune persona ne parle : ni débat, ni discussion spontanée."""
+        store.write_json(vie_sociale.ETAT, {})
+        avant = len(self.messages())  # le réseau n'est pas remis à zéro entre les tests
+        self.assertEqual(vie_sociale.mode(), "off")
+        self.assertEqual(vie_sociale._mode_effectif(), "off")
+        with self.assertRaises(ValueError):
+            vie_sociale.lancer_debat("sujet de test")
+        self.assertIsNone(vie_sociale.passage())
+        self.faire_tourner()
+        self.assertEqual(len(self.messages()), avant)
+        with mock.patch.object(config, "settings", return_value={"communaute": {"vie": "calme"}}):
+            self.assertEqual(vie_sociale.mode(), "calme", "le réglage communaute.vie le rallume")
+        with mock.patch.object(config, "settings", return_value={"communaute": {"vie": "n'importe quoi"}}):
+            self.assertEqual(vie_sociale.mode(), "off")
 
     def test_silence_quand_coupe_en_pause_ou_au_plafond(self):
         vie_sociale.regler("off")
