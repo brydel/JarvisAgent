@@ -107,6 +107,10 @@ def _carte(tenant: str, espace: str, ref: str, type_: str, meta: dict, *, pres_d
                           (json.dumps(nouvelle, ensure_ascii=False), ref, now, o["id"], tenant))
                 missions._evenement(c, tenant, "board_maj", now=now, objet_id=o["id"], champs=["meta"], par="jarvis",
                                     espace=espace, version=(v["version"] if v else o["version"]) + 1)
+                # relations « dépend de » : une tâche du chef qui se termine (ou reçoit un verdict) débloque ce qui l'attendait
+                if type_ == "tache" and (ancienne.get("statut"), ancienne.get("verdict")) != (nouvelle.get("statut"), nouvelle.get("verdict")):
+                    from . import board_relations
+                    board_relations.signaler_fin(c, tenant, [o["id"]], now=now)
         return o["id"]
     if x is None:
         x, y = synchro.position_libre(tenant, espace, *taille)

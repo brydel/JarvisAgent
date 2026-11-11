@@ -103,7 +103,7 @@ class RequetesConstantesTest(test_board_v2.Base):
             self.assertEqual(len(etat["objets"]), n)
             comptes[n] = r.n
         self.assertEqual(comptes[10], comptes[500], comptes)
-        self.assertLessEqual(comptes[500], 12, comptes)
+        self.assertLessEqual(comptes[500], 13, comptes)  # 11 + relations à effet + relectures (lot « intelligence »)
 
     @sqlite_seulement
     def test_lecture_ciblee_et_board_v1_aussi_constants(self):
@@ -113,7 +113,7 @@ class RequetesConstantesTest(test_board_v2.Base):
         with Requetes() as r150:
             board.lire(self.org, "b", objets=ids500[:150])
         self.assertEqual(r10.n, r150.n)
-        self.assertLessEqual(r150.n, 12)
+        self.assertLessEqual(r150.n, 13)
         with Requetes() as v10:
             mi.board(self.org, "a")
         with Requetes() as v500:

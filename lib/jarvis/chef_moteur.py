@@ -41,6 +41,8 @@ AUTORISE = (
     # Bibliothèque de références : lecture seule (capturer un site reste soumis à ton accord).
     "Bash(jarvis reference chercher *)", "Bash(jarvis reference liste)", "Bash(jarvis reference liste *)",
     "Bash(jarvis reference voir *)",
+    # File des relectures demandées sur le Board : lecture seule (le verdict est rendu par l'humain).
+    "Bash(jarvis board relectures)", "Bash(jarvis board relectures *)",
     "Bash(jarvis cout)", "Bash(jarvis cout *)", "Bash(jarvis budget-jetons *)",
     "Bash(jarvis secrets verifier *)", "Bash(jarvis rejouer *)", "Bash(jarvis traces)", "Bash(jarvis traces *)",
     "Bash(jarvis rollback proposer *)", "Bash(jarvis rollback demander *)", "Bash(jarvis eval liste*)",
@@ -94,6 +96,7 @@ INTERDIT = (
     "Bash(jarvis role approuver *)", "Bash(jarvis role refuser *)", "Bash(jarvis role promouvoir *)",
     "Bash(jarvis stockage migrer*)", "Bash(jarvis stockage revenir*)", "Bash(jarvis executant declarer *)",
     "Bash(jarvis executant retirer *)",
+    "Bash(jarvis board relire *)",  # demander, rendre ou retirer une relecture : l'humain seul
     # Contournements de « jarvis task » et accès directs au noyau.
     "Bash(workmux add *)", "Bash(workmux run *)", "Bash(python *)", "Bash(python3 *)",
     "Bash(env *)", "Bash(script *)",

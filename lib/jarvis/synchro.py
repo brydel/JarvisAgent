@@ -380,6 +380,17 @@ def texte_board(tenant_id: str, espace: str, *, detail: bool = False) -> str:
                 lignes.append(f"    action {i + 1} [{p['niveau']}] {p['titre'][:110]} — {p['statut']}")
         if detail and m.get("livrable_de"):
             lignes.append("    livrable : " + o["contenu"][:600].replace("\n", " "))
+        # effets calculés des relations (board_relations) et demande de relecture en cours
+        r = o.get("relations") or {}
+        if r.get("bloquee"):
+            lignes.append("    BLOQUÉE par : " + ", ".join(f"{b['id']} « {b['titre'][:50]} » ({b['etat']})" for b in r["bloquee_par"][:5]))
+        if r.get("alimentee_par"):
+            lignes.append("    alimentée par : " + ", ".join(f"{b['id']} « {b['titre'][:50]} »" for b in r["alimentee_par"][:5]))
+        attendent = [b for b in r.get("debloque") or [] if b.get("attend")]
+        if attendent:
+            lignes.append("    débloquera : " + ", ".join(f"{b['id']} « {b['titre'][:50]} »" for b in attendent[:5]))
+        if (o.get("relecture") or {}).get("statut") == "demandee":
+            lignes.append(f"    relecture demandée ({o['relecture']['id']}) : jarvis board relectures")
     liens = [l for l in etat["liens"] if l["source_id"] in par_id and l["cible_id"] in par_id]
     if liens and detail:
         lignes.append("Relations :")

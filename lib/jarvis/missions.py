@@ -183,6 +183,17 @@ CREATE TABLE IF NOT EXISTS board_commentaires (
 
 _SCHEMA += outbox.SCHEMA_SQLITE
 
+# File des demandes de relecture du Board (board_relectures.py) : table en plus, sans effet sur le code plus ancien.
+_SCHEMA += """
+CREATE TABLE IF NOT EXISTS board_relectures (
+    id TEXT PRIMARY KEY, tenant_id TEXT NOT NULL, objet_id TEXT NOT NULL, espace TEXT NOT NULL,
+    statut TEXT NOT NULL DEFAULT 'demandee', demande_par TEXT NOT NULL, note TEXT NOT NULL DEFAULT '',
+    verdict TEXT NOT NULL DEFAULT '', avis TEXT NOT NULL DEFAULT '', rendu_par TEXT NOT NULL DEFAULT '',
+    cree REAL NOT NULL, maj REAL NOT NULL);
+CREATE INDEX IF NOT EXISTS board_relectures_objet ON board_relectures (tenant_id, objet_id, cree);
+CREATE INDEX IF NOT EXISTS board_relectures_file ON board_relectures (tenant_id, statut, cree);
+"""
+
 # Colonnes du Board V2 ajoutées aux bases existantes (version 2 du schéma) : aucune donnée n'est réécrite.
 COLONNES_BOARD_V2 = (
     ("largeur", "REAL NOT NULL DEFAULT 0"), ("hauteur", "REAL NOT NULL DEFAULT 0"), ("z", "INTEGER NOT NULL DEFAULT 0"),
@@ -440,6 +451,16 @@ def _clore_mission_si_finie(c: sqlite3.Connection, tenant_id: str, mission_id: s
         CANCELLED if all(s == CANCELLED for s in statuts) else FAILED)
     c.execute("UPDATE missions SET statut=?, maj=? WHERE id=? AND tenant_id=?", (final, now, mission_id, tenant_id))
     _evenement(c, tenant_id, "mission_etat", mission_id=mission_id, now=now, vers=final)
+    # relations « dépend de » du Board : les cartes qui attendaient cette mission sont débloquées (ou apprennent
+    # qu'elle a échoué) — événement board_debloquee / board_dependance, dans la même transaction
+    cartes = [r["id"] for r in c.execute("SELECT id FROM board_objets WHERE tenant_id=? AND mission_id=? AND type='mission' "
+                                         "AND supprime=0", (tenant_id, mission_id))]
+    if cartes:
+        from . import board_relations
+        for oid in board_relations.signaler_fin(c, tenant_id, cartes, now=now):
+            outbox.enregistrer(c, tenant_id, "feed", {"type": "chef", "texte": f"Board : carte {oid} débloquée (mission "
+                                                                                f"{mission_id} terminée)"},
+                               cle=f"debloquee:{oid}:{mission_id}", now=now)
 
 
 # --- Organisations (tenants) ---------------------------------------------------------
@@ -745,10 +766,23 @@ def reclamer(executant_id: str, secret: str, *, now: float | None = None) -> dic
         if _reglages(c, tenant)["arret_urgence"]:
             return None
         caps = set(json.loads(e["capacites"]))
+        retenues: dict[str, str] = {}  # mission → « bloquée par … » (relations « dépend de » du Board), une fois par appel
         # PostgreSQL : les tâches prises par une réclamation concurrente sont sautées (SKIP LOCKED)
         for t in c.execute("SELECT * FROM taches WHERE tenant_id=? AND statut=? ORDER BY cree, id"
                            + backend().verrou_file, (tenant, QUEUED)).fetchall():
             if not set(json.loads(t["capacites"])) <= caps:
+                continue
+            if t["mission_id"] not in retenues:
+                from . import board_relations
+                retenues[t["mission_id"]] = board_relations.raison_blocage_mission(c, tenant, t["mission_id"])
+            if retenues[t["mission_id"]]:
+                # la carte de cette mission dépend d'un travail non terminé : la tâche reste en file, et le dit
+                # (dans le journal, une fois par raison : la tâche elle-même n'est pas modifiée)
+                raison = f"retenue : carte {retenues[t['mission_id']]}"[:500]
+                dernier = c.execute("SELECT donnees FROM evenements WHERE tenant_id=? AND mission_id=? AND type='tache_retenue' "
+                                    "AND tache_id=? ORDER BY seq DESC LIMIT 1", (tenant, t["mission_id"], t["id"])).fetchone()
+                if dernier is None or json.loads(dernier["donnees"]).get("raison") != raison:
+                    _evenement(c, tenant, "tache_retenue", mission_id=t["mission_id"], tache_id=t["id"], now=now, raison=raison)
                 continue
             fournisseur, raison = _router(c, t, e, now)
             jeton = t["bail_jeton"] + 1
@@ -1099,6 +1133,8 @@ def lancer_contextualisation(tenant_id: str, objet_id: str, *, auteur: str, rela
             raise MissionError("board", f"type non contextualisable : {o['type']}")
         if not relance and not _reglages(c, tenant_id)["board_auto_analyse"]:
             return None  # analyse automatique coupée pour ce tenant : seul le bouton « Analyser avec Jarvis » la lance
+        from . import board_relations
+        board_relations.verifier_lancement(c, tenant_id, objet_id)  # dépendance non terminée : refus (code `bloquee`)
         meta = json.loads(o["meta"] or "{}")
         # le contexte est celui du PROJET (l'espace du Board) : ses missions et ses autres cartes
         missions_cours = [r["objectif"] for r in c.execute(
@@ -1125,6 +1161,10 @@ def lancer_contextualisation(tenant_id: str, objet_id: str, *, auteur: str, rela
     from . import synchro  # mémoire collective : ce que Jarvis sait déjà du sujet (donnée de contexte)
     travail["memoire"] = synchro._effet("mémoire", synchro.memoire_pour, tenant_id,
                                         f"{titre} {o['contenu'][:400]}", o["espace"]) or []
+    # relations entrantes « alimente » / « inspire » : livrables, contenus et passages cités, joints comme DONNÉES
+    relie = board_relations.contexte(tenant_id, objet_id, f"{titre} {o['contenu'][:800]}")
+    if relie:
+        travail["relations"] = relie
     cle = f"board-contexte:{objet_id}" + (f":{int(now * 1000)}" if relance else "")
     m = creer_mission(tenant_id, f"Contextualiser « {titre[:120]} »",
                       [{"type": "contextualiser", "niveau": "L1", "capacites": ["analyse"], "travail": travail}],
@@ -1205,12 +1245,26 @@ def decider_proposition(tenant_id: str, objet_id: str, index: int, decision: str
     if type(index) is not int:
         raise MissionError("inconnue", "proposition inconnue")
     now = time.time() if now is None else now
+    from . import board_relations
+    relie = None
+    if decision == "lancer":  # lu avant la transaction (lecture seule) : ce que les flèches « alimente » / « inspire » joignent
+        c0 = _connecter(tenant_id)
+        try:
+            avant = c0.execute("SELECT meta, contenu FROM board_objets WHERE id=? AND tenant_id=? AND supprime=0",
+                               (objet_id, tenant_id)).fetchone()
+        finally:
+            c0.close()
+        if avant is not None:
+            relie = board_relations.contexte(tenant_id, objet_id, f"{json.loads(avant['meta'] or '{}').get('titre', '')} "
+                                                                  f"{avant['contenu'][:800]}")
     with transaction(tenant_id) as c:
         verrou = " FOR UPDATE" if backend().nom == "postgres" else ""
         o = c.execute("SELECT * FROM board_objets WHERE id=? AND tenant_id=? AND supprime=0" + verrou,
                       (objet_id, tenant_id)).fetchone()
         if o is None:
             raise MissionError("inconnue", f"objet inconnu : {objet_id}")
+        if decision == "lancer":
+            board_relations.verifier_lancement(c, tenant_id, objet_id)  # dépendance non terminée : refus (code `bloquee`)
         meta = json.loads(o["meta"] or "{}")
         if generation is not None and (meta.get("jarvis_mission", objet_id) != generation
                                        or o["mission_id"] != generation):
@@ -1238,7 +1292,8 @@ def decider_proposition(tenant_id: str, objet_id: str, index: int, decision: str
                             + f"\nÉlément du Board ({o['type']}) : {meta.get('titre', '')}\n{o['contenu'][:15_000]}\n"
                               f"\nSynthèse du chef : {meta.get('jarvis_resume', '')}")
                 spec = _valider_spec({"type": "preparer", "niveau": "L1", "capacites": ["analyse"],
-                                      "travail": {"document": document}, "delai_s": DELAI_PREPARATION_S})
+                                      "travail": {"document": document, **({"relations": relie} if relie else {})},
+                                      "delai_s": DELAI_PREPARATION_S})
                 cle = f"proposition:{objet_id}:{meta.get('jarvis_mission', objet_id)}:{index}"
                 m = _creer_mission(c, tenant_id, f"Préparer : {p['titre']}"[:500], [spec],
                                    source="board-proposition", demandeur=par, cle_idempotence=cle, now=now)

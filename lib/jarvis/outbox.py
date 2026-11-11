@@ -123,8 +123,10 @@ def _executer(e: dict):
             return mi.decider_proposition(tenant, d["objet_id"], d["index"], "lancer", par="jarvis:auto",
                                           operation_id=e["id"], generation=d["generation"])
         except mi.MissionError as exc:
-            if exc.code in ("conflit", "obsolete", "inconnue"):
-                return {"ignore": exc.code}  # une décision humaine ou une nouvelle analyse a pris le relais
+            if exc.code in ("conflit", "obsolete", "inconnue", "bloquee"):
+                # une décision humaine ou une nouvelle analyse a pris le relais ; ou la carte dépend d'un travail non
+                # terminé : rien n'est lancé seul, la proposition reste offerte à l'humain
+                return {"ignore": exc.code}
             raise
     if e["sorte"].startswith("synchro."):
         from . import synchro

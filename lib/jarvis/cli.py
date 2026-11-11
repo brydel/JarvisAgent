@@ -2038,6 +2038,26 @@ def cmd_board(a) -> int:
             # une relation posée par le chef ou un agent porte l'auteur « jarvis » : visible et retirable sur le Board
             print(board.lier(org, o["espace"], a.quoi[0], a.quoi[1], libelle=synchro.NATURES[a.nature], style=a.nature,
                              par="jarvis:" + acteur if acteur != "humain" else "humain"))
+        elif a.action == "relectures":
+            # lecture seule : la file des demandes « Faire relire » de tous les Boards (le chef la lit, l'humain tranche)
+            from . import board_relectures
+            print(board_relectures.texte_file(org, toutes=a.toutes))
+        elif a.action == "relire":
+            from . import board_relectures
+            if not a.quoi or a.quoi[0][:3] not in ("BO-", "RL-") or (len(a.quoi) > 1 and a.quoi[1] not in ("pret", "corrections", "annuler")):
+                return _err('usage : jarvis board relire BO-…            (demander la relecture d\'un livrable)\n'
+                            '        jarvis board relire BO-…|RL-… pret|corrections ["avis"]   ou   … annuler')
+            cible = {"relecture_id": a.quoi[0]} if a.quoi[0].startswith("RL-") else {"objet_id": a.quoi[0]}
+            if len(a.quoi) == 1:
+                if "relecture_id" in cible:
+                    return _err("usage : jarvis board relire BO-… (une demande se pose sur une carte)")
+                r = board_relectures.demander(org, a.quoi[0], par=acteur)
+                print(f"relecture {r['id']} " + ("déjà en attente" if r["deja"] else "demandée") + " : aucun agent n'est lancé")
+            elif a.quoi[1] == "annuler":
+                print(f"relecture {board_relectures.annuler(org, **cible, par=acteur)['id']} retirée")
+            else:
+                r = board_relectures.rendre(org, **cible, verdict=a.quoi[1], avis=" ".join(a.quoi[2:]), par=acteur)
+                print(f"relecture {r['id']} rendue : {board_relectures.VERDICTS[r['verdict']]}")
         elif a.action == "decider":
             if len(a.quoi) != 3 or a.quoi[2] not in ("lancer", "ecarter") or not a.quoi[1].isdigit():
                 return _err("usage : jarvis board decider BO-… <numéro d'action> lancer|ecarter")
@@ -2331,7 +2351,7 @@ def build_parser() -> argparse.ArgumentParser:
     s = sub.add_parser("board", help="le Board partagé : voir, déposer, commenter, relier, décider (chef compris)")
     s.add_argument("action", nargs="?", default="voir",
                    choices=("voir", "espaces", "deposer", "modifier", "ranger", "reduire", "grouper", "commenter", "lier",
-                            "decider", "retirer", "restaurer"))
+                            "decider", "retirer", "restaurer", "relectures", "relire"))
     s.add_argument("quoi", nargs="*")
     s.add_argument("--espace", default="accueil", help="Board du projet (accueil par défaut)")
     s.add_argument("--titre", default="")
@@ -2340,6 +2360,7 @@ def build_parser() -> argparse.ArgumentParser:
     s.add_argument("--termines", action="store_true",
                    help="retirer : les cartes de travail finies (tâches, équipe au repos, plans sans tâche active)")
     s.add_argument("--dernier", action="store_true", help="restaurer : le dernier retrait")
+    s.add_argument("--toutes", action="store_true", help="relectures : aussi celles déjà rendues ou retirées")
     s.add_argument("--essai", action="store_true", help="retirer : montrer ce qui serait retiré, sans rien retirer")
     # dessin libre (deposer, modifier, ranger, reduire, grouper)
     s.add_argument("--format", default="", help="note, texte, lien, dossier, image, pdf, audio, video, document")

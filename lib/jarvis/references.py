@@ -705,6 +705,50 @@ def fragment(tenant_id: str, fragment_id: str) -> dict:
             "nature": "donnee_non_fiable", "avertissement": AVERTISSEMENT}
 
 
+def passages(tenant_id: str, reference_ids: list[str], question: str, *, par_reference: int = 3,
+             largeur: int = 600) -> list[dict]:
+    """Passages de CES références les plus proches de la question (BM25 en Python, borné aux fragments des
+    références demandées), chacun avec sa citation prête à recopier. Sert aux relations « inspire » du Board.
+
+    Une référence dont aucun passage ne partage de mot avec la question rend son premier passage, marqué
+    `pertinence: "debut"` (les autres : `"mots"`). Références inconnues, supprimées ou pas prêtes : ignorées."""
+    ids = list(dict.fromkeys(i for i in reference_ids if isinstance(i, str) and i))[:8]
+    if not ids:
+        return []
+    par_reference = max(1, min(5, int(par_reference)))
+    marques = ",".join("?" * len(ids))
+    with _lire(tenant_id) as a:
+        lignes = a.c.execute(
+            "SELECT f.id, f.reference_id, f.position, f.section, f.texte, f.texte_norm, r.titre, r.type, r.source, "
+            "r.url_finale, r.collection, r.capture_le FROM board_reference_fragments f JOIN board_references r "
+            "ON r.id = f.reference_id WHERE f.tenant_id=? AND r.tenant_id=? AND r.supprime=0 AND r.statut='prete' "
+            f"AND f.actif=1 AND f.reference_id IN ({marques}) ORDER BY f.reference_id, f.position LIMIT 2000",
+            (tenant_id, tenant_id, *ids)).fetchall()
+    par_id = {l["id"]: l for l in lignes}
+    documents = [(l["id"], f"{l['texte_norm']} {rag.normaliser(l['section'])} {rag.normaliser(l['titre'])}") for l in lignes]
+    classes = [i for i, _ in rag.bm25_python(documents, _court(question, 500), limite=len(documents))]
+    retenus: dict[str, list[tuple[str, str]]] = {}
+    for ident in classes:
+        liste = retenus.setdefault(par_id[ident]["reference_id"], [])
+        if len(liste) < par_reference:
+            liste.append((ident, "mots"))
+    for l in lignes:  # aucune correspondance : le premier passage de la référence, dit comme tel
+        retenus.setdefault(l["reference_id"], [(l["id"], "debut")])
+    sortie = []
+    for ref in ids:
+        for ident, pertinence in retenus.get(ref, []):
+            l = par_id[ident]
+            url = l["url_finale"] or (l["source"] if l["type"] == "site" else "")
+            jour = time.strftime("%Y-%m-%d", time.localtime(l["capture_le"])) if l["capture_le"] else "date inconnue"
+            origine = url or f"collection « {l['collection']} »"
+            sortie.append({
+                "reference_id": ref, "fragment_id": ident, "section": l["section"], "titre": l["titre"], "url": url,
+                "extrait": rag.extrait(l["texte"], question, largeur=largeur)["texte"], "pertinence": pertinence,
+                "capture_le": l["capture_le"], "nature": "donnee_non_fiable",
+                "citation": f"[{ref}#{ident}] {l['titre']} — {origine} (capturé le {jour})"})
+    return sortie
+
+
 # --- Board ----------------------------------------------------------------------------------------------
 
 def poser_sur_board(tenant_id: str, reference_id: str, *, espace: str = "accueil", x: float = 0, y: float = 0,

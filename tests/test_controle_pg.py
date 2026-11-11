@@ -20,6 +20,7 @@ from pathlib import Path
 
 import test_jarvis  # noqa: F401 — environnement isolé
 import test_board_fondations
+import test_board_intelligence
 import test_board_tableau
 import test_board_v2
 import test_missions
@@ -113,6 +114,9 @@ _rejouer(test_missions.MachineEtatsTest, test_missions.TrancheVerticaleTest, tes
          test_board_fondations.LecteurTest, test_board_fondations.ReferenceTest, test_board_fondations.ApiFondationsTest,
          test_board_tableau.ObjetsTableauTest, test_board_tableau.ApiTableauTest)
 _rejouer(test_references.StockageTest, test_references.ApiTest)  # bibliothèque de références : mêmes tests sous RLS
+# effets des relations (blocage, boucles, alimentation, citations) et file de relecture, sur PostgreSQL réel
+_rejouer(test_board_intelligence.BlocageTest, test_board_intelligence.CycleTest, test_board_intelligence.AlimentationTest,
+         test_board_intelligence.InspireTest, test_board_intelligence.RelectureTest, test_board_intelligence.ApiIntelligenceTest)
 
 
 @unittest.skipUnless(DISPONIBLE, RAISON)

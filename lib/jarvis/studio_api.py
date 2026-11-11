@@ -273,6 +273,11 @@ class Handler(BaseHTTPRequestHandler):
                                               objets=ids, liens=liens), "reglages": missions.reglages_board(org)})
             elif route == "/api/v2/espaces":
                 self._json(200, {"espaces": board.espaces(org)})
+            elif route == "/api/v2/relectures":
+                from . import board_relectures
+                self._json(200, {"relectures": board_relectures.file(
+                    org, espace=board.nom_espace(q["espace"][0]) if q.get("espace") else None,
+                    toutes=(q.get("toutes") or [""])[0] == "1")})
             elif route == "/api/v2/activite":
                 from . import activite
                 self._json(200, activite.instantane(org, (q.get("espace") or ["accueil"])[0]))
@@ -550,7 +555,7 @@ class Handler(BaseHTTPRequestHandler):
         except OSError:
             self._erreur(503, "État local indisponible ; aucune écriture externe confirmée.")
         except missions.MissionError as exc:
-            conflits = ("approbation", "transition", "conflit", "verrouille", "concurrence")
+            conflits = ("approbation", "transition", "conflit", "verrouille", "concurrence", "bloquee", "cycle")
             self._erreur(404 if exc.code == "inconnue" else 403 if exc.code == "interdit" else 409 if exc.code in conflits else 400, str(exc))
 
     def _post_v2(self, org: str, route: str, corps: dict) -> None:
@@ -618,6 +623,20 @@ class Handler(BaseHTTPRequestHandler):
                 return
             self._json(200, missions.decider_proposition(org, m.group(1), index, str(corps.get("decision") or ""),
                                                          par="studio:humain"))
+        elif m := re.match(r"^/api/v2/objets/(BO-[0-9a-f]{12})/relecture$", route):
+            # « Faire relire » : demande suivie dans la file (board_relectures) ; aucun agent, aucun modèle
+            from . import board_relectures
+            action = str(corps.get("action") or "demander")
+            if action == "demander":
+                r = board_relectures.demander(org, m.group(1), par="studio:humain", note=str(corps.get("note") or ""))
+                self._json(200 if r["deja"] else 201, r)
+            elif action == "annuler":
+                self._json(200, board_relectures.annuler(org, objet_id=m.group(1), par="studio:humain"))
+            elif action == "rendre":
+                self._json(200, board_relectures.rendre(org, objet_id=m.group(1), verdict=str(corps.get("verdict") or ""),
+                                                        avis=str(corps.get("avis") or ""), par="studio:humain"))
+            else:
+                self._erreur(400, "« action » : demander, annuler ou rendre")
         elif m := re.match(r"^/api/v2/objets/(BO-[0-9a-f]{12})/commentaires$", route):
             self._json(201, {"id": board.commenter(org, m.group(1), str(corps.get("texte") or ""), auteur="studio:humain")})
         elif route == "/api/v2/liens":

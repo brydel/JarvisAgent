@@ -27,7 +27,7 @@ import tempfile
 import time
 from pathlib import Path
 
-from . import board_tableau, config
+from . import board_relations, board_relectures, board_tableau, config
 from .missions import MissionError, PRIORITES, _curseur, _evenement, _id, reference_travail, transaction, _connecter
 
 ESPACE_MAX = 80
@@ -310,7 +310,11 @@ def mettre_a_jour(tenant_id: str, objet_id: str, champs: dict, *, version: int |
                             and propres["contenu"].strip() not in ("", "Nouvelle note"))
     if a_contextualiser:  # première vraie écriture d'une note créée vide : le chef la lit
         from . import missions
-        missions.lancer_contextualisation(tenant_id, objet_id, auteur=par, now=now)
+        try:
+            missions.lancer_contextualisation(tenant_id, objet_id, auteur=par, now=now)
+        except MissionError as exc:  # carte bloquée par une dépendance : le texte est enregistré, l'analyse attend
+            if exc.code != "bloquee":
+                raise
     return {"version": o["version"] + 1}
 
 
@@ -472,6 +476,21 @@ def _completer(c, tenant_id: str, lignes: list, filtre: str, params: tuple) -> l
             d["mission"] = missions.get(d["mission_id"])
             d["artefacts"] = artefacts.get(d["mission_id"], [])
         d["commentaires"] = commentaires.get(d["id"], 0)
+    # effets des relations (bloquée par, alimentée par, débloque) et dernière demande de relecture : calculés ici,
+    # jamais stockés sur la carte — une requête pour les relations, trois de plus seulement s'il y en a à effet
+    if objs:
+        choisis = f"SELECT id FROM board_objets WHERE {filtre}"
+        liens_effet = c.execute(
+            "SELECT id, source_id, cible_id, style FROM board_liens WHERE tenant_id=? AND supprime=0 AND style IN "
+            f"('depend', 'alimente', 'inspire') AND (source_id IN ({choisis}) OR cible_id IN ({choisis}))",
+            (tenant_id, *params, *params)).fetchall()
+        relations = board_relations.resumes(c, tenant_id, liens_effet)
+        relectures = board_relectures.pour_objets(c, tenant_id, filtre, params)
+        for d in objs:
+            if d["id"] in relations:
+                d["relations"] = relations[d["id"]]
+            if d["id"] in relectures:
+                d["relecture"] = relectures[d["id"]]
     return objs
 
 
@@ -552,18 +571,20 @@ def lier(tenant_id: str, espace: str, source_id: str, cible_id: str, *, libelle:
                              (tenant_id, source_id, cible_id)).fetchone()
         if existant:
             return existant["id"]
+        if style == "depend":  # une dépendance qui ferme une boucle bloquerait toutes ses cartes : refusée (code `cycle`)
+            board_relations.verifier_cycle(c, tenant_id, espace, source_id, cible_id)
         lid = _id("BL")
         c.execute("INSERT INTO board_liens (id, tenant_id, espace, source_id, cible_id, libelle, style, cree, maj, auteur) "
                   "VALUES (?,?,?,?,?,?,?,?,?,?)", (lid, tenant_id, espace, source_id, cible_id, libelle[:60], style, now, now,
                                                     "jarvis" if par.startswith("jarvis") else "humain"))
         _evenement(c, tenant_id, "board_lien", now=now, lien_id=lid, source_id=source_id, cible_id=cible_id, par=par,
-                   espace=espace, version=1)
+                   espace=espace, version=1, style=style)
         return lid
 
 
 def modifier_lien(tenant_id: str, lien_id: str, *, libelle: str | None = None, style: str | None = None,
                   supprime: bool | None = None, version: int | None = None, par: str, now: float | None = None) -> dict:
-    """Renomme, restyle, supprime ou restaure une relation. `version` : si fournie et périmée, conflit (code
+    """Renomme, change le type, supprime ou restaure une relation. Le type a un effet (board_relations.py). `version` : si fournie et périmée, conflit (code
     `conflit`), comme pour un objet. Renvoie {"version": nouvelle version}."""
     now = now or time.time()
     if style is not None and style not in STYLES_LIEN:
@@ -575,11 +596,16 @@ def modifier_lien(tenant_id: str, lien_id: str, *, libelle: str | None = None, s
         if version is not None and int(version) != l["version"]:
             raise MissionError("conflit", f"la relation a été modifiée ailleurs (version {l['version']}, reçue {version})")
         etat = int(supprime) if supprime is not None else l["supprime"]
+        nouveau = style or l["style"]
+        # devient (ou redevient) une dépendance vivante : même refus des boucles qu'à la création
+        if nouveau == "depend" and not etat and (l["style"] != "depend" or l["supprime"]):
+            board_relations.verifier_cycle(c, tenant_id, l["espace"], l["source_id"], l["cible_id"], sauf=lien_id)
         c.execute("UPDATE board_liens SET libelle=?, style=?, supprime=?, version=version+1, maj=? WHERE id=? AND tenant_id=?",
-                  (str(libelle if libelle is not None else l["libelle"])[:60], style or l["style"], etat, now, lien_id,
-                   tenant_id))
+                  (str(libelle if libelle is not None else l["libelle"])[:60], nouveau, etat, now, lien_id, tenant_id))
+        # les deux bouts : leur résumé calculé (bloquée par, alimentée par…) change avec le type de la relation
         _evenement(c, tenant_id, "board_lien_maj", now=now, lien_id=lien_id, par=par, espace=l["espace"],
-                   version=l["version"] + 1, supprime=bool(etat))
+                   version=l["version"] + 1, supprime=bool(etat), source_id=l["source_id"], cible_id=l["cible_id"],
+                   style=nouveau)
         return {"version": l["version"] + 1}
 
 

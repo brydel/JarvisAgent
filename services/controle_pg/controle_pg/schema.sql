@@ -154,6 +154,15 @@ CREATE TABLE IF NOT EXISTS board_reference_fichiers (
     role TEXT NOT NULL, asset_id TEXT NOT NULL, sha256 TEXT NOT NULL, largeur INTEGER NOT NULL DEFAULT 0,
     hauteur INTEGER NOT NULL DEFAULT 0, PRIMARY KEY (tenant_id, reference_id, role));
 
+-- File des demandes de relecture du Board (lib/jarvis/board_relectures.py) : même table que SQLite.
+CREATE TABLE IF NOT EXISTS board_relectures (
+    id TEXT PRIMARY KEY, tenant_id TEXT NOT NULL REFERENCES organisations(id), objet_id TEXT NOT NULL,
+    espace TEXT NOT NULL, statut TEXT NOT NULL DEFAULT 'demandee', demande_par TEXT NOT NULL,
+    note TEXT NOT NULL DEFAULT '', verdict TEXT NOT NULL DEFAULT '', avis TEXT NOT NULL DEFAULT '',
+    rendu_par TEXT NOT NULL DEFAULT '', cree DOUBLE PRECISION NOT NULL, maj DOUBLE PRECISION NOT NULL);
+CREATE INDEX IF NOT EXISTS board_relectures_objet ON board_relectures (tenant_id, objet_id, cree);
+CREATE INDEX IF NOT EXISTS board_relectures_file ON board_relectures (tenant_id, statut, cree);
+
 INSERT INTO meta VALUES ('schema_version', '4') ON CONFLICT (cle) DO UPDATE SET valeur = excluded.valeur;
 
 -- --- RLS : une politique par table, sur le tenant du contexte ---------------------------------------------------
@@ -163,7 +172,8 @@ BEGIN
   FOREACH t IN ARRAY ARRAY['reglages_tenant', 'executants', 'connexions', 'missions', 'taches', 'tentatives',
                            'approbations', 'artefacts', 'board_objets', 'evenements', 'adhesions',
                            'board_liens', 'board_assets', 'board_commentaires', 'effets_outbox', 'effets_inbox',
-                           'board_references', 'board_reference_fragments', 'board_reference_fichiers'] LOOP
+                           'board_references', 'board_reference_fragments', 'board_reference_fichiers',
+                           'board_relectures'] LOOP
     EXECUTE format('ALTER TABLE %I ENABLE ROW LEVEL SECURITY', t);
     EXECUTE format('DROP POLICY IF EXISTS par_tenant ON %I', t);
     EXECUTE format('CREATE POLICY par_tenant ON %I USING (tenant_id = current_setting(''jarvis.tenant_id'', true)) '
