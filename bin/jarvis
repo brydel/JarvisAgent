@@ -242,7 +242,7 @@ cmd_relancer() {
   ok "Démon et cockpit relancés avec la version installée."
   if chef_present; then
     if ((avec_chef)); then
-      tmux kill-window -t "$SESSION:chef" 2>/dev/null || true
+      fermer_fenetres_chef
       start_chef
     else
       py chef-preparer >/dev/null   # permissions à jour ; son rôle, lui, n'est relu qu'au démarrage
@@ -261,6 +261,12 @@ cmd_chef_lancer() {
   start_chef
 }
 
+# Ferme TOUTES les fenêtres « chef » (par identifiant : « session:chef » est ambigu s'il y en a deux).
+fermer_fenetres_chef() {
+  tmux list-windows -t "$SESSION" -F '#{window_id} #{window_name}' 2>/dev/null \
+    | awk '$2 == "chef" { print $1 }' | while read -r wid; do tmux kill-window -t "$wid" 2>/dev/null || true; done
+}
+
 # Vrai si une fenêtre « chef » existe. Si Claude Code s'y est arrêté (il ne reste qu'un shell), la
 # fenêtre est fermée d'abord : y écrire exécuterait les messages comme des commandes.
 chef_present() {
@@ -269,7 +275,7 @@ chef_present() {
   case "$rc" in
     0) return 0 ;;
     2) warn "Le chef s'était arrêté (fenêtre restée sur un shell) : je la referme et je le relance."
-       tmux kill-window -t "$SESSION:chef" 2>/dev/null || true
+       fermer_fenetres_chef
        return 1 ;;
     *) return 1 ;;
   esac
@@ -277,6 +283,11 @@ chef_present() {
 
 start_chef() {
   has claude || { warn "Claude Code introuvable : chef non lancé."; return 0; }
+  # Verrou : deux lancements simultanés (reprise après redémarrage + démon, par exemple) voyaient
+  # tous deux « pas de chef » et en créaient chacun un (5 nov.).
+  local verrou="${XDG_RUNTIME_DIR:-/tmp}/jarvis-chef-$SESSION.lock"
+  exec {fd_chef}>"$verrou"
+  flock -w 30 "$fd_chef" || { warn "Un autre lancement du chef est en cours."; exec {fd_chef}>&-; return 0; }
   if ! chef_present; then
     local dir flags="" kickoff mode
     dir="$(py chef-preparer)"
@@ -296,6 +307,7 @@ start_chef() {
     py evenement chef "chef d'orchestre démarré"
     ok "Chef lancé dans la fenêtre « chef ». Il va proposer un premier plan."
   fi
+  exec {fd_chef}>&-
 }
 
 cmd_task() {

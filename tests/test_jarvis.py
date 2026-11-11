@@ -1847,6 +1847,25 @@ class JarvisTest(unittest.TestCase):
         self.assertLess(contraste(d / "flou.png"), 60)                     # la zone est restée floutée après la navigation
 
 
+    def test_two_chef_windows_never_look_absent(self):
+        # 5 nov. : après un écran bleu, deux fenêtres « chef » coexistaient ; tmux refusait la cible
+        # ambiguë « session:chef », le chef paraissait absent et le démon en relançait un de plus à
+        # chaque tour (six chefs en cinq minutes). Il doit rester vu actif, et chef-lancer ne rien ajouter.
+        env = dict(os.environ, JARVIS_SESSION="jtest3", PYTHONPATH=str(ROOT / "lib"))
+        tmux("new-session", "-d", "-s", "jtest3", "-n", "cockpit", "sleep 300")
+        tmux("new-window", "-d", "-t", "jtest3:", "-n", "chef", "sleep 300")
+        tmux("new-window", "-d", "-t", "jtest3:", "-n", "chef", "sleep 300")
+        time.sleep(0.5)
+        try:
+            res = subprocess.run([sys.executable, "-m", "jarvis", "chef-etat"], capture_output=True, text=True, env=env)
+            self.assertEqual((res.returncode, res.stdout.strip()), (0, "actif"))
+            avant = tmux("list-windows", "-t", "jtest3", "-F", "#{window_id}")
+            res = subprocess.run([str(ROOT / "bin" / "jarvis"), "chef-lancer"], capture_output=True, text=True, env=env)
+            self.assertEqual(res.returncode, 0, res.stderr)
+            self.assertEqual(tmux("list-windows", "-t", "jtest3", "-F", "#{window_id}"), avant)
+        finally:
+            tmux("kill-session", "-t", "jtest3")
+
     def test_running_chef_is_seen_even_behind_its_launch_shell(self):
         # Le chef est lancé comme « env … claude …; exec bash » : tmux ne rapporte que le shell parent.
         # Il doit quand même être vu actif, et « jarvis chef » ne doit jamais refermer un chef vivant.

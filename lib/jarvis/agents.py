@@ -304,13 +304,17 @@ def chef_etat() -> str:
     """« actif », « absent » (pas de fenêtre) ou « eteint » (fenêtre ouverte sur un simple shell)."""
     if not shutil.which("tmux"):
         return "absent"
-    try:
-        res = _run(["tmux", "list-panes", "-t", _chef_win(), "-F", "#{pane_pid}\t#{pane_current_command}"], timeout=5)
-    except (subprocess.TimeoutExpired, OSError):
+    wins = _chef_wins()
+    if not wins:
         return "absent"
-    if res.returncode != 0:
-        return "absent"
-    volets = [ln.split("\t", 1) for ln in res.stdout.splitlines() if "\t" in ln]
+    volets = []
+    for win in wins:
+        try:
+            res = _run(["tmux", "list-panes", "-t", win, "-F", "#{pane_pid}\t#{pane_current_command}"], timeout=5)
+        except (subprocess.TimeoutExpired, OSError):
+            continue
+        if res.returncode == 0:
+            volets += [ln.split("\t", 1) for ln in res.stdout.splitlines() if "\t" in ln]
     if not volets:
         return "absent"
     arbre = _arbre()
@@ -351,8 +355,25 @@ CHEF_QUEUE = "chef_queue.json"
 DIALOG_MARKERS = ("❯ 1.", "❯ 2.", "❯ 3.", "Do you want to proceed", "don't ask again")
 
 
+def _chef_wins() -> list[str]:
+    """Identifiants tmux (@N) des fenêtres nommées « chef », dans l'ordre de la session.
+
+    On ne cible jamais la fenêtre par son nom : dès que deux fenêtres « chef » existent, tmux refuse
+    « session:chef » (ambigu) et le chef paraîtrait absent, ce qui en ferait relancer un de plus.
+    """
+    try:
+        res = _run(["tmux", "list-windows", "-t", config.SESSION, "-F", "#{window_id}\t#{window_name}"], timeout=5)
+    except (subprocess.TimeoutExpired, OSError):
+        return []
+    if res.returncode != 0:
+        return []
+    return [wid for wid, _, nom in (ln.partition("\t") for ln in res.stdout.splitlines())
+            if nom == config.CHEF_WINDOW and wid]
+
+
 def _chef_win() -> str:
-    return f"{config.SESSION}:{config.CHEF_WINDOW}"
+    wins = _chef_wins()
+    return wins[0] if wins else f"{config.SESSION}:{config.CHEF_WINDOW}"
 
 
 def chef_has_dialog() -> bool:
