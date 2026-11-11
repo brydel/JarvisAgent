@@ -65,7 +65,7 @@ test("routes utiles et retour au vrai Board", async ({ page }) => {
 });
 
 test("atelier reel: proposition, essai limite et retrait", async ({ page, request }) => {
-  const token = fs.readFileSync("/tmp/jarvis-e2e-jeton", "utf8").trim();
+  const token = fs.readFileSync(process.env.JARVIS_E2E_JETON || "/tmp/jarvis-e2e-jeton", "utf8").trim();
   await page.goto(`/v2/connexion?vue=agents#${token}`);
   await expect(page.locator(".p-agent-card").first()).toBeVisible();
   await page.locator(".p-agent-card").filter({ hasText: "Designer" }).first().click();

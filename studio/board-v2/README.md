@@ -7,8 +7,10 @@
 cd studio/board-v2
 npm ci                      # dépendances verrouillées, une fois
 npm run build               # vérification des types puis build vers lib/jarvis/studio_v2
+npm test                    # tests unitaires de la couche de données (vitest, src/donnees/*.test.ts)
 bash scripts/preparer-demo.sh   # régénère les fichiers du mode démo (ffmpeg requis)
-npx playwright test         # parcours fonctionnels/visuels et mesures de fluidité (serveur isolé, port 7721)
+npx playwright test         # parcours fonctionnels/visuels et mesures de fluidité (serveur isolé, port 7721 ;
+                            # JARVIS_E2E_PORT et JARVIS_E2E_JETON pour un autre port / fichier de jeton)
 npx playwright test runtime.spec.ts  # contrôleur outillé et interfaces de connexion
 node scripts/compare.mjs <capture.png> <dossier>   # comparaison avec la maquette de référence
 ```
@@ -19,7 +21,12 @@ node scripts/compare.mjs <capture.png> <dossier>   # comparaison avec la maquett
   L'accueil observe tous les projets ; un Board de projet filtre son travail. Sélectionner une session affiche
   sa sortie terminal, relue toutes les cinq secondes. Le panneau se replie pour laisser la place au canevas.
   Les missions sans terminal montrent leur statut et leur bail ; la réponse du modèle arrive à la remise du résultat.
-  Les cartes sont également relues toutes les dix secondes si le flux SSE ne suffit plus.
+- **Données du Board** (`src/donnees/`, détail dans `docs/jarvis-next/BOARD_FONDATIONS.md`) : store normalisé
+  (objets et relations par identifiant), file d'écritures optimistes versionnées (retour arrière et relecture de
+  la carte sur conflit), flux SSE ouvert au curseur du chargement et filtré par Board. Un événement = la lecture
+  ciblée d'une carte (`GET /api/v2/objets?ids=…`) ; le Board n'est relu en entier qu'au démarrage et en filet
+  (trou dans le flux, reconnexion après coupure). Plus de relecture périodique tant que le flux est connecté ;
+  s'il est coupé (réseau, proxy), le Board est relu toutes les dix secondes jusqu'à son retour.
 - **Réseau des agents** : espace global de toute l'usine, discussions libres, salons et réponses persistantes.
   Le projet et les preuves sont facultatifs pour parler. La promotion en leçon reste une action de relecture distincte.
 - **Intégrations** : serveurs MCP HTTPS ou processus locaux stdio, découverte, sélection des outils,

@@ -5,7 +5,8 @@ import {
 } from "@xyflow/react";
 import { AlignHorizontalJustifyCenter, AlignLeft, AlignStartVertical, ArrowUpToLine, Copy, FolderInput, Lock, Trash2, AlignVerticalJustifyCenter } from "lucide-react";
 import type { Source, NouvelObjet, Modification } from "./api";
-import type { Approbation, DonneesNoeud, EtatBoard, Evenement, ObjetBoard, Priorite, StyleLien, EspaceBoard } from "./types";
+import type { DonneesNoeud, EtatBoard, ObjetBoard, Priorite, StyleLien } from "./types";
+import { useBoard } from "./donnees/useBoard";
 import { ImageNode, LienNode, PdfNode, DossierNode } from "./nodes/CartesVisuelles";
 import { NoteNode, MissionNode, AgentsNode } from "./nodes/CartesVivantes";
 import { AudioNode, VideoNode } from "./nodes/CartesMedia";
@@ -44,9 +45,11 @@ function versNoeud(o: ObjetBoard, demo: boolean, precedent?: Node<DonneesNoeud>)
   const largeur = o.largeur || t[0];
   const hauteur = o.hauteur || t[1];
   if (precedent && precedent.data.objet === o) return precedent;
+  // une mise à jour distante reçue pendant un glisser ne ramène pas la carte sous le curseur à son ancienne place
+  const enGlisser = Boolean(precedent?.dragging);
   return {
-    id: o.id, type: o.type, position: { x: o.x, y: o.y }, data: { objet: o, demo }, width: largeur, height: hauteur,
-    zIndex: o.z, draggable: !o.verrouille, selected: precedent?.selected ?? false,
+    id: o.id, type: o.type, position: enGlisser ? precedent!.position : { x: o.x, y: o.y }, data: { objet: o, demo }, width: largeur, height: hauteur,
+    zIndex: o.z, draggable: !o.verrouille, selected: precedent?.selected ?? false, ...(enGlisser ? { dragging: true } : {}),
     ariaLabel: `${o.type} : ${o.meta.titre || o.contenu.slice(0, 40) || o.asset?.nom || ""}`,
   };
 }
@@ -58,9 +61,7 @@ interface Props {
 
 export function Board({ source, charge }: Props) {
   const rf = useReactFlow<Node<DonneesNoeud>, Edge<DonneesLien>>();
-  const [etat, setEtat] = useState<EtatBoard | null>(null);
   const [noeuds, setNoeuds] = useState<Node<DonneesNoeud>[]>([]);
-  const [erreur, setErreur] = useState("");
   const initial = useMemo(() => lireUrl(), []);
   const [filtre, setFiltre] = useState<Filtre>(initial.filtre);
   const [prio, setPrio] = useState(initial.priorite);
@@ -73,13 +74,6 @@ export function Board({ source, charge }: Props) {
   const [saisieUrl, setSaisieUrl] = useState(false);
   const [toasts, setToasts] = useState<Toast[]>([]);
   const [depot, setDepot] = useState(false);
-  const [evenements, setEvenements] = useState<Evenement[]>([]);
-  const [approbations, setApprobations] = useState<Approbation[]>([]);
-  const [tick, setTick] = useState(0);
-  const [espaces, setEspaces] = useState<EspaceBoard[]>([]);
-  useEffect(() => {
-    source.espaces().then(setEspaces).catch(() => undefined);
-  }, [source, tick]);
   // changer de projet = changer de Board : rechargement complet (flux, sélection et historique propres au Board)
   const changerEspace = useCallback((nom: string) => {
     const u = new URL(location.href);
@@ -90,15 +84,11 @@ export function Board({ source, charge }: Props) {
   }, []);
   const [visionneuse, setVisionneuse] = useState<{ src: string; titre: string } | null>(null);
   const historique = useRef(new Historique());
-  const etatRef = useRef<EtatBoard | null>(null);
   const pressePapiers = useRef<ObjetBoard[]>([]);
   const departGlisser = useRef(new Map<string, { x: number; y: number }>());
   const departTaille = useRef(new Map<string, { largeur: number; hauteur: number }>());
   const fichierInput = useRef<HTMLInputElement>(null);
   const acceptFichier = useRef("");
-  const rechargement = useRef<number>(0);
-  const versionChargement = useRef(0);
-  etatRef.current = etat;
 
   const toast = useCallback((texte: string, opts: Omit<Toast, "id" | "texte"> = {}) => {
     const id = Date.now() + Math.random();
@@ -106,66 +96,23 @@ export function Board({ source, charge }: Props) {
     window.setTimeout(() => setToasts((t) => t.filter((x) => x.id !== id)), opts.action ? 7000 : 4000);
   }, []);
 
-  /* ------------------------------------------------------------ chargement et synchronisation ---------- */
-  const charger = useCallback(async () => {
-    const version = ++versionChargement.current;
-    try {
-      const e = await source.charger();
-      if (version !== versionChargement.current) return;
-      if (charge && source.demo) e.objets.push(...genererCharge(charge));
-      setEtat(e);
-      setErreur("");
-      if (!source.demo) source.approbations().then(a => {
-        if (version === versionChargement.current) setApprobations(a);
-      }).catch(() => undefined);
-      setTick((t) => t + 1);
-    } catch (x) {
-      if (version === versionChargement.current) setErreur(x instanceof Error ? x.message : "chargement impossible");
-    }
-  }, [source, charge]);
-  const rechargerBientot = useCallback(() => {
-    // Au plus 250 ms d'attente, même si les événements arrivent sans interruption.
-    if (rechargement.current) return;
-    rechargement.current = window.setTimeout(() => { rechargement.current = 0; void charger(); }, 250);
-  }, [charger]);
-  useEffect(() => {
-    charger();
-    return () => { ++versionChargement.current; };
-  }, [charger]);
-
-  useEffect(() => {
-    if (source.demo) return;
-    // Filet de sécurité : une session SSE ouverte ne prouve pas que tous les changements sont arrivés.
-    const timer = window.setInterval(() => { if (document.visibilityState === "visible") void charger(); }, 10000);
-    return () => window.clearInterval(timer);
-  }, [source, charger]);
-
-  // Flux d'événements réel (SSE). Le navigateur se reconnecte seul avec Last-Event-ID ; on recharge l'état à la reprise.
-  useEffect(() => {
-    if (source.demo) return;
-    const es = new EventSource("/api/flux?apres=0");
-    const ouvertA = Date.now() / 1000 - 2;  // le flux rejoue l'historique : seuls les événements récents font un toast
-    let premier = true;
-    es.onopen = () => {
-      if (!premier) rechargerBientot();
-      premier = false;
-    };
-    es.onmessage = (m) => {
-      const e = JSON.parse(m.data) as Evenement;
-      setEvenements((l) => (l.length > 300 ? [...l.slice(-200), e] : [...l, e]));
-      if (e.type !== "board_maj" || !e.donnees.par || e.donnees.par !== "studio") rechargerBientot();
-      if (e.type === "board_propositions" && e.ts >= ouvertA) {
-        const n = Number(e.donnees.n ?? 0), l = Number(e.donnees.liens ?? 0);
-        toast(`Jarvis a contextualisé un élément : ${n} action${n > 1 ? "s" : ""} proposée${n > 1 ? "s" : ""}`
-          + (l ? `, ${l} lien${l > 1 ? "s" : ""} tracé${l > 1 ? "s" : ""}` : ""));
-      }
-    };
-    return () => {
-      es.close();
-      window.clearTimeout(rechargement.current);
-      rechargement.current = 0;
-    };
-  }, [source, rechargerBientot, toast]);
+  /* ------------------------------------------------------------ données (src/donnees) ------------------ */
+  // Chargement initial, flux incrémental repris au curseur, écritures optimistes versionnées : tout est dans la
+  // couche de données. Aucune relecture complète ici, sauf le filet (trou dans le flux, reconnexion).
+  const preparer = useCallback((e: EtatBoard) => (charge && source.demo ? { ...e, objets: [...e.objets, ...genererCharge(charge)] } : e), [charge, source.demo]);
+  const { etat, erreur, reglages, definirReglages, approbations, rafraichirApprobations, evenements, espaces, tick, store, file, sync,
+    recharger: charger, creer: creerObjet } = useBoard(source, {
+    conflit: (ids) => toast(ids.length > 1
+      ? "Ces éléments ont été modifiés ailleurs : ta modification est annulée, voici leur dernière version"
+      : "Cet élément a été modifié ailleurs : ta modification est annulée, voici sa dernière version", { erreur: true }),
+    erreur: (m) => toast(`Non enregistré : ${m}`, { erreur: true }),
+    evenement: (e) => {
+      if (e.type !== "board_propositions") return;
+      const n = Number(e.donnees.n ?? 0), l = Number(e.donnees.liens ?? 0);
+      toast(`Jarvis a contextualisé un élément : ${n} action${n > 1 ? "s" : ""} proposée${n > 1 ? "s" : ""}`
+        + (l ? `, ${l} lien${l > 1 ? "s" : ""} tracé${l > 1 ? "s" : ""}` : ""));
+    },
+  }, preparer);
 
   /* ------------------------------------------------------------ nœuds et liens dérivés ----------------- */
   const visibleSelon = useCallback((o: ObjetBoard) => {
@@ -198,9 +145,8 @@ export function Board({ source, charge }: Props) {
   }, [etat, source.demo, visibleSelon]);
 
   const renommerLien = useCallback(async (id: string, libelle: string) => {
-    await source.modifierLien(id, { libelle });
-    charger();
-  }, [source, charger]);
+    await file.modifierLien(id, { libelle });
+  }, [file]);
 
   const aretes = useMemo<Edge<DonneesLien>[]>(() => (etat?.liens ?? []).map((l) => ({
     id: l.id, source: l.source_id, target: l.cible_id, type: "relation",
@@ -219,44 +165,47 @@ export function Board({ source, charge }: Props) {
   }, [etat?.objets]);
 
   /* ------------------------------------------------------------ persistance ----------------------------- */
+  // Écriture optimiste : la carte bouge tout de suite ; la file envoie la version connue et annule si le serveur refuse.
+  // L'entrée d'historique est posée AU MOMENT DU GESTE (Ctrl+Z fonctionne avant même la réponse du serveur : son
+  // écriture attend son tour dans la file) et retirée si le serveur refuse tout.
   const modifier = useCallback(async (mods: Modification[], libelle?: string, inverse?: Modification[]) => {
-    const r = await source.modifier(mods);
-    const echecs = r.filter((x) => !x.ok);
-    if (echecs.length) toast(`Non enregistré : ${echecs[0]?.erreur ?? "erreur"}`, { erreur: true });
-    if (libelle && inverse) {
-      historique.current.ajouter({
-        libelle,
-        annuler: async () => { await source.modifier(inverse); await charger(); },
-        refaire: async () => { await source.modifier(mods); await charger(); },
-      });
-    }
-    await charger();
-  }, [source, toast, charger]);
+    const commande = libelle && inverse ? {
+      libelle,
+      annuler: async () => { await file.modifier(inverse); },
+      refaire: async () => { await file.modifier(mods); },
+    } : null;
+    if (commande) historique.current.ajouter(commande);
+    const r = await file.modifier(mods);
+    if (commande && !r.some((x) => x.ok)) historique.current.retirer(commande);
+  }, [file]);
 
-  const objet = useCallback((id: string) => etatRef.current?.objets.find((o) => o.id === id), []);
+  const objet = useCallback((id: string) => store.objet(id), [store]);
 
   const creer = useCallback(async (o: NouvelObjet, libelle = "Ajout") => {
-    const id = await source.creer(o);
+    const id = await creerObjet(o);
     historique.current.ajouter({
-      libelle, annuler: async () => { await source.supprimer([id]); await charger(); },
-      refaire: async () => { await source.supprimer([id], true); await charger(); },
+      libelle, annuler: async () => { await file.supprimer([id]); },
+      refaire: async () => { await file.restaurer([id]); },
     });
     return id;
-  }, [source, charger]);
+  }, [creerObjet, file]);
 
   const supprimer = useCallback(async (ids: string[]) => {
     if (!ids.length) return;
     if (ids.length >= 10 && !window.confirm(`Supprimer ${ids.length} cartes ? (Ctrl+Z pour annuler)`)) return;
-    await source.supprimer(ids);
-    historique.current.ajouter({
-      libelle: "Suppression", annuler: async () => { await source.supprimer(ids, true); await charger(); },
-      refaire: async () => { await source.supprimer(ids); await charger(); },
-    });
-    await charger();
+    const commande = {
+      libelle: "Suppression", annuler: async () => { await file.restaurer(ids); },
+      refaire: async () => { await file.supprimer(ids); },
+    };
+    historique.current.ajouter(commande);
+    if (!(await file.supprimer(ids))) {
+      historique.current.retirer(commande);
+      return;
+    }
     toast(`${ids.length} carte${ids.length > 1 ? "s" : ""} supprimée${ids.length > 1 ? "s" : ""}`, {
       action: { nom: "Annuler", faire: async () => { await historique.current.annuler(); } },
     });
-  }, [source, charger, toast]);
+  }, [file, toast]);
 
   const dupliquer = useCallback(async (ids: string[]) => {
     const objs = ids.map(objet).filter((o): o is ObjetBoard => Boolean(o) && o!.type !== "mission" && o!.type !== "agents");
@@ -264,14 +213,13 @@ export function Board({ source, charge }: Props) {
       await creer({ type: o.type, contenu: o.contenu, x: o.x + 40, y: o.y + 40, largeur: o.largeur, hauteur: o.hauteur,
         priorite: o.priorite, meta: o.meta, asset_id: o.asset_id, analyser: false }, "Duplication");
     }
-    await charger();
-  }, [objet, creer, charger]);
+  }, [objet, creer]);
 
   const devant = useCallback(async (ids: string[]) => {
-    const max = Math.max(0, ...(etatRef.current?.objets ?? []).map((o) => o.z));
+    const max = store.lire().objets.reduce((m, o) => Math.max(m, o.z), 0);
     await modifier(ids.map((id, i) => ({ id, champs: { z: max + 1 + i } })), "Amener devant",
       ids.map((id) => ({ id, champs: { z: objet(id)?.z ?? 0 } })));
-  }, [modifier, objet]);
+  }, [modifier, objet, store]);
 
   const actions = useMemo<ActionsBoard>(() => ({
     modifier: (id, champs) => {
@@ -296,14 +244,14 @@ export function Board({ source, charge }: Props) {
       modifier([{ id, champs: { parent_id: null, x: (parent?.x ?? 0) + 40, y: (parent?.y ?? 0) + (parent?.hauteur ?? 150) + 40 } }],
         "Sortie du dossier", [{ id, champs: { parent_id: o?.parent_id ?? null } }]);
     },
-    enfants: (dossierId) => (etatRef.current?.objets ?? []).filter((o) => o.parent_id === dossierId),
+    enfants: (dossierId) => store.lire().objets.filter((o) => o.parent_id === dossierId),
     contextualiser: (id) => {
       source.contextualiser(id).then(() => {
         toast(source.demo ? "Mode démo : aucune IA n'est appelée" : "Jarvis analyse l'élément…");
-        charger();
+        sync.demander([id]);
       }).catch((x: Error) => toast(x.message, { erreur: true }));
     },
-  }), [objet, modifier, supprimer, dupliquer, devant, rf, source, toast, charger]);
+  }), [objet, modifier, supprimer, dupliquer, devant, rf, source, toast, sync, store]);
 
   /* ------------------------------------------------------------ interactions du canevas ---------------- */
   // mémoïsé (exigé par React Flow) et sans nouvelle valeur si la sélection n'a pas changé : sinon boucle de rendu
@@ -369,14 +317,14 @@ export function Board({ source, charge }: Props) {
   const onEdgesChange = useCallback(async (changes: EdgeChange<Edge<DonneesLien>>[]) => {
     const suppr = changes.filter((c) => c.type === "remove").map((c) => c.id);
     for (const id of suppr) {
-      await source.modifierLien(id, { supprime: true });
-      historique.current.ajouter({
-        libelle: "Suppression de relation", annuler: async () => { await source.modifierLien(id, { supprime: false }); await charger(); },
-        refaire: async () => { await source.modifierLien(id, { supprime: true }); await charger(); },
-      });
+      const commande = {
+        libelle: "Suppression de relation", annuler: async () => { await file.modifierLien(id, { supprime: false }); },
+        refaire: async () => { await file.modifierLien(id, { supprime: true }); },
+      };
+      historique.current.ajouter(commande);
+      if (!(await file.modifierLien(id, { supprime: true }))) historique.current.retirer(commande);
     }
-    if (suppr.length) charger();
-  }, [source, charger]);
+  }, [file]);
 
   const derniereConnexion = useRef({ cle: "", t: 0 });
   const onConnect = useCallback(async (c: Connection) => {
@@ -385,14 +333,20 @@ export function Board({ source, charge }: Props) {
     const cle = `${c.source}>${c.target}`;
     if (derniereConnexion.current.cle === cle && performance.now() - derniereConnexion.current.t < 800) return;
     derniereConnexion.current = { cle, t: performance.now() };
-    const id = await source.lier(c.source, c.target, "", "defaut");
+    let id: string;
+    try {
+      id = await source.lier(c.source, c.target, "", "defaut");
+    } catch (x) {
+      toast(x instanceof Error ? x.message : "relation refusée", { erreur: true });
+      return;
+    }
+    await sync.lireMaintenant([], [id]);
     historique.current.ajouter({
-      libelle: "Relation", annuler: async () => { await source.modifierLien(id, { supprime: true }); await charger(); },
-      refaire: async () => { await source.modifierLien(id, { supprime: false }); await charger(); },
+      libelle: "Relation", annuler: async () => { await file.modifierLien(id, { supprime: true }); },
+      refaire: async () => { await file.modifierLien(id, { supprime: false }); },
     });
-    await charger();
     toast("Relation créée — double-clique l'étiquette pour la nommer");
-  }, [source, charger, toast]);
+  }, [source, sync, file, toast]);
 
   /* ------------------------------------------------------------ ingestion -------------------------------- */
   // centre de la vue, décalé tant qu'une carte occupe déjà l'emplacement (les ajouts successifs ne s'empilent pas)
@@ -400,13 +354,13 @@ export function Board({ source, charge }: Props) {
     const el = document.querySelector(".canevas");
     const r = el?.getBoundingClientRect();
     const p = rf.screenToFlowPosition({ x: (r?.left ?? 0) + (r?.width ?? 800) / 2 - 200, y: (r?.top ?? 0) + (r?.height ?? 600) / 2 - 150 });
-    const objets = etatRef.current?.objets ?? [];
+    const objets = store.lire().objets;
     for (let i = 0; i < 60 && objets.some((o) => !o.parent_id && Math.abs(o.x - p.x) < 36 && Math.abs(o.y - p.y) < 36); i++) {
       p.x += 48;
       p.y += 48;
     }
     return { x: Math.round(p.x), y: Math.round(p.y) };
-  }, [rf]);
+  }, [rf, store]);
 
   const ingerer = useCallback(async (elements: Element[], ou?: { x: number; y: number }) => {
     if (!elements.length) return;
@@ -423,14 +377,11 @@ export function Board({ source, charge }: Props) {
           let hote = e.url;
           try { hote = new URL(e.url).hostname; } catch { /* adresse brute */ }
           const id = await creer({ type: "lien", contenu: e.url, ...p, largeur: 434, hauteur: 356, meta: { url: e.url, hote, titre: hote } });
-          await charger();
           source.apercu(e.url).then(async (a) => {
-            await source.modifier([{ id, champs: { meta: { url: a.url, hote: a.hote, titre: a.titre || a.hote, description: a.description, site: a.site,
+            await file.modifier([{ id, champs: { meta: { url: a.url, hote: a.hote, titre: a.titre || a.hote, description: a.description, site: a.site,
               apercu_image: a.image, favicon: a.favicon } } }]);
-            charger();
           }).catch(async (x: Error) => {
-            await source.modifier([{ id, champs: { meta: { url: e.url, hote, titre: hote, apercu_erreur: x.message } } }]);
-            charger();
+            await file.modifier([{ id, champs: { meta: { url: e.url, hote, titre: hote, apercu_erreur: x.message } } }]);
           });
         } else {
           const famille = familleFichier(e.fichier);
@@ -448,8 +399,7 @@ export function Board({ source, charge }: Props) {
         toast(x instanceof Error ? x.message : "ajout impossible", { erreur: true });
       }
     }
-    await charger();
-  }, [centreVue, creer, charger, source, toast]);
+  }, [centreVue, creer, file, source, toast]);
 
   // Coller : fichiers et images du presse-papiers, URL, texte — ou les cartes copiées dans le Board
   useEffect(() => {
@@ -501,25 +451,22 @@ export function Board({ source, charge }: Props) {
       } else if (!mod && k === "n") {
         const p = centreVue();
         await creer({ type: "note", contenu: "Nouvelle note", ...p, largeur: 408, hauteur: 320, meta: { titre: "Note" }, analyser: false });
-        charger();
       } else if (e.key === "Escape") {
         rf.setNodes((ns) => ns.map((n) => (n.selected ? { ...n, selected: false } : n)));
       }
     };
     window.addEventListener("keydown", touche);
     return () => window.removeEventListener("keydown", touche);
-  }, [selection, objet, dupliquer, supprimer, rf, toast, centreVue, creer, charger]);
+  }, [selection, objet, dupliquer, supprimer, rf, toast, centreVue, creer]);
 
   /* ------------------------------------------------------------ barre d'outils -------------------------- */
   const agir = useCallback(async (o: Outil) => {
     const p = centreVue();
     if (o === "ajouter" || o === "texte") {
       await creer({ type: "note", contenu: "Nouvelle note", ...p, largeur: 408, hauteur: 320, meta: { titre: "Note" }, analyser: false });
-      charger();
     } else if (o === "lien") setSaisieUrl(true);
-    else if (o === "mindmap") {
+    else if (o === "dossier") {
       await creer({ type: "dossier", ...p, largeur: 378, hauteur: 152, meta: { titre: "Nouveau dossier" } });
-      charger();
       toast("Dossier créé : glisse des cartes dessus pour les y ranger");
     } else if (o === "coller") {
       try {
@@ -547,17 +494,18 @@ export function Board({ source, charge }: Props) {
         fichierInput.current.click();
       }
     }
-  }, [centreVue, creer, charger, ingerer, toast]);
+  }, [centreVue, creer, ingerer, toast]);
 
   const ouvrirDialogueMission = useCallback(() => setDialogueMission(true), []);
   const lancerMission = useCallback(async (d: DemandeMission) => {
     const p = centreVue();
     const id = await source.lancerMission(d, p.x, p.y);  // une erreur reste affichée dans le dialogue
     toast(source.demo ? "Mode démo : aucune mission réelle n'est lancée" : "Mission créée : un exécutant va la prendre en charge");
-    await charger();
+    aSelectionner.current = id;
+    await sync.lireMaintenant([id]);
     rf.setNodes((ns) => ns.map((n) => ({ ...n, selected: n.id === id })));
     setSelection([id]);
-  }, [source, centreVue, charger, toast, rf]);
+  }, [source, centreVue, sync, toast, rf]);
 
   /* ------------------------------------------------------------ sélection multiple ---------------------- */
   const aligner = useCallback(async (mode: "gauche" | "haut" | "centreH" | "centreV" | "distribuerH") => {
@@ -679,7 +627,7 @@ export function Board({ source, charge }: Props) {
                 </div>
               </div>
             )}
-            {erreur && <div className="etat-vide"><div role="alert"><h2>Board indisponible</h2>{erreur}<div><button type="button" className="bouton" onClick={charger}>Réessayer</button></div></div></div>}
+            {erreur && <div className="etat-vide"><div role="alert"><h2>Board indisponible</h2>{erreur}<div><button type="button" className="bouton" onClick={() => void charger()}>Réessayer</button></div></div></div>}
             {depot && <div className="depot">Dépose pour ajouter au Board</div>}
             <div className="toasts" aria-live="polite">
               {toasts.map((t) => (
@@ -694,13 +642,12 @@ export function Board({ source, charge }: Props) {
           </section>
           <Panneau source={source} objet={selectionne} objets={etat?.objets ?? []} evenements={evenements} approbations={approbations} tick={tick}
             priorite={actions.priorite} modifierMeta={(o, meta) => modifier([{ id: o.id, champs: { meta } }], "Étiquettes", [{ id: o.id, champs: { meta: o.meta } }])}
-            decider={async (id, accord) => { await source.decider(id, accord); charger(); }}
+            decider={async (id, accord) => { await source.decider(id, accord); rafraichirApprobations(); }}
             contextualiser={actions.contextualiser}
-            reglages={etat?.reglages}
+            reglages={reglages}
             regler={async (v) => {
               try {
-                await source.regler(v);
-                await charger();
+                definirReglages(await source.regler(v));
               } catch (x) {
                 toast(x instanceof Error ? x.message : "réglage refusé", { erreur: true });
               }
@@ -710,7 +657,7 @@ export function Board({ source, charge }: Props) {
                 const r = await source.deciderProposition(o.id, i, d);
                 toast(d === "ecarter" ? "Proposition écartée" : source.demo ? "Mode démo : aucune mission réelle n'est lancée"
                   : "Mission de préparation créée, reliée à l'élément");
-                await charger();
+                await sync.lireMaintenant([o.id, ...(r.carte_id ? [r.carte_id] : [])]);
                 if (r.carte_id) actions.inspecter(r.carte_id);
               } catch (x) {
                 toast(x instanceof Error ? x.message : "décision refusée", { erreur: true });

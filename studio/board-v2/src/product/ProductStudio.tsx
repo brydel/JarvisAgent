@@ -38,7 +38,7 @@ export function ProductStudio({ source }: { source: Source }) {
     const focus = () => { if (document.visibilityState === "visible") void refresh(); };
     document.addEventListener("visibilitychange", focus);
     let timer: number | undefined;
-    const events = source.demo ? null : new EventSource("/api/flux");
+    const events = source.demo ? null : new EventSource("/api/flux?apres=fin");
     if (events) events.onmessage = () => { if (timer === undefined) timer = window.setTimeout(() => { timer = undefined; if (document.visibilityState === "visible") void refresh(); }, 450); };
     return () => { controller.current?.abort(); events?.close(); window.clearTimeout(timer); document.removeEventListener("visibilitychange", focus); };
   }, [source, refresh]);

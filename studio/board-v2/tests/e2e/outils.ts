@@ -8,7 +8,7 @@ export const RAPPORTS = path.resolve(import.meta.dirname, "../../../../reports/b
 
 /** Ouvre le Board réel avec une session (jeton du serveur de test, passé dans le fragment comme en production). */
 export async function ouvrir(page: Page) {
-  const jeton = fs.readFileSync("/tmp/jarvis-e2e-jeton", "utf8").trim();
+  const jeton = fs.readFileSync(process.env.JARVIS_E2E_JETON || "/tmp/jarvis-e2e-jeton", "utf8").trim();
   await page.goto(`/v2/connexion#${jeton}`);
   await expect(page.locator(".react-flow")).toBeVisible();
   // chaque test part d'un Board vide (suppression douce par l'API : rien n'est effacé de la base de test)

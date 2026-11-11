@@ -3,7 +3,7 @@ import type { EspaceBoard } from "../types";
 import { useReactFlow, useStore } from "@xyflow/react";
 import {
   ChevronDown, ClipboardPaste, Ellipsis, File, Grid3x3, Image as IconeImage, 
-  Check, FolderGit2, Link2, Maximize, Minus, Mic, Network, Plus, Sparkles, Star, Type, Upload, Video,
+  Check, Folder, FolderGit2, Link2, Maximize, Minus, Mic, Network, Plus, Sparkles, Star, Type, Upload, Video,
 } from "lucide-react";
 
 export { ProductNav as BarreHaut } from "../product/ProductNav";
@@ -110,13 +110,13 @@ export const SousBarre = memo(function SousBarre({ projet, espaces = [], changer
 });
 
 /* ---------------------------------------------------------------- barre d'outils --------------------------- */
-export type Outil = "ajouter" | "coller" | "importer" | "lien" | "texte" | "image" | "video" | "audio" | "document" | "mindmap";
+export type Outil = "ajouter" | "coller" | "importer" | "lien" | "texte" | "image" | "video" | "audio" | "document" | "dossier";
 
 export const BarreOutils = memo(function BarreOutils({ agir }: { agir: (o: Outil) => void }) {
   const items: [Outil, string, typeof Plus, boolean][] = [
     ["coller", "Coller", ClipboardPaste, false], ["importer", "Importer", Upload, false], ["lien", "Lien", Link2, false],
     ["texte", "Texte", Type, false], ["image", "Image", IconeImage, true], ["video", "Vidéo", Video, true],
-    ["audio", "Audio", Mic, true], ["document", "Document", File, true], ["mindmap", "Mind map", Network, true],
+    ["audio", "Audio", Mic, true], ["document", "Document", File, true], ["dossier", "Dossier", Folder, true],
   ];
   return (
     <div className="outils nodrag nopan" role="toolbar" aria-label="Ajouter au Board" aria-orientation="vertical">

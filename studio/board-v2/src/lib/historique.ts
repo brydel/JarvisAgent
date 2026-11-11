@@ -14,6 +14,11 @@ export class Historique {
     if (this.passe.length > this.limite) this.passe.shift();
     this.futur = [];
   }
+  /** Retire une commande dont l'écriture a finalement été refusée par le serveur : rien à annuler. */
+  retirer(c: Commande) {
+    this.passe = this.passe.filter((x) => x !== c);
+    this.futur = this.futur.filter((x) => x !== c);
+  }
   async annuler(): Promise<string | null> {
     const c = this.passe.pop();
     if (!c) return null;

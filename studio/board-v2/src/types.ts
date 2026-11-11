@@ -126,6 +126,9 @@ export interface LienBoard {
   style: StyleLien;
   /** « jarvis » : relation posée par le chef (retirable comme les autres) */
   auteur?: string;
+  /** version serveur (détection de conflit) ; absente en démo et sur les anciennes réponses */
+  version?: number;
+  espace?: string;
   /** ancrages explicites (démo) ; sinon le lien part du bord le plus proche */
   cotes?: { s: CoteLien; sf: number; t: CoteLien; tf: number; c?: number; lt?: number };
 }
@@ -140,6 +143,19 @@ export interface EtatBoard {
   espace: string;
   objets: ObjetBoard[];
   liens: LienBoard[];
+  reglages?: ReglagesBoard;
+  /** numéro du dernier événement du journal au moment de la lecture : le flux reprend à partir de là */
+  curseur?: number;
+}
+
+/** Lecture ciblée (GET /api/v2/objets?ids=…) : quelques objets et les relations qui les touchent. */
+export interface DeltaBoard {
+  espace: string;
+  objets: ObjetBoard[];
+  liens: LienBoard[];
+  /** identifiants demandés qui n'existent plus dans ce Board (supprimés, déplacés ailleurs, inconnus) */
+  absents: { objets: string[]; liens: string[] };
+  curseur?: number;
   reglages?: ReglagesBoard;
 }
 
@@ -157,6 +173,8 @@ export interface Evenement {
   tache_id: string | null;
   ts: number;
   donnees: Record<string, unknown>;
+  /** flux filtré : numéro de l'événement précédent envoyé sur CE flux (continuité vérifiée par le client) */
+  prec?: number;
 }
 
 export interface Approbation {

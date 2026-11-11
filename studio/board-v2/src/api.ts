@@ -2,7 +2,7 @@
 // - SourceReelle : l'API authentifiée du Studio (lib/jarvis/studio_api.py), seule source de vérité ;
 // - SourceDemo   : jeu de démonstration EN MÉMOIRE (src/demo/fixture.ts), signalé « DÉMO », jamais persisté,
 //                  jamais présenté comme des missions ou des agents réels.
-import type { Approbation, Asset, EspaceBoard, EtatBoard, LienBoard, ObjetBoard, ReglagesBoard, StyleLien } from "./types";
+import type { Approbation, Asset, DeltaBoard, EspaceBoard, EtatBoard, Evenement, LienBoard, ObjetBoard, ReglagesBoard, StyleLien } from "./types";
 import { fixtureDemo, inspectionDemo } from "./demo/fixture";
 import type { DemandeMission } from "./components/DialogueMission";
 
@@ -59,12 +59,19 @@ export interface Source {
   espace: string;
   espaces(): Promise<EspaceBoard[]>;
   regler(valeurs: Partial<ReglagesBoard>): Promise<ReglagesBoard>;
+  /** Board entier + curseur du journal. Réservé au démarrage et au filet de sécurité (trou, reconnexion). */
   charger(): Promise<EtatBoard>;
+  /** Lecture ciblée : quelques objets (et les relations qui les touchent), quelques relations. */
+  lire(demande: { objets?: string[]; liens?: string[] }): Promise<DeltaBoard>;
+  /** Derniers événements du Board (activité récente), du plus ancien au plus récent. */
+  historique(dernier: number): Promise<Evenement[]>;
   creer(o: NouvelObjet): Promise<string>;
-  modifier(mods: Modification[]): Promise<{ id: string; ok: boolean; erreur?: string; version?: number }[]>;
-  supprimer(ids: string[], restaurer?: boolean): Promise<void>;
+  /** Chaque modification porte la version connue ; `code: "conflit"` si elle est périmée. */
+  modifier(mods: Modification[]): Promise<{ id: string; ok: boolean; erreur?: string; code?: string; version?: number }[]>;
+  /** `versions` : version connue de chaque objet ; rejet 409 (ErreurApi) si l'un d'eux a changé ailleurs. */
+  supprimer(ids: string[], restaurer?: boolean, versions?: Record<string, number>): Promise<{ versions?: Record<string, number> }>;
   lier(source: string, cible: string, libelle: string, style: StyleLien): Promise<string>;
-  modifierLien(id: string, champs: { libelle?: string; style?: StyleLien; supprime?: boolean }): Promise<void>;
+  modifierLien(id: string, champs: { libelle?: string; style?: StyleLien; supprime?: boolean }, version?: number): Promise<{ version?: number }>;
   televerser(fichier: File): Promise<Asset>;
   apercu(url: string): Promise<Apercu>;
   inspection(missionId: string): Promise<Inspection>;
@@ -112,20 +119,29 @@ export class SourceReelle implements Source {
     const r = await poster<{ objet_id: string }>("/api/v2/objets", { ...o, espace: this.espace });
     return r.objet_id;
   }
+  lire(demande: { objets?: string[]; liens?: string[] }) {
+    const p = new URLSearchParams({ espace: this.espace });
+    if (demande.objets?.length) p.set("ids", demande.objets.join(","));
+    if (demande.liens?.length) p.set("liens", demande.liens.join(","));
+    return json<DeltaBoard>(`/api/v2/objets?${p}`);
+  }
+  async historique(dernier: number) {
+    return (await json<{ evenements: Evenement[] }>(`/api/evenements?dernier=${dernier}&espace=${encodeURIComponent(this.espace)}`)).evenements;
+  }
   async modifier(mods: Modification[]) {
-    const r = await poster<{ resultats: { id: string; ok: boolean; erreur?: string; version?: number }[] }>(
+    const r = await poster<{ resultats: { id: string; ok: boolean; erreur?: string; code?: string; version?: number }[] }>(
       "/api/v2/objets/lot", { modifications: mods });
     return r.resultats;
   }
-  async supprimer(ids: string[], restaurer = false) {
-    await poster("/api/v2/objets/supprimer", { ids, restaurer });
+  supprimer(ids: string[], restaurer = false, versions?: Record<string, number>) {
+    return poster<{ versions?: Record<string, number> }>("/api/v2/objets/supprimer", { ids, restaurer, ...(versions ? { versions } : {}) });
   }
   async lier(source: string, cible: string, libelle: string, style: StyleLien) {
     const r = await poster<{ id: string }>("/api/v2/liens", { source_id: source, cible_id: cible, libelle, style, espace: this.espace });
     return r.id;
   }
-  async modifierLien(id: string, champs: { libelle?: string; style?: StyleLien; supprime?: boolean }) {
-    await poster(`/api/v2/liens/${id}`, champs);
+  modifierLien(id: string, champs: { libelle?: string; style?: StyleLien; supprime?: boolean }, version?: number) {
+    return poster<{ version?: number }>(`/api/v2/liens/${id}`, version === undefined ? champs : { ...champs, version });
   }
   async televerser(fichier: File) {
     const r = await fetch("/api/v2/fichiers", {
@@ -189,6 +205,18 @@ export class SourceDemo implements Source {
   async charger() {
     return structuredClone(this.etat);
   }
+  async lire(demande: { objets?: string[]; liens?: string[] }): Promise<DeltaBoard> {
+    const ids = new Set(demande.objets ?? []), idsLiens = new Set(demande.liens ?? []);
+    const objets = this.etat.objets.filter((o) => ids.has(o.id));
+    const liens = this.etat.liens.filter((l) => idsLiens.has(l.id) || ids.has(l.source_id) || ids.has(l.cible_id));
+    return structuredClone({
+      espace: this.espace, objets, liens, reglages: this.reglagesDemo,
+      absents: { objets: [...ids].filter((id) => !objets.some((o) => o.id === id)), liens: [...idsLiens].filter((id) => !liens.some((l) => l.id === id)) },
+    });
+  }
+  async historique() {
+    return [];
+  }
   async creer(o: NouvelObjet) {
     const id = this.id("BO");
     const z = Math.max(0, ...this.etat.objets.map((x) => x.z)) + 1;
@@ -225,7 +253,7 @@ export class SourceDemo implements Source {
           this.liensSupprimes.delete(id);
         }
       }
-      return;
+      return {};
     }
     for (const id of ids) {
       const o = this.etat.objets.find((x) => x.id === id);
@@ -236,6 +264,7 @@ export class SourceDemo implements Source {
       this.liensSupprimes.set(l.id, l);
     }
     this.etat.liens = this.etat.liens.filter((l) => !this.liensSupprimes.has(l.id));
+    return {};
   }
   async lier(source: string, cible: string, libelle: string, style: StyleLien) {
     const id = this.id("BL");
@@ -244,7 +273,7 @@ export class SourceDemo implements Source {
   }
   async modifierLien(id: string, champs: { libelle?: string; style?: StyleLien; supprime?: boolean }) {
     const l = this.etat.liens.find((x) => x.id === id) ?? this.liensSupprimes.get(id);
-    if (!l) return;
+    if (!l) return {};
     if (champs.libelle !== undefined) l.libelle = champs.libelle;
     if (champs.style !== undefined) l.style = champs.style;
     if (champs.supprime === true) {
@@ -254,6 +283,7 @@ export class SourceDemo implements Source {
       this.liensSupprimes.delete(id);
       this.etat.liens.push(l);
     }
+    return {};
   }
   private assets = new Map<string, Asset>();
   async televerser(fichier: File) {
