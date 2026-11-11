@@ -226,6 +226,10 @@ Tu reçois aussi les questions du chef (❓), ses bilans (📝) et les **livrabl
 | `general.fermeture_auto_min` | `60` | Ferme la fenêtre d'un agent terminé depuis N min (0 = jamais) |
 | `general.reprise_auto` | `true` | Après un redémarrage, `jarvis start` relance les agents qui travaillaient et le chef |
 | `general.chef_relance_auto` | `true` | Relancer le chef s'il s'arrête alors qu'il reste du travail (3 fois par heure au plus) |
+| `general.chef_moteurs` | `claude,codex` | Moteurs du chef par ordre de préférence. `claude` seul : pas de relève |
+| `general.chef_releve_auto` | `true` | Passer la direction au moteur suivant quand l'abonnement du chef est épuisé (2 relèves par heure au plus) |
+| `general.chef_releve_grace_s` | `180` | Temps laissé au chef sortant pour écrire son bilan |
+| `general.chef_modele_codex` | *(vide)* | Modèle du chef sur Codex (vide : celui de ta configuration Codex) |
 | `general.blocage_min` · `general.duree_max_min` | `45` · `240` | Prévenir le chef quand un agent n'affiche plus rien depuis N min, ou travaille depuis plus de N min |
 | `codex.mode` | `bac-a-sable` | `complet` : Codex sans bac à sable (dernier recours si `jarvis doctor` dit qu'il ne peut pas committer) |
 | `sante.active` · `sante.disque_min_go` · `sante.memoire_min_pct` | `true` · `10` · `10` | Surveillance du PC et seuils d'alerte |
@@ -355,6 +359,8 @@ install.sh                    Installation complète, idempotente
 bin/jarvis                    Point d'entrée (bash) : start, chef, task, doctor…
 bin/jarvis-claude             Claude Code en mode auto, avec le modèle de la tâche
 bin/jarvis-codex              Codex en mode autonome (bac à sable + règles), avec le modèle de la tâche
+bin/jarvis-chef-codex         Le chef sur Codex (relève du chef Claude) : bac à sable limité à son dossier, sans réseau
+bin/jarvis-chef               Porte filtrée du chef Codex : vérifie l'appelant et applique ses permissions
 config/modeles.toml           Catalogue des modèles
 config/codex/jarvis.rules     Règles d'exécution des agents Codex
 roles/                        Un fichier par spécialité : en-tête + brief de l'agent
@@ -408,6 +414,15 @@ Jarvis lit la **consommation réelle** des deux abonnements, sur les fenêtres d
 **Par tâche.** À la fin de chaque tâche, Jarvis lit dans les journaux de Claude Code et de Codex les jetons qu'elle a consommés. `jarvis bilan` les additionne par fournisseur, par rôle et par modèle : tu vois ce que coûte chaque atelier et ce qu'il livre.
 
 Le routeur tient compte de ces marges à chaque affectation. Les jauges sont en haut du cockpit, sur le tableau de bord web, et sur Telegram avec `/jetons`.
+
+### Le chef ne dépend plus d'un seul fournisseur
+
+Le chef d'orchestre tourne sur **Claude Code ou sur Codex**. `jarvis chef-moteur` montre l'ordre de préférence, l'état des deux abonnements et qui dirigera au prochain lancement.
+
+- **Au lancement** (`jarvis chef`, reprise après redémarrage, relance par le démon) : premier moteur de `general.chef_moteurs` qui est installé et dont l'abonnement n'est pas épuisé.
+- **En cours de route** : quand l'abonnement du chef en place est épuisé, le démon lui demande son bilan, attend `chef_releve_grace_s`, ferme sa fenêtre et lance le moteur suivant. Tu reçois « Relève du chef » sur Telegram. Les plans approuvés et les agents continuent : ils vivent dans l'état de Jarvis, pas dans la conversation du chef.
+- **Mêmes permissions** : le chef Codex travaille dans un bac à sable limité à son dossier, sans réseau. Ses commandes `jarvis`, `workmux` et `gh pr` passent par `bin/jarvis-chef`, qui applique les listes du chef Claude (`lib/jarvis/chef_moteur.py`) et refuse tout appelant qui ne descend pas de la fenêtre « chef ».
+- **Limite connue** : le bac à sable de Codex n'empêche pas la *lecture* d'un fichier `.env` (règle 4 du rôle, non tenue par la technique) ; sans réseau, rien de lu ne peut sortir par une commande. Détails : `docs/autonomy/chef-multi-moteur.md`.
 
 ## Linear et veille concurrentielle
 

@@ -1,0 +1,25 @@
+#!/usr/bin/env bash
+# jarvis-chef — seule porte de sortie du bac à sable pour le chef d'orchestre quand il tourne sur Codex.
+#
+#   jarvis-chef jarvis etat
+#   jarvis-chef workmux status --all
+#   jarvis-chef gh pr view 12
+#
+# Codex exécute cette commande hors du bac à sable (règle .codex/rules/chef.rules du dossier du chef).
+# Avant de lancer quoi que ce soit, « chef-garde » vérifie :
+#  - que l'appelant descend bien de la fenêtre « chef » (un agent de l'usine est refusé) ;
+#  - que la commande fait partie des outils du chef : mêmes listes que les permissions du chef Claude
+#    (lib/jarvis/chef_moteur.py), interdits d'abord, autorisation explicite exigée.
+# La commande est lancée telle quelle, sans shell : ni « ; », ni redirection, ni substitution.
+
+set -euo pipefail
+
+JARVIS_HOME="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")/.." && pwd)"
+export JARVIS_HOME
+
+(($#)) || { echo "usage : jarvis-chef <jarvis|workmux|gh> <arguments…>" >&2; exit 2; }
+
+PYTHONPATH="$JARVIS_HOME/lib" python3 -m jarvis chef-garde -- "$@" || exit $?
+
+export JARVIS_ROLE=chef JARVIS_VIA_CHEF=1 PATH="$JARVIS_HOME/bin:$PATH"
+exec "$@"

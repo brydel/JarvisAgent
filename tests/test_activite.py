@@ -86,7 +86,9 @@ class ActiviteTest(test_missions.Base):
                 mock.patch.object(agents, "chef_has_dialog", return_value=False), \
                 mock.patch.object(agents, "_run", return_value=subprocess.CompletedProcess([], 1)) as run:
             self.assertTrue(agents.chef_inject("Relire la mission"))
-            self.assertEqual(run.call_count, 1)  # pas d'Entrée après une saisie refusée
+            # pas d'Entrée après une saisie refusée (la recherche de la fenêtre du chef ne compte pas)
+            envois = [c for c in run.call_args_list if "send-keys" in c.args[0]]
+            self.assertEqual(len(envois), 1)
         from jarvis import store
         self.assertIn("Relire la mission", store.read_json(agents.CHEF_QUEUE, []))
 

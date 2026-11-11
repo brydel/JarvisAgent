@@ -28,6 +28,14 @@ DEFAULTS: dict = {
         # Mode de permission du chef (auto = un classifieur valide les actions sûres, utile la nuit).
         # Ses règles deny (pas de code, pas de fusion, pas de push) restent prioritaires.
         "chef_permission_mode": "auto",
+        # Moteurs du chef par ordre de préférence. Quand l'abonnement du premier est épuisé, le suivant
+        # prend la direction (relève) ; « claude » seul pour garder l'ancien comportement.
+        "chef_moteurs": "claude,codex",
+        "chef_releve_auto": True,
+        # Délai laissé au chef sortant pour écrire son bilan avant que le suivant démarre.
+        "chef_releve_grace_s": 180,
+        # Modèle du chef sur Codex (vide = celui de ta configuration Codex).
+        "chef_modele_codex": "",
         # Battement de cœur : si rien ne s'est passé depuis N minutes et qu'il reste de la place,
         # le démon réveille le chef pour qu'il cherche du travail utile (0 = désactivé).
         "battement_min": 30,
@@ -211,6 +219,7 @@ def settings() -> dict:
 _BORNES: dict[tuple[str, str], tuple[type, float, float]] = {
     ("general", "max_agents"): (int, 0, 64),
     ("general", "poll_seconds"): (int, 5, 600),
+    ("general", "chef_releve_grace_s"): (int, 0, 3600),
     ("admission", "operations_lourdes_max"): (int, 0, 16),
     ("admission", "reservation_min"): (int, 1, 120),
     ("admission", "charge_max_par_coeur"): (float, 0.5, 16),

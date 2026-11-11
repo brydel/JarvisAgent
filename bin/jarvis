@@ -29,6 +29,7 @@ ${C_CYAN}Pilotage${C_OFF}
   jarvis start [--fond]                 Ouvre la session « $SESSION » : cockpit + démon
                                         (après un redémarrage : reprend les agents et le chef)
   jarvis chef                           Lance (ou rejoint) le chef d'orchestre
+  jarvis chef-moteur                    Qui dirige : Claude ou Codex, jetons, relève automatique
   jarvis cockpit                        Interface plein écran (ateliers, plans, livrables, fil)
   jarvis web                            Tableau de bord dans le navigateur (lecture seule)
   jarvis etat · jarvis usine            État complet · les ateliers : qui travaille sur quoi
@@ -210,7 +211,7 @@ cmd_start() {
 }
 
 cmd_chef() {
-  has claude || die "Claude Code n'est pas installé (lance ./install.sh)."
+  has claude || has codex || die "Ni Claude Code ni Codex n'est installé (lance ./install.sh)."
   ensure_session
   resume_after_reboot
   start_chef
@@ -256,9 +257,8 @@ cmd_relancer() {
 
 # Lance le chef sans s'y attacher (utilisé par le démon quand le chef s'est arrêté).
 cmd_chef_lancer() {
-  has claude || die "Claude Code n'est pas installé."
   tmux has-session -t "$SESSION" 2>/dev/null || die "session « $SESSION » fermée (jarvis start)."
-  start_chef
+  start_chef "${1:-}"
 }
 
 # Ferme TOUTES les fenêtres « chef » (par identifiant : « session:chef » est ambigu s'il y en a deux).
@@ -281,31 +281,27 @@ chef_present() {
   esac
 }
 
+# Le moteur (Claude Code ou Codex) est choisi par « chef-commande » : ordre de préférence, puis jetons.
+# « --releve » : ferme le chef en place et lance le moteur suivant (appelé par le démon).
 start_chef() {
-  has claude || { warn "Claude Code introuvable : chef non lancé."; return 0; }
+  local releve="${1:-}"
   # Verrou : deux lancements simultanés (reprise après redémarrage + démon, par exemple) voyaient
   # tous deux « pas de chef » et en créaient chacun un (5 nov.).
   local verrou="${XDG_RUNTIME_DIR:-/tmp}/jarvis-chef-$SESSION.lock"
   exec {fd_chef}>"$verrou"
   flock -w 30 "$fd_chef" || { warn "Un autre lancement du chef est en cours."; exec {fd_chef}>&-; return 0; }
+  [[ "$releve" == "--releve" ]] && fermer_fenetres_chef
   if ! chef_present; then
-    local dir flags="" kickoff mode
+    local dir ligne
     dir="$(py chef-preparer)"
-    kickoff="$(py chef-message)"
-    mode="$(py reglage-lire general.chef_permission_mode)"
-    case "$mode" in
-      ""|default|manual|plan|auto|acceptEdits) ;;
-      *) die "general.chef_permission_mode « $mode » refusé : le chef ne peut pas contourner ses permissions." ;;
-    esac
-    [[ -n "$mode" ]] && flags+=" --permission-mode $mode"
-    if [[ "$(py reglage-lire general.chef_remote_control)" == "true" ]]; then
-      flags+=" --remote-control JARVIS-CHEF"
+    # JARVIS_ROLE=chef (posé par la ligne) : « jarvis task » exigera alors un plan approuvé.
+    if ligne="$(py chef-commande ${releve:+--releve})"; then
+      tmux new-window -d -t "$SESSION:" -n chef -c "$dir" "$ligne; exec bash"
+      py evenement chef "chef d'orchestre démarré"
+      ok "Chef lancé dans la fenêtre « chef ». Il va proposer un premier plan."
+    else
+      warn "Chef non lancé : ni Claude Code ni Codex n'est utilisable (jarvis chef-moteur)."
     fi
-    # JARVIS_ROLE=chef : « jarvis task » exigera alors un plan approuvé.
-    tmux new-window -d -t "$SESSION:" -n chef -c "$dir" \
-      "env JARVIS_ROLE=chef CLAUDE_CODE_ENABLE_PROMPT_SUGGESTION=false claude$flags $(squote "$kickoff"); exec bash"
-    py evenement chef "chef d'orchestre démarré"
-    ok "Chef lancé dans la fenêtre « chef ». Il va proposer un premier plan."
   fi
   exec {fd_chef}>&-
 }
@@ -647,7 +643,7 @@ main() {
     os|redteam|defense|cockpit|etat|plan|fil|projet|telegram|noeud|regler|capacite|demander|note|journal|daemon|voir|jetons|veille|\
     fermer|reprendre|sante|reparer-git|role|modele|tache|verdict|bilan|usine|studio|livrer|livrables|web|\
     admission|pause|profil|lourd|audit|diagnostic|politique|budget|fournisseurs|proposition|\
-    budget-jetons|cout|memoire|secrets|eval|rejouer|traces|proxy|rollback|execution|skill|stockage|executant|\
+    budget-jetons|cout|memoire|secrets|eval|rejouer|traces|proxy|rollback|execution|skill|stockage|executant|chef-moteur|\
     mission)
                   py "$cmd" "$@" ;;
     chef-lancer)  cmd_chef_lancer "$@" ;;

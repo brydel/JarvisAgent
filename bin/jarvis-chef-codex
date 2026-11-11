@@ -1,0 +1,50 @@
+#!/usr/bin/env bash
+# jarvis-chef-codex — lance le chef d'orchestre sur Codex (relève du chef Claude, ou moteur préféré).
+#
+# Mêmes garde-fous que le chef Claude, tenus autrement :
+#  - bac à sable « workspace-write » limité au dossier du chef : il ne peut modifier ni le code des
+#    projets, ni l'état de Jarvis, ni ses réglages ;
+#  - pas de réseau dans le bac à sable : rien de ce qu'il lit ne peut sortir par une commande ;
+#  - --ask-for-approval never : aucune boîte de dialogue, une action non prévue échoue proprement ;
+#  - ses outils (jarvis, workmux, gh pr) passent par bin/jarvis-chef, qui applique ses permissions ;
+#  - recherche web native (veille), outils MCP choisis (réglage codex.mcp_approuves, Linear par défaut) ;
+#  - --no-daemon : les commandes restent des descendants de la fenêtre « chef », ce que bin/jarvis-chef exige.
+#
+# Appelé par « jarvis chef » depuis le dossier du chef, avec son message de démarrage en argument.
+
+set -euo pipefail
+
+JARVIS_HOME="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")/.." && pwd)"
+export JARVIS_HOME JARVIS_ROLE=chef JARVIS_CHEF_MOTEUR=codex
+# Dossiers npm/pip de l'utilisateur en dernier : un shell non interactif ne lit pas ~/.bashrc, qui les ajoute.
+export PATH="$JARVIS_HOME/bin:$PATH:$HOME/.local/bin:$HOME/.npm-global/bin"
+CODEX_CFG="${CODEX_HOME:-$HOME/.codex}/config.toml"
+
+py() { PYTHONPATH="$JARVIS_HOME/lib" python3 -m jarvis "$@"; }
+
+# Sous WSL, le Codex de Windows (/mnt/c/…) ne marche pas dans Linux.
+codex_bin=""
+while IFS= read -r p; do
+  [[ "$p" != /mnt/* ]] && { codex_bin="$p"; break; }
+done < <(type -ap codex 2>/dev/null || true)
+[[ -n "$codex_bin" ]] || { echo "jarvis-chef-codex : Codex (Linux) introuvable." >&2; exit 1; }
+
+[[ -f AGENTS.md && -f .codex/rules/chef.rules ]] \
+  || { echo "jarvis-chef-codex : dossier du chef non préparé (jarvis chef)." >&2; exit 1; }
+
+options=(--sandbox workspace-write --ask-for-approval never --no-daemon --search
+         -c "projects.\"$PWD\".trust_level=\"trusted\""
+         -c sandbox_workspace_write.network_access=false)
+
+modele="$(py reglage-lire general.chef_modele_codex 2>/dev/null || true)"
+[[ -n "$modele" ]] && options+=(-m "$modele")
+
+approuves=" $(py reglage-lire codex.mcp_approuves 2>/dev/null | tr ',' ' ') "
+if [[ -f "$CODEX_CFG" ]]; then
+  while IFS= read -r name; do
+    [[ "$approuves" == *" $name "* ]] || continue
+    options+=(-c "mcp_servers.$name.default_tools_approval_mode=\"approve\"")
+  done < <(sed -n 's/^[[:space:]]*\[mcp_servers\.\("\{0,1\}\)\([A-Za-z0-9_-]\{1,\}\)\1\][[:space:]]*$/\2/p' "$CODEX_CFG" | sort -u)
+fi
+
+exec "$codex_bin" "${options[@]}" "$@"

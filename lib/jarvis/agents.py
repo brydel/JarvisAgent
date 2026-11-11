@@ -389,7 +389,12 @@ def chef_has_dialog() -> bool:
     if res.returncode != 0:
         return True
     tail = [ln for ln in res.stdout.splitlines() if ln.strip()][-10:]
-    return any(m in ln for ln in tail for m in DIALOG_MARKERS)
+    from . import chef_moteur
+    marqueurs = chef_moteur.DIALOGUES.get(chef_moteur.courant(), DIALOG_MARKERS)
+    return any(m in ln for ln in tail for m in marqueurs)
+
+
+CODEX_PAUSE_SAISIE = 0.6
 
 
 def _type_into_chef(line: str) -> bool:
@@ -399,6 +404,11 @@ def _type_into_chef(line: str) -> bool:
         saisie = _run(["tmux", "send-keys", "-t", _chef_win(), "-l", line], timeout=5)
         if saisie.returncode:
             return False
+        from . import chef_moteur
+        if chef_moteur.courant() == "codex":
+            # Codex prend une saisie rapide suivie d'Entrée pour un collage : le message resterait dans la
+            # zone de saisie sans partir (constaté à l'essai réel du 11 nov.).
+            time.sleep(CODEX_PAUSE_SAISIE)
         validation = _run(["tmux", "send-keys", "-t", _chef_win(), "Enter"], timeout=5)
         return validation.returncode == 0
     except (subprocess.TimeoutExpired, OSError):

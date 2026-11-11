@@ -84,3 +84,8 @@ prefix_rule(
     decision = "forbidden",
     justification = "Jarvis : commandes destructrices interdites aux agents",
 )
+
+# --- Chef d'orchestre sur Codex ------------------------------------------------
+# La règle qui laisse sortir « jarvis-chef » du bac à sable n'est PAS ici : elle est écrite dans le
+# dossier du chef (.codex/rules/chef.rules, par « jarvis chef-preparer »), pour que les agents de
+# l'usine ne la reçoivent pas. bin/jarvis-chef refuse de toute façon tout appelant hors fenêtre « chef ».

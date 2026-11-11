@@ -146,7 +146,7 @@ class JarvisTest(unittest.TestCase):
         for name in ("claude_usage.json", "budget.json", "veille.json", "battement.json", "sante.json",
                      "reprise.json", "agents_actifs.json", "chef_queue.json", "taches.json", "modeles_verif.json",
                      "modeles_propositions.json", "livrables.json", "usage_hist.json", "prevision.json",
-                     "blocage.json", "chef_garde.json", "demon.json", "sante_windows.json", "watch.json",
+                     "blocage.json", "chef_garde.json", "chef_moteur.json", "demon.json", "sante_windows.json", "watch.json",
                      "pauses.json", "reservations.json", "lourdes/operations.json", "relances.json", "journal.jsonl",
                      "ressources.json", "delegations.json", "exceptions.json", "budgets.json", "travaux.json"):
             store.supprimer(name)
@@ -1865,6 +1865,175 @@ class JarvisTest(unittest.TestCase):
             self.assertEqual(tmux("list-windows", "-t", "jtest3", "-F", "#{window_id}"), avant)
         finally:
             tmux("kill-session", "-t", "jtest3")
+
+    # --- moteur du chef : Claude ou Codex, relève automatique ---------------------
+    def test_chef_engine_follows_order_then_tokens(self):
+        from jarvis import chef_moteur
+        self.set_claude(20)
+        self.set_codex(20)
+        self.assertEqual(chef_moteur.choisir()[0], "claude")
+        self.set_claude(99)                                    # Claude épuisé : Codex dirige
+        moteur, raison = chef_moteur.choisir()
+        self.assertEqual(moteur, "codex")
+        self.assertIn("claude épuisé", raison)
+        self.set_codex(99)                                     # tous épuisés : le préféré attend la remise à zéro
+        moteur, raison = chef_moteur.choisir()
+        self.assertEqual(moteur, "claude")
+        self.assertIn("épuisés", raison)
+        self.set_claude(20)
+        shutil.rmtree(TMP / "codexhome" / "sessions")
+        self.set_codex(20)
+        self.assertEqual(chef_moteur.choisir(eviter="claude")[0], "codex")   # relève : on quitte le moteur en place
+        data = config.settings()
+        data["general"]["chef_moteurs"] = "codex, inconnu, claude, codex"
+        config.save_settings(data)
+        try:
+            self.assertEqual(chef_moteur.ordre(), ["codex", "claude"])
+            self.assertEqual(chef_moteur.choisir()[0], "codex")
+        finally:
+            data["general"]["chef_moteurs"] = "claude,codex"
+            config.save_settings(data)
+
+    def test_codex_chef_gate_applies_the_same_permissions(self):
+        from jarvis import chef_moteur
+        permis = (["jarvis", "etat"], ["jarvis", "plan", "nouveau", "--titre", "x"], ["jarvis", "task", "--plan", "P-1"],
+                  ["workmux", "status", "--all"], ["gh", "pr", "view", "12"], ["jarvis", "livrer", "x"])
+        refuse = (["jarvis", "plan", "ok", "P-0001"], ["jarvis", "regler", "general.max_agents", "99"],
+                  ["jarvis", "pause", "lever", "humain"], ["jarvis", "livrer", "x", "--forcer"],
+                  ["workmux", "add", "x"], ["gh", "pr", "merge", "3"], ["git", "push"], ["rm", "-rf", "x"],
+                  ["python3", "-c", "1"], ["bash", "-c", "jarvis etat"], ["/usr/bin/jarvis", "etat"],
+                  ["jarvis", "etatx"], ["jarvis", "etat\njarvis plan ok P-1"], [])
+        for argv in permis:
+            self.assertTrue(chef_moteur.verifier(argv)[0], argv)
+        for argv in refuse:
+            self.assertFalse(chef_moteur.verifier(argv)[0], argv)
+        # Chaque règle Bash donnée au chef Claude est comprise par la garde : aucune ne passe à la trappe.
+        for regle in chef_moteur.AUTORISE + chef_moteur.INTERDIT:
+            if regle.startswith("Bash("):
+                self.assertIsNotNone(chef_moteur._motif(regle), regle)
+
+    def test_codex_chef_gate_refuses_anyone_but_the_chef(self):
+        # Lancé d'ici (pas depuis la fenêtre « chef ») : refusé avant même de regarder la commande.
+        res = subprocess.run([str(ROOT / "bin" / "jarvis-chef"), "jarvis", "etat"], capture_output=True, text=True,
+                             env=dict(os.environ, JARVIS_ROLE="chef"))
+        self.assertEqual(res.returncode, 4, res.stderr)
+        self.assertIn("réservé au chef", res.stderr)
+        # Depuis la fenêtre du chef : la commande permise passe, l'interdite est refusée.
+        sortie = TMP / "garde.txt"
+        sortie.unlink(missing_ok=True)
+        garde = str(ROOT / "bin" / "jarvis-chef")
+        script = (f"{garde} jarvis capacite >/dev/null 2>&1; echo permis=$? >{sortie}; "
+                  f"{garde} jarvis plan ok P-0001 >/dev/null 2>&1; echo interdit=$? >>{sortie}; sleep 30")
+        tmux("new-session", "-d", "-s", "jtest4", "-n", "cockpit", "sleep 300")
+        tmux("new-window", "-d", "-t", "jtest4:", "-n", "chef", f"env JARVIS_SESSION=jtest4 sh -c '{script}'")
+        try:
+            for _ in range(100):
+                if sortie.exists() and "interdit=" in sortie.read_text():
+                    break
+                time.sleep(0.2)
+            self.assertEqual(sortie.read_text().split(), ["permis=0", "interdit=4"])
+        finally:
+            tmux("kill-session", "-t", "jtest4")
+
+    def test_chef_folder_is_prepared_for_both_engines(self):
+        from jarvis import chef_moteur
+        res = subprocess.run([sys.executable, "-m", "jarvis", "chef-preparer"], capture_output=True, text=True,
+                             env=dict(os.environ, PYTHONPATH=str(ROOT / "lib"), JARVIS_DATA_DIR=str(TMP / "data2")))
+        self.assertEqual(res.returncode, 0, res.stderr)
+        chef_dir = Path(res.stdout.strip())
+        role = (chef_dir / "AGENTS.md").read_text()
+        self.assertTrue(role.startswith("# Moteur : Codex"))
+        self.assertIn("`jarvis-chef jarvis plan nouveau", role)
+        self.assertIn("`jarvis-chef workmux status --all`", role)
+        self.assertNotIn("`jarvis etat`", role)                # plus aucune commande d'usine hors de la garde
+        self.assertIn("# Tu es JARVIS-CHEF", role)
+        regle = (chef_dir / ".codex" / "rules" / "chef.rules").read_text()
+        self.assertIn('pattern = ["jarvis-chef"]', regle)
+        self.assertNotIn("jarvis-chef", (ROOT / "config" / "codex" / "jarvis.rules").read_text().split("# --- Chef")[0])
+        allow = json.loads((chef_dir / ".claude" / "settings.json").read_text())["permissions"]["allow"]
+        self.assertEqual(allow, list(chef_moteur.AUTORISE))
+        (chef_dir / "AGENTS.md").write_text("notes à moi")     # un fichier de l'humain n'est jamais écrasé
+        subprocess.run([sys.executable, "-m", "jarvis", "chef-preparer"], capture_output=True, text=True,
+                       env=dict(os.environ, PYTHONPATH=str(ROOT / "lib"), JARVIS_DATA_DIR=str(TMP / "data2")))
+        self.assertTrue(any(f.read_text() == "notes à moi" for f in chef_dir.glob("AGENTS.md.bak.*")))
+
+    def test_chef_starts_on_codex_when_claude_is_out(self):
+        self.set_claude(99)
+        self.set_codex(10)
+        env = dict(os.environ, JARVIS_SESSION="jtest5", PYTHONPATH=str(ROOT / "lib"))
+        tmux("new-session", "-d", "-s", "jtest5", "-n", "cockpit", "-x", "200", "-y", "50", "sleep 300")
+        try:
+            res = subprocess.run([str(ROOT / "bin" / "jarvis"), "chef-lancer"], capture_output=True, text=True, env=env)
+            self.assertEqual(res.returncode, 0, res.stderr)
+            time.sleep(1.5)
+            ecran = tmux("capture-pane", "-p", "-J", "-S", "-200", "-t", "jtest5:chef")
+            for attendu in ("workspace-write", "--no-daemon", "network_access=false", "Nouvelle session."):
+                self.assertIn(attendu, ecran)
+            self.assertNotIn("--permission-mode", ecran)       # ce n'est pas la ligne de commande de Claude
+            self.assertEqual(store.read_json("chef_moteur.json", {})["moteur"], "codex")
+            # Relève dans l'autre sens : Codex épuisé, Claude rétabli. Le message dit au nouveau chef d'où il vient.
+            self.set_claude(10)
+            self.set_codex(99)
+            res = subprocess.run([str(ROOT / "bin" / "jarvis"), "chef-lancer", "--releve"], capture_output=True, text=True, env=env)
+            self.assertEqual(res.returncode, 0, res.stderr)
+            time.sleep(1.5)
+            self.assertEqual(len([w for w in tmux("list-windows", "-t", "jtest5", "-F", "#{window_name}").split() if w == "chef"]), 1)
+            ecran = tmux("capture-pane", "-p", "-J", "-S", "-200", "-t", "jtest5:chef")
+            self.assertIn("--permission-mode", ecran)
+            self.assertIn("RELÈVE", ecran)
+            self.assertEqual(store.read_json("chef_moteur.json", {})["moteur"], "claude")
+        finally:
+            tmux("kill-session", "-t", "jtest5")
+
+    def test_daemon_hands_the_factory_over_when_the_chef_engine_runs_out(self):
+        from jarvis import chef_moteur
+        self.set_claude(20)
+        self.set_codex(20)
+        chef_moteur.enregistrer("claude", "moteur préféré")
+        self.assertIsNone(daemon.chef_releve_check())           # tout va bien : rien à faire
+        self.set_claude(99)
+        t0 = time.time()
+        self.assertEqual(daemon.chef_releve_check(t0), "demandee")
+        self.assertIn("[JARVIS relève]", self.chef_screen())    # le chef sortant écrit son bilan
+        vrai_run = subprocess.run
+        with mock.patch("subprocess.run", side_effect=vrai_run) as run:
+            self.assertIsNone(daemon.chef_releve_check(t0 + 60))   # délai de grâce : on attend
+            self.assertFalse(any("chef-lancer" in c.args[0] for c in run.call_args_list))
+
+        def faux(cmd, *a, **k):
+            if "chef-lancer" in cmd:
+                self.assertIn("--releve", cmd)
+                chef_moteur.enregistrer("codex", "relève (claude épuisé)")
+                return subprocess.CompletedProcess(cmd, 0, "", "")
+            return vrai_run(cmd, *a, **k)
+
+        with mock.patch("subprocess.run", side_effect=faux):
+            self.assertEqual(daemon.chef_releve_check(t0 + 200), "faite")
+        self.assertTrue(any("Relève du chef" in str(c) for c in FakeTelegram.calls))
+        self.assertEqual(chef_moteur.courant(), "codex")
+        self.assertIsNone(daemon.chef_releve_check(t0 + 400))   # Codex a de la marge : on y reste
+
+    def test_handover_is_cancelled_if_tokens_come_back_and_never_runs_in_pause(self):
+        from jarvis import chef_moteur
+        self.set_codex(20)
+        self.set_claude(99)
+        chef_moteur.enregistrer("claude", "moteur préféré")
+        store.set_paused(True)
+        self.assertIsNone(daemon.chef_releve_check())           # pause : personne ne relance rien à ta place
+        store.set_paused(False)
+        self.assertEqual(daemon.chef_releve_check(), "demandee")
+        self.set_claude(20)                                    # remise à zéro pendant le délai de grâce
+        self.assertIsNone(daemon.chef_releve_check())
+        self.assertFalse(store.read_json("chef_moteur.json", {}).get("releve_demandee"))
+        self.set_claude(99)
+        data = config.settings()
+        data["general"]["chef_releve_auto"] = False
+        config.save_settings(data)
+        try:
+            self.assertIsNone(daemon.chef_releve_check())       # relève désactivée : ancien comportement
+        finally:
+            data["general"]["chef_releve_auto"] = True
+            config.save_settings(data)
 
     def test_running_chef_is_seen_even_behind_its_launch_shell(self):
         # Le chef est lancé comme « env … claude …; exec bash » : tmux ne rapporte que le shell parent.

@@ -1173,7 +1173,7 @@ def cmd_chef_preparer(a) -> int:
         protected |= {root, root.parent / f"{root.name}__worktrees"}
     protected |= {config.STATE_DIR, config.CONFIG_DIR, config.JARVIS_HOME, chef_dir / ".claude"}
     # Vague 3 : skills actives, quarantaine, briefs candidats, rapports d'optimisation, dossiers lus par les agents.
-    from . import skills as _skills
+    from . import chef_moteur, skills as _skills
     protected |= {config.DATA_DIR / d for d in ("skills", "skills-quarantaine", "roles-candidats", "optimisation")}
     protected |= set(_skills.liens_dirs())
     deny_paths = []
@@ -1186,85 +1186,89 @@ def cmd_chef_preparer(a) -> int:
 
     settings = {
         "permissions": {
-            "allow": [
-                "Bash(jarvis etat *)", "Bash(jarvis etat)", "Bash(jarvis projet liste)", "Bash(jarvis fil *)",
-                "Bash(jarvis plan nouveau *)", "Bash(jarvis plan liste *)", "Bash(jarvis plan liste)",
-                "Bash(jarvis plan voir *)", "Bash(jarvis task *)", "Bash(jarvis capacite)",
-                "Bash(jarvis demander *)", "Bash(jarvis note *)", "Bash(jarvis journal *)", "Bash(jarvis journal)",
-                "Bash(jarvis voir *)", "Bash(jarvis jetons)", "Bash(jarvis jetons *)",
-                "Bash(jarvis veille)", "Bash(jarvis veille *)",
-                "Bash(jarvis fermer *)", "Bash(jarvis sante)", "Bash(jarvis reparer-git *)",
-                "Bash(jarvis reprendre --essai)", "Bash(jarvis admission etat)", "Bash(jarvis pause)",
-                "Bash(jarvis pause etat)", "Bash(jarvis pause poser incident *)", "Bash(jarvis lourd liste)",
-                "Bash(jarvis audit)", "Bash(jarvis audit *)", "Bash(jarvis profil liste)", "Bash(jarvis profil voir *)",
-                "Bash(jarvis diagnostic)", "Bash(jarvis diagnostic *)", "Bash(jarvis politique)", "Bash(jarvis politique *)",
-                "Bash(jarvis budget)", "Bash(jarvis budget *)", "Bash(jarvis fournisseurs)", "Bash(jarvis fournisseurs *)",
-                "Bash(jarvis proposition *)", "Bash(jarvis memoire)", "Bash(jarvis memoire *)",
-                "Bash(jarvis cout)", "Bash(jarvis cout *)", "Bash(jarvis budget-jetons *)",
-                "Bash(jarvis secrets verifier *)", "Bash(jarvis rejouer *)", "Bash(jarvis traces)", "Bash(jarvis traces *)",
-                "Bash(jarvis rollback proposer *)", "Bash(jarvis rollback demander *)", "Bash(jarvis eval liste*)",
-                "Bash(jarvis eval verifier*)", "Bash(jarvis eval resultats*)", "Bash(jarvis proxy)", "Bash(jarvis proxy voir)",
-                "Bash(jarvis skill)", "Bash(jarvis skill liste)", "Bash(jarvis skill auditer)", "Bash(jarvis skill installer *)",
-                "Bash(jarvis stockage)", "Bash(jarvis stockage etat)", "Bash(jarvis executant)", "Bash(jarvis executant liste)",
-                # Usine : rôles, routeur, registre, bilan, studio et livrables.
-                "Bash(jarvis role)", "Bash(jarvis role *)", "Bash(jarvis modele)", "Bash(jarvis modele liste)",
-                "Bash(jarvis modele choisir *)", "Bash(jarvis modele proposer *)",
-                "Bash(jarvis tache)", "Bash(jarvis tache *)", "Bash(jarvis verdict *)",
-                "Bash(jarvis bilan)", "Bash(jarvis bilan *)", "Bash(jarvis usine)",
-                "Bash(jarvis studio verifier *)", "Bash(jarvis livrer *)",
-                "Bash(jarvis livrables)", "Bash(jarvis livrables *)",
-                # Veille concurrentielle : recherche web (lecture seule).
-                "WebSearch", "WebFetch",
-                "Bash(jarvis os diagnostic)", "Bash(jarvis os schemas)", "Bash(jarvis os preflight *)",
-                "Bash(jarvis os communaute *)", "Bash(jarvis os outils *)",
-                "Bash(jarvis os runtime *)", "Bash(jarvis os modele voir)", "Bash(jarvis os modele verifier)",
-                "Bash(jarvis os oauth liste)",
-                "Bash(jarvis os connexions liste)", "Bash(jarvis os connexions decouvrir *)",
-                "Bash(workmux status)", "Bash(workmux status *)", "Bash(workmux capture *)",
-                "Bash(workmux send *)", "Bash(workmux wait *)",
-                "Bash(gh pr view *)", "Bash(gh pr diff *)", "Bash(gh pr checks *)", "Bash(gh pr list *)",
-                "mcp__linear-server__*",
-            ],
-            "deny": deny_paths + secrets + [
-                # Décisions et réglages réservés à l'humain.
-                "Bash(jarvis os mandat creer*)", "Bash(jarvis os mandat revoquer*)",
-                "Bash(jarvis os connexions creer*)", "Bash(jarvis os connexions revoquer*)",
-                "Bash(jarvis os modele configurer*)", "Bash(jarvis os oauth configurer*)",
-                "Bash(jarvis os oauth commencer*)", "Bash(jarvis os oauth revoquer*)",
-                "Bash(jarvis plan ok *)", "Bash(jarvis plan non *)", "Bash(jarvis plan verifier *)",
-                "Bash(jarvis plan relacher *)", "Bash(jarvis regler *)", "Bash(jarvis telegram *)",
-                "Bash(jarvis reglage-lire *)", "Bash(jarvis preparer-worktree *)", "Bash(jarvis chef-preparer *)",
-                "Bash(jarvis autostart)", "Bash(jarvis autostart *)", "Bash(jarvis reprise-preparer)",
-                "Bash(jarvis reprise-preparer *)", "Bash(jarvis reprendre)",
-                "Bash(jarvis modele ok *)", "Bash(jarvis modele non *)", "Bash(jarvis modele verifier)",
-                "Bash(jarvis modele verifier *)", "Bash(jarvis livrer * --forcer*)", "Bash(jarvis livrer --forcer*)",
-                "Bash(jarvis tache-enregistrer *)", "Bash(jarvis tache-annuler *)", "Bash(jarvis lancement-args *)",
-                "Bash(jarvis prompt-construire *)", "Bash(jarvis chef-lancer)", "Bash(jarvis chef-lancer *)", "Bash(jarvis chef-etat)",
-                "Bash(jarvis web)", "Bash(jarvis web *)", "Bash(jarvis relancer)", "Bash(jarvis relancer *)",
-                "Bash(jarvis pause lever *)", "Bash(jarvis pause poser humain*)", "Bash(jarvis pause poser maintenance*)",
-                "Bash(jarvis pause poser batterie*)", "Bash(jarvis pause poser quota*)", "Bash(jarvis pause poser ressources*)",
-                "Bash(jarvis profil appliquer *)", "Bash(jarvis admission demander *)", "Bash(jarvis admission liberer *)",
-                "Bash(jarvis lourd debut *)", "Bash(jarvis lourd exec *)", "Bash(jarvis lourd fin *)",
-                "Bash(jarvis politique appliquer *)", "Bash(jarvis politique deleguer *)", "Bash(jarvis budget definir *)",
-                "Bash(jarvis tache relancer *)", "Bash(jarvis execution *)", "Bash(jarvis rollback executer *)",
-                "Bash(jarvis eval lancer *)", "Bash(jarvis proxy config*)", "Bash(jarvis skill approuver *)",
-                "Bash(jarvis skill refuser *)", "Bash(jarvis skill epingler *)",
-                "Bash(jarvis role approuver *)", "Bash(jarvis role refuser *)", "Bash(jarvis role promouvoir *)",
-                "Bash(jarvis stockage migrer*)", "Bash(jarvis stockage revenir*)", "Bash(jarvis executant declarer *)",
-                "Bash(jarvis executant retirer *)",
-                # Contournements de « jarvis task » et accès directs au noyau.
-                "Bash(workmux add *)", "Bash(workmux run *)", "Bash(python *)", "Bash(python3 *)",
-                "Bash(env *)", "Bash(script *)",
-                # Le chef dirige : il ne fusionne, ne pousse et ne supprime rien.
-                "Bash(workmux merge *)", "Bash(workmux remove *)", "Bash(workmux rm *)",
-                "Bash(gh pr merge)", "Bash(gh pr merge *)", "Bash(git push)", "Bash(git push *)",
-                "Bash(git merge *)", "Bash(git reset *)", "Bash(git -C *)", "Bash(rm *)",
-            ],
+            "allow": list(chef_moteur.AUTORISE),
+            "deny": deny_paths + secrets + list(chef_moteur.INTERDIT),
         }
     }
     (chef_dir / ".claude" / "settings.json").write_text(json.dumps(settings, indent=2, ensure_ascii=False) + "\n",
                                                         encoding="utf-8")
+    _chef_preparer_codex(chef_dir, source)
     print(chef_dir)
+    return 0
+
+
+CHEF_REGLE_CODEX = """# Écrit par « jarvis chef-preparer » : ne pas modifier (réécrit à chaque lancement du chef).
+# Seule commande du chef Codex qui sort du bac à sable. bin/jarvis-chef vérifie l'appelant (fenêtre du
+# chef) et applique les mêmes permissions que celles du chef Claude (lib/jarvis/chef_moteur.py).
+prefix_rule(
+    pattern = ["jarvis-chef"],
+    decision = "allow",
+    justification = "Jarvis : outils du chef d'orchestre, filtrés par bin/jarvis-chef",
+)
+"""
+
+
+def _chef_preparer_codex(chef_dir: Path, source: Path) -> None:
+    """Rôle et règle d'exécution du chef quand il tourne sur Codex (fichiers générés, jamais édités à la main)."""
+    from . import chef_moteur, trust
+    role = chef_dir / "AGENTS.md"
+    texte = chef_moteur.role_codex(source.read_text(encoding="utf-8"))
+    if role.is_symlink():
+        role.unlink()
+    elif role.exists() and not role.read_text(encoding="utf-8", errors="replace").startswith(
+            chef_moteur.PREAMBULE_CODEX.splitlines()[0]):
+        role.rename(role.with_name(f"AGENTS.md.bak.{time.strftime('%Y%m%d-%H%M%S')}"))
+    role.write_text(texte, encoding="utf-8")
+    regles = chef_dir / ".codex" / "rules"
+    regles.mkdir(parents=True, exist_ok=True)
+    (regles / "chef.rules").write_text(CHEF_REGLE_CODEX, encoding="utf-8")
+    if chef_moteur.installe("codex"):
+        try:
+            trust.trust_codex(str(chef_dir))  # sinon Codex ouvre sur « Do you trust this folder? »
+        except OSError:
+            pass
+
+
+def cmd_chef_commande(a) -> int:
+    """Pour bin/jarvis : choisit le moteur du chef et affiche la ligne de commande à lancer dans tmux."""
+    from . import chef_moteur, poste
+    moteur, raison = chef_moteur.choisir(eviter=chef_moteur.courant() if a.releve else None)
+    if not moteur:
+        return _err(raison, 3)
+    avant = chef_moteur.enregistrer(moteur, raison)
+    message = CHEF_KICKOFF
+    for note in (poste.note_redemarrage(), chef_moteur.note_releve(avant, moteur, raison)):
+        if note:
+            message += f" IMPORTANT : {note}"
+    try:
+        print(chef_moteur.commande(moteur, message))
+    except ValueError as exc:
+        return _err(str(exc), 3)
+    if avant.get("moteur") and avant["moteur"] != moteur:
+        store.feed_add("chef", f"moteur du chef : {avant['moteur']} → {moteur} ({raison})")
+    return 0
+
+
+def cmd_chef_moteur(a) -> int:
+    from . import chef_moteur
+    print(chef_moteur.texte())
+    return 0
+
+
+def cmd_chef_garde(a) -> int:
+    """Pour bin/jarvis-chef : 0 si l'appelant est le chef et que la commande fait partie de ses outils."""
+    from . import chef_moteur, journal
+    argv = a.commande[1:] if a.commande[:1] == ["--"] else list(a.commande)
+    if not chef_moteur.appelant_est_chef(os.getppid()):
+        return _err("jarvis-chef est réservé au chef d'orchestre (fenêtre « chef »).", 4)
+    ok, detail = chef_moteur.verifier(argv)
+    if not ok:
+        try:
+            journal.ecrire("chef_garde", acteur="chef", objet=" ".join(argv)[:300], decision="refus", raison=detail)
+        except Exception:  # noqa: BLE001 — le refus prime sur sa trace
+            pass
+        return _err(f"refusé : {detail}. N'essaie pas de contourner : adapte-toi ou demande à ton humain "
+                    "(jarvis-chef jarvis demander \"…\").", 4)
     return 0
 
 
@@ -2486,6 +2490,14 @@ def build_parser() -> argparse.ArgumentParser:
     sub.add_parser("chef-preparer", help=argparse.SUPPRESS).set_defaults(fn=cmd_chef_preparer)
     sub.add_parser("chef-message", help=argparse.SUPPRESS).set_defaults(fn=cmd_chef_message)
     sub.add_parser("chef-etat", help=argparse.SUPPRESS).set_defaults(fn=cmd_chef_etat)
+    c = sub.add_parser("chef-commande", help=argparse.SUPPRESS)
+    c.add_argument("--releve", action="store_true")
+    c.set_defaults(fn=cmd_chef_commande)
+    c = sub.add_parser("chef-garde", help=argparse.SUPPRESS)
+    c.add_argument("commande", nargs=argparse.REMAINDER)
+    c.set_defaults(fn=cmd_chef_garde)
+    sub.add_parser("chef-moteur", help="moteur du chef (Claude ou Codex) : ordre, jetons, prochain lancement"
+                   ).set_defaults(fn=cmd_chef_moteur)
 
     # --- Rôles, modèles, registre des tâches ---
     role = sub.add_parser("role", help="rôles spécialisés de l'usine")

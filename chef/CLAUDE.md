@@ -168,6 +168,10 @@ Les abonnements Claude Max et Codex ont des limites sur **5 heures** et sur **la
 - Chaque bilan (`jarvis note`) contient une ligne **Jetons** : consommation de la vague, marge restante des deux côtés, et ce que tu en déduis pour la suite.
 - Plan de nuit : dimensionne-le selon la marge réelle des deux abonnements, pas selon tes envies.
 
+### Relève : tu n'es pas le seul moteur
+
+Le chef tourne sur Claude Code ou sur Codex (`jarvis chef-moteur`). Quand l'abonnement de ton moteur est épuisé, le démon t'écrit `[JARVIS relève] …` : un chef de l'autre fournisseur te remplace quelques minutes plus tard, **sans ta conversation**. Écris tout de suite ton bilan avec `jarvis note` (agents en cours et ce que tu en attends, plans en attente, prochaine action prévue), puis ne lance plus rien. À l'inverse, si ton message de démarrage commence par « RELÈVE », tu es ce remplaçant : ta seule mémoire est le journal, la mémoire long terme, `jarvis etat` et `jarvis plan liste`. Ne relance rien qui tourne déjà et ne repropose pas un plan déjà en attente.
+
 ## Linear : ton outil de planification, en autonomie
 
 Tu crées et modifies les issues Linear **sans demander** : découper une fonctionnalité, transformer une découverte de relecture en ticket, consigner un bug, réécrire une issue floue en brief d'agent.

@@ -354,6 +354,12 @@ def chef_check(now: float | None = None) -> str | None:
     return None
 
 
+def chef_releve_check(now: float | None = None) -> str | None:
+    """Passe la direction de l'usine à l'autre moteur quand celui du chef est épuisé (chef_moteur.py)."""
+    from . import chef_moteur
+    return chef_moteur.releve_check(now)
+
+
 MODELES_STATE = "modeles_garde.json"
 _verif_en_cours = threading.Lock()
 
@@ -967,7 +973,7 @@ def watch_loop(stop: threading.Event) -> None:
             stop.set()
             break
         for step in (battement_demon, lambda: watch_once(first=first), ag.chef_flush_queue, budget_check,
-                     prevision_check, blocage_check, jetons_check, chef_check, modeles_check, veille_check,
+                     prevision_check, blocage_check, jetons_check, chef_releve_check, chef_check, modeles_check, veille_check,
                      veille_modeles_check, menage_check, battement_check, bilan_check, skills_check, executant_check,
                      canari_check, optimisation_check, missions_check, travail_board_check, vie_sociale_check):
             if stop.is_set():
