@@ -1,10 +1,12 @@
 import { memo, useEffect, useRef, useState, type ReactNode } from "react";
 import type { EspaceBoard } from "../types";
-import { useReactFlow, useStore } from "@xyflow/react";
+import { useStore } from "@xyflow/react";
 import {
-  ChevronDown, ClipboardPaste, Ellipsis, File, Grid3x3, Image as IconeImage, 
-  Check, Folder, FolderGit2, Link2, Maximize, Minus, Mic, Network, Plus, Sparkles, Star, Type, Upload, Video,
+  ChevronDown, ClipboardPaste, Ellipsis, File, Grid3x3, Image as IconeImage,
+  Check, Folder, FolderGit2, Link2, Maximize, Minus, Mic, Moon, Network, Plus, Presentation, Sparkles, Star, Sun, Type, Upload, Video,
 } from "lucide-react";
+import { BoutonCommande, useCommandes } from "../commandes/react";
+import { useUi } from "../etat/ui";
 
 export { ProductNav as BarreHaut } from "../product/ProductNav";
 
@@ -68,12 +70,14 @@ function MenuProjet({ projet, espaces, changer }: { projet: string; espaces: Esp
   );
 }
 
-export const SousBarre = memo(function SousBarre({ projet, espaces = [], changerEspace, demo, compteurs, filtre, setFiltre, priorite, setPriorite, magnetisme, setMagnetisme, lancer, communaute }: {
+export const SousBarre = memo(function SousBarre({ projet, espaces = [], changerEspace, demo, compteurs, filtre, setFiltre, priorite, setPriorite, communaute }: {
   projet: string; espaces?: EspaceBoard[]; changerEspace?: (nom: string) => void; demo: boolean; compteurs: Record<Filtre, number>; filtre: Filtre; setFiltre: (f: Filtre) => void;
-  priorite: string; setPriorite: (p: string) => void; magnetisme: boolean; setMagnetisme: (v: boolean) => void; lancer: () => void; communaute?: ReactNode;
+  priorite: string; setPriorite: (p: string) => void; communaute?: ReactNode;
 }) {
-  const { zoomIn, zoomOut, fitView } = useReactFlow();
+  // chaque bouton de cette rangée est une commande du registre (même action que son raccourci et que la palette)
+  const { executer } = useCommandes();
   const zoom = useStore((s) => s.transform[2]);
+  const jour = useUi((e) => e.theme) === "jour";
   return (
     <div className="subbar">
       <div className="projet">
@@ -95,40 +99,42 @@ export const SousBarre = memo(function SousBarre({ projet, espaces = [], changer
         </button>
       </div>
       <div className="zoom" role="group" aria-label="Zoom">
-        <button type="button" aria-label="Zoom arrière" onClick={() => zoomOut({ duration: 160 })}><Minus size={17} /></button>
+        <BoutonCommande id="vue.zoomArriere"><Minus size={17} /></BoutonCommande>
         <output className="tab-num" aria-live="polite">{Math.round(zoom * 100)}%</output>
-        <button type="button" aria-label="Zoom avant" onClick={() => zoomIn({ duration: 160 })}><Plus size={17} /></button>
+        <BoutonCommande id="vue.zoomAvant"><Plus size={17} /></BoutonCommande>
       </div>
-      <button type="button" className="bouton-carre" aria-label="Ajuster à la vue" title="Ajuster à la vue (Maj+1)"
-        onClick={() => fitView({ duration: 220, padding: 0.08 })}><Maximize size={18} /></button>
-      <button type="button" className="bouton-carre" aria-pressed={magnetisme} aria-label="Magnétisme de la grille"
-        title="Magnétisme de la grille" onClick={() => setMagnetisme(!magnetisme)}><Grid3x3 size={18} /></button>
-      <button type="button" className="bouton-principal" onClick={lancer}><Sparkles size={18} /> Lancer une mission</button>
+      <BoutonCommande id="vue.ajuster" classe="bouton-carre"><Maximize size={18} /></BoutonCommande>
+      <BoutonCommande id="affichage.grille" classe="bouton-carre"><Grid3x3 size={18} /></BoutonCommande>
+      <BoutonCommande id="affichage.theme.basculer" classe="bouton-carre">{jour ? <Moon size={18} /> : <Sun size={18} />}</BoutonCommande>
+      <BoutonCommande id="presentation.demarrer" classe="bouton-carre"><Presentation size={18} /></BoutonCommande>
+      <button type="button" className="bouton-principal" title="Lancer une mission (Ctrl+Maj+M)" onClick={() => executer("mission.lancer", "bouton")}><Sparkles size={18} /> Lancer une mission</button>
       {communaute}
     </div>
   );
 });
 
-/* ---------------------------------------------------------------- barre d'outils --------------------------- */
-export type Outil = "ajouter" | "coller" | "importer" | "lien" | "texte" | "image" | "video" | "audio" | "document" | "dossier";
+/* ---------------------------------------------------------------- barre d'ajout --------------------------- */
+// Barre verticale « Ajouter au Board » : chaque entrée exécute une commande du registre.
+const AJOUTS: [string, string, typeof Plus, boolean][] = [
+  ["ajouter.pressePapiers", "Coller", ClipboardPaste, false], ["ajouter.importer", "Importer", Upload, false], ["ajouter.lien", "Lien", Link2, false],
+  ["ajouter.note", "Texte", Type, false], ["ajouter.image", "Image", IconeImage, true], ["ajouter.video", "Vidéo", Video, true],
+  ["ajouter.audio", "Audio", Mic, true], ["ajouter.document", "Document", File, true], ["ajouter.dossier", "Dossier", Folder, true],
+];
 
-export const BarreOutils = memo(function BarreOutils({ agir }: { agir: (o: Outil) => void }) {
-  const items: [Outil, string, typeof Plus, boolean][] = [
-    ["coller", "Coller", ClipboardPaste, false], ["importer", "Importer", Upload, false], ["lien", "Lien", Link2, false],
-    ["texte", "Texte", Type, false], ["image", "Image", IconeImage, true], ["video", "Vidéo", Video, true],
-    ["audio", "Audio", Mic, true], ["document", "Document", File, true], ["dossier", "Dossier", Folder, true],
-  ];
+export const BarreAjout = memo(function BarreAjout() {
+  const { executer } = useCommandes();
   return (
     <div className="outils nodrag nopan" role="toolbar" aria-label="Ajouter au Board" aria-orientation="vertical">
-      <button type="button" className="ajouter" onClick={() => agir("ajouter")} title="Ajouter une note (N)">
+      <button type="button" className="ajouter" onClick={() => executer("ajouter.note", "bouton", { selection: [] })} title="Ajouter une note (Maj+N)">
         <span><Plus size={22} /></span>Ajouter
       </button>
-      {items.map(([cle, nom, Icone, secondaire]) => (
-        <button key={cle} type="button" className={secondaire ? "secondaire" : undefined} onClick={() => agir(cle)}>
+      {AJOUTS.map(([id, nom, Icone, secondaire]) => (
+        <button key={id} type="button" className={secondaire ? "secondaire" : undefined} onClick={() => executer(id, "bouton", { selection: [] })}>
           <Icone />{nom}
         </button>
       ))}
-      <button type="button" className="secondaire" aria-label="Plus d'outils" style={{ height: 40 }}><Ellipsis size={20} /></button>
+      <button type="button" className="secondaire" aria-label="Toutes les commandes" title="Toutes les commandes (Ctrl+K)" style={{ height: 40 }}
+        onClick={() => executer("palette.ouvrir", "bouton")}><Ellipsis size={20} /></button>
     </div>
   );
 });

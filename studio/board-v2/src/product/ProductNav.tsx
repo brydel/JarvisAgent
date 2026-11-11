@@ -27,6 +27,8 @@ export const ProductNav = memo(function ProductNav({ recherche = "", setRecherch
 
   useEffect(() => {
     const key = (event: KeyboardEvent) => {
+      // dans le Board, Ctrl/⌘+K ouvre la palette de commandes (registre) ; la recherche y répond à « / »
+      if (vue === "board") return;
       if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k" && setRecherche) {
         event.preventDefault();
         input.current?.focus();
@@ -34,7 +36,7 @@ export const ProductNav = memo(function ProductNav({ recherche = "", setRecherch
     };
     window.addEventListener("keydown", key);
     return () => window.removeEventListener("keydown", key);
-  }, [setRecherche]);
+  }, [setRecherche, vue]);
 
   return (
     <header className="topbar product-nav">
@@ -55,7 +57,7 @@ export const ProductNav = memo(function ProductNav({ recherche = "", setRecherch
           <input ref={input} value={recherche} type="search" placeholder="Rechercher..."
             aria-label={vue === "board" ? "Rechercher dans le Board" : "Rechercher dans cet espace"}
             onChange={event => setRecherche(event.target.value)} />
-          <kbd>Ctrl K</kbd>
+          <kbd>{vue === "board" ? "/" : "Ctrl K"}</kbd>
         </label>
       )}
       {notifications > 0 && (

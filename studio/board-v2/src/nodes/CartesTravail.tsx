@@ -17,7 +17,7 @@ export const PlanNode = memo(function PlanNode({ data, selected }: P) {
   const elements = (m.elements as Element[] | undefined) ?? [];
   const statut = String(m.statut ?? "");
   return (
-    <CardShell objet={o} selected={selected} classe="c-plan" entete={false}>
+    <CardShell objet={o} selected={selected} sources={data.sources} classe="c-plan" entete={false}>
       <div className="contenu">
         <div className="ligne1">
           <span className="icone-plan"><ClipboardList size={22} /></span>
@@ -54,7 +54,7 @@ export const TacheNode = memo(function TacheNode({ data, selected }: P) {
   const actif = Boolean(m.actif);
   const statut = String(m.statut ?? "");
   return (
-    <CardShell objet={o} selected={selected} classe={`c-tache${actif ? " active" : ""}`} entete={false}>
+    <CardShell objet={o} selected={selected} sources={data.sources} classe={`c-tache${actif ? " active" : ""}`} entete={false}>
       <div className="contenu">
         <div className="ligne1">
           <span className="etiquette-type"><Wrench size={13} /> TÂCHE {String(m.issue ?? "")}</span>

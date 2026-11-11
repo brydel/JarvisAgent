@@ -51,7 +51,7 @@ export const NoteNode = memo(function NoteNode({ data, selected }: P) {
     }
   };
   return (
-    <CardShell objet={o} selected={selected} classe="c-note">
+    <CardShell objet={o} selected={selected} sources={data.sources} classe="c-note">
       <div className="entete">
         <FileText size={24} />
         <div className="titre-carte">{o.meta.titre || "Note"}</div>
@@ -102,7 +102,7 @@ export const MissionNode = memo(function MissionNode({ data, selected }: P) {
   const a = useActions();
   if (!m) {
     return (
-      <CardShell objet={o} selected={selected} classe="c-mission" entete={false}>
+      <CardShell objet={o} selected={selected} sources={data.sources} classe="c-mission" entete={false}>
         <div className="contenu"><h3>Mission introuvable</h3><p className="meta-carte">La mission liée n'existe plus.</p></div>
       </CardShell>
     );
@@ -110,7 +110,7 @@ export const MissionNode = memo(function MissionNode({ data, selected }: P) {
   const s = statutMission(m);
   const agents = m.agents;
   return (
-    <CardShell objet={o} selected={selected} classe="c-mission" entete={false}>
+    <CardShell objet={o} selected={selected} sources={data.sources} classe="c-mission" entete={false}>
       <div className="contenu" onDoubleClick={() => a.inspecter(o.id)}>
         <div className="ligne1">
           <span className="icone-mission"><Target size={26} /></span>
@@ -220,7 +220,7 @@ export const AgentsNode = memo(function AgentsNode({ data, selected }: P) {
   const agents = [...(o.mission?.agents ?? [])].sort((a, b) => Number(Boolean(a.fin || a.issue)) - Number(Boolean(b.fin || b.issue)) || b.debut - a.debut);
   const actifs = agents.filter((x) => !x.fin && !x.issue).length;
   return (
-    <CardShell objet={o} selected={selected} classe="c-agents" entete={false}>
+    <CardShell objet={o} selected={selected} sources={data.sources} classe="c-agents" entete={false}>
       <div className="entete">
         <Users size={19} /> ÉQUIPE D'AGENTS
         <span className="badge-actifs tab-num">{actifs} actif{actifs > 1 ? "s" : ""}</span>

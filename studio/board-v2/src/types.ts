@@ -3,7 +3,16 @@
 export type Priorite = "" | "P1" | "P2" | "P3";
 export type TypeObjet =
   | "note" | "texte" | "lien" | "image" | "video" | "audio" | "pdf" | "document" | "capture"
-  | "mission" | "agents" | "dossier" | "plan" | "tache";
+  | "mission" | "agents" | "dossier" | "plan" | "tache"
+  // tableau blanc (lib/jarvis/board_tableau.py) : apparence dans meta, bornée par le serveur
+  | "adhesif" | "texte_libre" | "forme" | "trait" | "cadre" | "fleche";
+
+/** Ancre d'une extrémité de flèche : position normalisée (0..1) sur la boîte de l'objet visé. */
+export interface AncreFleche {
+  id: string;
+  nx: number;
+  ny: number;
+}
 
 export interface Asset {
   id: string;
@@ -77,6 +86,24 @@ export interface MetaObjet {
   demo_src?: string;
   demo_vignette?: string;
   demo_pages?: string[];
+  /** tableau blanc — noms de jetons de couleur (jamais une couleur CSS) */
+  couleur?: string;
+  fond?: string;
+  trait?: string;
+  epaisseur?: number;
+  taille_police?: number;
+  forme?: "rectangle" | "ellipse" | "losange";
+  /** trait : triplets (x, y, pression %) relatifs à la boîte ; flèche : [x1, y1, x2, y2] normalisés sur la boîte */
+  points?: number[];
+  boite?: [number, number];
+  outil?: "crayon" | "surligneur";
+  pointes?: "fin" | "deux" | "aucune";
+  ancres?: { de?: AncreFleche; vers?: AncreFleche };
+  libelle?: string;
+  /** demande de relecture posée par l'humain sur un livrable (aucun agent n'est lancé par cette demande) */
+  relecture?: { demandee: number; par: string };
+  source?: string;
+  compact?: boolean;
   [cle: string]: unknown;
 }
 
@@ -113,6 +140,8 @@ export interface ObjetBoard {
   cree: number;
   maj: number;
   commentaires?: number;
+  /** qui a posé l'objet : « studio » (toi), « chef », « telegram »… tel qu'enregistré par le serveur */
+  auteur?: string;
   artefacts?: { id: string; fournisseur: string; factice: number; revue: string; contenu: string }[];
 }
 
@@ -192,4 +221,6 @@ export interface Approbation {
 export interface DonneesNoeud extends Record<string, unknown> {
   objet: ObjetBoard;
   demo: boolean;
+  /** nombre de relations entrantes (cartes sources), pour le pied « provenance » */
+  sources: number;
 }

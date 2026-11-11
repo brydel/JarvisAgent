@@ -24,7 +24,7 @@ export function App() {
   const params = useMemo(() => new URLSearchParams(location.search), []);
   const demo = params.get("demo") === "1";
   const n = Number(params.get("charge") || 0);
-  const charge = demo && Number.isFinite(n) ? Math.max(0, Math.min(1000, n)) : 0;
+  const charge = demo && Number.isFinite(n) ? Math.max(0, Math.min(6000, n)) : 0;
   const [session, setSession] = useState<"attente" | "ok" | "refus">(demo ? "ok" : "attente");
   const verificationSession = useRef<Promise<boolean> | null>(null);
   const source = useMemo(() => demo ? new SourceDemo() : new SourceReelle(espaceDeLUrl(params)), [demo, params]);

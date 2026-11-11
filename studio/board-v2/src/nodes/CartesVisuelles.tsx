@@ -17,7 +17,7 @@ export const ImageNode = memo(function ImageNode({ data, selected }: P) {
   const src = o.asset?.url ?? (o.meta.demo_src as string | undefined);
   const dims = o.asset?.meta.largeur ? `${o.asset.meta.largeur} × ${o.asset.meta.hauteur}` : "";
   return (
-    <CardShell objet={o} selected={selected} classe="c-image">
+    <CardShell objet={o} selected={selected} sources={data.sources} classe="c-image">
       <div className="visuel">
         {src && !erreur ? (
           <img src={src} alt={o.meta.titre || o.asset?.nom || "image"} loading="lazy" decoding="async" draggable={false}
@@ -48,7 +48,7 @@ export const LienNode = memo(function LienNode({ data, selected }: P) {
   const image = m.apercu_image?.url ?? (m.demo_src as string | undefined);
   const url = m.url || o.contenu;
   return (
-    <CardShell objet={o} selected={selected} classe="c-lien">
+    <CardShell objet={o} selected={selected} sources={data.sources} classe="c-lien">
       <div className={`apercu${image ? "" : " repli"}`}>
         {image ? <img src={image} alt="" loading="lazy" decoding="async" draggable={false} /> : <Link2 size={36} />}
         {url && /^https?:/.test(url) && (
@@ -120,7 +120,7 @@ export const PdfNode = memo(function PdfNode({ data, selected }: P) {
   const o = data.objet;
   const a = o.asset;
   return (
-    <CardShell objet={o} selected={selected} classe="c-pdf">
+    <CardShell objet={o} selected={selected} sources={data.sources} classe="c-pdf">
       <div className="haut">
         <span className="icone-tuile"><FileText /></span>
         <div style={{ minWidth: 0 }}>
@@ -151,7 +151,7 @@ export const DossierNode = memo(function DossierNode({ data, selected }: P) {
     : enfants.map((e) => e.asset?.vignette_url ?? (e.asset?.famille === "image" ? e.asset.url : null)).filter((x): x is string => Boolean(x));
   const total = (o.meta.demo_elements as number | undefined) ?? enfants.length;
   return (
-    <CardShell objet={o} selected={selected} classe="c-dossier">
+    <CardShell objet={o} selected={selected} sources={data.sources} classe="c-dossier">
       <div className="haut-dossier">
         <svg className="icone-dossier" viewBox="0 0 42 34" aria-hidden="true">
           <path d="M2 6a4 4 0 0 1 4-4h10l4 4h16a4 4 0 0 1 4 4v18a4 4 0 0 1-4 4H6a4 4 0 0 1-4-4Z" fill="#F5B83D" />

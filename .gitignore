@@ -23,3 +23,7 @@ test-results/
 /.private-lab/
 /gitleaks-report*.json
 /gitleaks-report*.sarif
+
+# Board V2 : captures et mesures régénérées par les tests (copies de référence dans docs/jarvis-next/)
+reports/board-v2/captures/
+reports/board-v2/perf-charge.json

@@ -3,7 +3,7 @@ import type { ObjetBoard, Priorite } from "../types";
 
 /** Actions du Board accessibles aux cartes. Références stables (créées une fois) : aucun re-rendu en cascade. */
 export interface ActionsBoard {
-  modifier(id: string, champs: Partial<Pick<ObjetBoard, "contenu" | "meta" | "priorite" | "largeur" | "hauteur">> & { verrouille?: boolean }): void;
+  modifier(id: string, champs: Partial<Pick<ObjetBoard, "contenu" | "meta" | "priorite" | "largeur" | "hauteur" | "x" | "y">> & { verrouille?: boolean }): void;
   priorite(id: string, p: Priorite): void;
   supprimer(ids: string[]): void;
   dupliquer(ids: string[]): void;
@@ -13,6 +13,11 @@ export interface ActionsBoard {
   sortirDuDossier(id: string): void;
   enfants(dossierId: string): ObjetBoard[];
   contextualiser(id: string): void;
+  objet(id: string): ObjetBoard | undefined;
+  /** objet le plus haut sous un point du canevas (ancrage d'une flèche) */
+  sousLePoint(p: { x: number; y: number }, sauf?: string): ObjetBoard | undefined;
+  /** ouvre l'édition du texte d'un objet de tableau blanc (surcouche non transformée) */
+  editer(id: string): void;
 }
 
 /** Types qu'un exécutant sait lire (texte, page, image, PDF) ou décrire (métadonnées audio / vidéo). */
@@ -41,4 +46,11 @@ export const TAILLES: Record<string, { min: [number, number]; defaut: [number, n
   capture: { min: [220, 170], defaut: [491, 309] },
   plan: { min: [320, 220], defaut: [440, 320] },
   tache: { min: [300, 200], defaut: [400, 260] },
+  // tableau blanc
+  adhesif: { min: [96, 72], defaut: [220, 220] },
+  texte_libre: { min: [40, 40], defaut: [280, 56] },
+  forme: { min: [40, 40], defaut: [180, 130] },
+  trait: { min: [40, 40], defaut: [120, 120] },
+  cadre: { min: [120, 80], defaut: [720, 460] },
+  fleche: { min: [40, 40], defaut: [200, 120] },
 };

@@ -87,7 +87,7 @@ export const AudioNode = memo(function AudioNode({ data, selected }: P) {
     m.currentTime = Math.min(total, Math.max(0, ((e.clientX - r.left) / r.width) * total));
   };
   return (
-    <CardShell objet={o} selected={selected} classe="c-audio" entete={false}>
+    <CardShell objet={o} selected={selected} sources={data.sources} classe="c-audio" entete={false}>
       <div className="haut">
         <BadgePriorite p={o.priorite} />
         <div style={{ flex: 1, minWidth: 0 }}>
@@ -164,7 +164,7 @@ export const VideoNode = memo(function VideoNode({ data, selected }: P) {
     } else v.pause();
   };
   return (
-    <CardShell objet={o} selected={selected} classe="c-video" ratio={false}>
+    <CardShell objet={o} selected={selected} sources={data.sources} classe="c-video" ratio={false}>
       <div className="ecran">
         {actif && a ? (
           <video ref={video} src={a.url} poster={vignette ?? undefined} preload="metadata" playsInline className="nodrag"

@@ -1,9 +1,12 @@
 import { memo, useEffect, useRef, useState, type ReactNode } from "react";
-import { Handle, NodeResizer, Position, useStore } from "@xyflow/react";
+import { Handle, NodeResizer, Position } from "@xyflow/react";
 import { ArrowUpToLine, ClipboardList, Copy, FileText, Minimize2, Maximize2, Palette, Wrench, Image as IconeImage, Link2, Lock, LockOpen, MoreHorizontal, Music, PanelRight, Sparkles, Target, Trash2, Users, Video, Folder } from "lucide-react";
 import type { ObjetBoard, Priorite } from "../types";
 import { CONTEXTUALISABLES, TAILLES, useActions } from "./contexte";
 import { Avatar } from "../components/Avatar";
+import { useCommandes } from "../commandes/react";
+import { EtatsCarte, PiedProvenance } from "../cartes/Provenance";
+import { useNiveauDetail } from "../board/detail";
 
 interface Props {
   objet: ObjetBoard;
@@ -13,24 +16,30 @@ interface Props {
   /** badge de priorité et menu en surimpression (cartes à visuel) ou laissés à la carte */
   entete?: boolean;
   ratio?: boolean;
+  /** nombre de relations entrantes (pied « provenance ») */
+  sources?: number;
 }
 
 const COTES = [Position.Top, Position.Right, Position.Bottom, Position.Left];
-/** Sous ce zoom, les cartes passent en vignette légère (niveau de détail) : texte illisible de toute façon. */
-export const ZOOM_DETAIL = 0.45;
-const choisirResume = (s: { transform: [number, number, number] }) => s.transform[2] < ZOOM_DETAIL;
 const ICONES: Record<string, typeof FileText> = { image: IconeImage, capture: IconeImage, lien: Link2, audio: Music, video: Video,
   mission: Target, agents: Users, dossier: Folder, plan: ClipboardList, tache: Wrench };
 
 const COULEURS = ["", "indigo", "violet", "rose", "orange", "jaune", "vert", "cyan", "gris"];
 
-export const CardShell = memo(function CardShell({ objet, selected, classe, children, entete = true, ratio }: Props) {
+export const CardShell = memo(function CardShell({ objet, selected, classe, children, entete = true, ratio, sources = 0 }: Props) {
   const t = TAILLES[objet.type] ?? TAILLES.note!;
   const verrou = Boolean(objet.verrouille);
-  // booléen : la carte ne se re-rend qu'au franchissement du seuil, pas à chaque image du zoom
-  const resume = useStore(choisirResume);
+  // niveau de détail selon le zoom : la carte ne se re-rend qu'au franchissement d'un seuil, pas à chaque image.
+  // 0 = carte complète ; 1 = rectangle titré (médias et iframes démontés) ; 2 = simple bloc de couleur.
+  const niveau = useNiveauDetail();
+  const resume = niveau > 0;
   // format choisi par le chef ou par toi : couleur d'accent, vignette compacte
   const accent = typeof objet.meta.couleur === "string" && objet.meta.couleur ? ` accent accent-${objet.meta.couleur}` : "";
+  if (niveau === 2) {
+    return (
+      <article className={`carte carte-bloc ${classe}${accent}`} aria-label={objet.meta.titre || objet.type} />
+    );
+  }
   if (objet.meta.compact && !resume) {
     const Icone = ICONES[objet.type] ?? FileText;
     return (
@@ -51,7 +60,7 @@ export const CardShell = memo(function CardShell({ objet, selected, classe, chil
     const Icone = ICONES[objet.type] ?? FileText;
     return (
       <>
-        {COTES.map((p) => <Handle key={p} id={p} type="source" position={p} />)}
+        <Handle id="top" type="source" position={Position.Top} />
         <article className={`carte carte-resume ${classe}`} aria-label={objet.meta.titre || objet.type}>
           {objet.priorite && <span className={`badge-p ${objet.priorite}`}>{objet.priorite}</span>}
           <Icone size={64} strokeWidth={1.5} />
@@ -79,6 +88,9 @@ export const CardShell = memo(function CardShell({ objet, selected, classe, chil
         )}
         <BandeauJarvis objet={objet} />
       </article>
+      {/* hors de la carte (jamais rognés, ne couvrent rien) : état réel et provenance */}
+      <EtatsCarte objet={objet} />
+      <PiedProvenance objet={objet} sources={sources} />
     </>
   );
 });
@@ -120,8 +132,10 @@ export function BadgePriorite({ p }: { p: Priorite }) {
   return p ? <span className={`badge-p ${p}`}>{p}</span> : null;
 }
 
+/** Menu « … » d'une carte : chaque entrée exécute une commande du registre, sur CETTE carte. */
 export function MenuCarte({ objet }: { objet: ObjetBoard }) {
-  const a = useActions();
+  const { executer } = useCommandes();
+  const lancer = (id: string) => executer(id, "menu", { selection: [objet] });
   const [ouvert, setOuvert] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
   useEffect(() => {
@@ -152,21 +166,16 @@ export function MenuCarte({ objet }: { objet: ObjetBoard }) {
           <div className="menu-priorites" role="group" aria-label="Priorité">
             {(["P1", "P2", "P3", ""] as Priorite[]).map((p) => (
               <button key={p || "aucune"} role="menuitemradio" aria-checked={objet.priorite === p} className={p ? `badge-p ${p}` : "badge-p aucune"}
-                onClick={faire(() => a.priorite(objet.id, p))}>{p || "—"}</button>
+                onClick={faire(() => lancer(`carte.priorite.${p || "aucune"}`))}>{p || "—"}</button>
             ))}
           </div>
-          <button role="menuitem" onClick={faire(() => a.inspecter(objet.id))}><PanelRight size={16} /> Détails</button>
+          <button role="menuitem" onClick={faire(() => lancer("carte.ouvrir"))}><PanelRight size={16} /> Détails</button>
           {CONTEXTUALISABLES.has(objet.type) && (
-            <button role="menuitem" onClick={faire(() => a.contextualiser(objet.id))}><Sparkles size={16} /> Analyser avec Jarvis</button>
+            <button role="menuitem" onClick={faire(() => lancer("carte.analyser"))}><Sparkles size={16} /> Analyser avec Jarvis</button>
           )}
-          <button role="menuitem" onClick={faire(() => a.dupliquer([objet.id]))}><Copy size={16} /> Dupliquer</button>
-          <button role="menuitem" onClick={faire(() => a.devant([objet.id]))}><ArrowUpToLine size={16} /> Amener devant</button>
-          <button role="menuitem" onClick={faire(() => {
-            const t = TAILLES[objet.type]?.defaut ?? [408, 320];
-            a.modifier(objet.id, objet.meta.compact
-              ? { meta: { ...objet.meta, compact: false }, largeur: t[0], hauteur: t[1] }
-              : { meta: { ...objet.meta, compact: true }, largeur: 240, hauteur: 96 });
-          })}>
+          <button role="menuitem" onClick={faire(() => lancer("edition.dupliquer"))}><Copy size={16} /> Dupliquer</button>
+          <button role="menuitem" onClick={faire(() => lancer("edition.devant"))}><ArrowUpToLine size={16} /> Amener devant</button>
+          <button role="menuitem" onClick={faire(() => lancer("carte.compacte"))}>
             {objet.meta.compact ? <><Maximize2 size={16} /> Taille normale</> : <><Minimize2 size={16} /> Vignette compacte</>}
           </button>
           <div className="menu-couleurs" role="group" aria-label="Couleur de la carte">
@@ -174,14 +183,14 @@ export function MenuCarte({ objet }: { objet: ObjetBoard }) {
             {COULEURS.map((c) => (
               <button key={c || "aucune"} role="menuitemradio" aria-checked={(objet.meta.couleur ?? "") === c}
                 aria-label={c ? `Couleur ${c}` : "Sans couleur"} className={`pastille-couleur ${c ? `accent-${c}` : "aucune"}`}
-                onClick={faire(() => a.modifier(objet.id, { meta: { ...objet.meta, couleur: c } }))} />
+                onClick={faire(() => lancer(`style.couleur.${c || "aucune"}`))} />
             ))}
           </div>
-          <button role="menuitem" onClick={faire(() => a.modifier(objet.id, { verrouille: !objet.verrouille }))}>
+          <button role="menuitem" onClick={faire(() => lancer("edition.verrouiller"))}>
             {objet.verrouille ? <><LockOpen size={16} /> Déverrouiller</> : <><Lock size={16} /> Verrouiller</>}
           </button>
-          {objet.parent_id && <button role="menuitem" onClick={faire(() => a.sortirDuDossier(objet.id))}>Sortir du dossier</button>}
-          <button role="menuitem" className="danger" onClick={faire(() => a.supprimer([objet.id]))}><Trash2 size={16} /> Supprimer</button>
+          {objet.parent_id && <button role="menuitem" onClick={faire(() => lancer("carte.sortirDuDossier"))}>Sortir du dossier</button>}
+          <button role="menuitem" className="danger" onClick={faire(() => lancer("edition.supprimer"))}><Trash2 size={16} /> Supprimer</button>
         </div>
       )}
     </div>
