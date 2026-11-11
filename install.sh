@@ -226,9 +226,17 @@ esac
 # --- 9 ter. Studio : vidéo de produit, visuels, montage ------------------------
 step "Compétences des agents (skills)"
 # Claude Code lit ~/.claude/skills, Codex lit ~/.agents/skills : même dossier, deux liens.
+lier_skill() {  # lier_skill <nom>
+  link "$JARVIS_HOME/skills/$1" "$HOME/.claude/skills/$1"
+  link "$JARVIS_HOME/skills/$1" "$HOME/.agents/skills/$1"
+}
 for skill in jarvis-studio jarvis-veille jarvis-design; do
-  link "$JARVIS_HOME/skills/$skill" "$HOME/.claude/skills/$skill"
-  link "$JARVIS_HOME/skills/$skill" "$HOME/.agents/skills/$skill"
+  lier_skill "$skill"
+done
+# Compétences de défense (triage, incident) : liées seulement si cette version du dépôt les contient.
+for d in "$JARVIS_HOME"/skills/jarvis-defense-*/; do
+  [[ -f "${d}SKILL.md" ]] || continue
+  lier_skill "$(basename "$d")"
 done
 
 if ((WITH_STUDIO)); then

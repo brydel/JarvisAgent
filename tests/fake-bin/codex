@@ -13,4 +13,8 @@ if [[ "${1:-}" == "exec" ]]; then
   [[ ",${FAKE_MODELES_FLOU:-}," == *",$modele,"* ]] && { echo "rate limit reached" >&2; exit 1; }
   echo "ok"; exit 0
 fi
+# « codex --help » : aide d'un Codex qui connaît --search quand FAKE_CODEX_RECHERCHE=1 (détection de jarvis-codex).
+if [[ "${1:-}" == "--help" && "${FAKE_CODEX_RECHERCHE:-}" == "1" ]]; then
+  echo "      --search    Enable live web search"; exit 0
+fi
 for a in "$@"; do echo "$a"; done

@@ -228,6 +228,7 @@ Tu reçois aussi les questions du chef (❓), ses bilans (📝) et les **livrabl
 | `general.chef_relance_auto` | `true` | Relancer le chef s'il s'arrête alors qu'il reste du travail (3 fois par heure au plus) |
 | `general.blocage_min` · `general.duree_max_min` | `45` · `240` | Prévenir le chef quand un agent n'affiche plus rien depuis N min, ou travaille depuis plus de N min |
 | `codex.mode` | `bac-a-sable` | `complet` : Codex sans bac à sable (dernier recours si `jarvis doctor` dit qu'il ne peut pas committer) |
+| `codex.recherche_web` | `true` | Recherche web native de Codex (`--search`), ajoutée par `jarvis-codex` si la version installée la propose ; `false` la coupe |
 | `sante.active` · `sante.disque_min_go` · `sante.memoire_min_pct` | `true` · `10` · `10` | Surveillance du PC et seuils d'alerte |
 | `sante.capacite_auto` · `sante.memoire_par_agent_mo` | `true` · `1200` | Moins d'agents quand la mémoire manque ; aucun lancement sur batterie faible, disque plein ou processeur saturé |
 | `sante.batterie_min_pct` · `sante.batterie_arret_pct` | `30` · `12` | Sur batterie : plus de lancement sous le premier seuil ; sous le second, les agents committent et Jarvis se met en pause |
@@ -282,7 +283,7 @@ Exemple : `jarvis regler general.max_agents 4`. Les réglages vivent dans `~/.co
 
 ### Veille approfondie, design et IA produit
 
-Trois compétences (skills) liées pour Claude Code et Codex par `./install.sh` :
+Trois compétences (skills) liées pour Claude Code et Codex par `./install.sh` (qui lie aussi `jarvis-defense-triage` et `jarvis-defense-incident` quand le dépôt les contient) :
 
 - **`jarvis-veille`** : la veille concurrentielle démonte au lieu de résumer. Matrice de parité sourcée (40 fonctionnalités au moins), captures côte à côte des pages publiques des concurrents et de notre produit (`capturer.cjs` : bureau et mobile, `robots.txt` respecté, une page toutes les 3 s, planche de comparaison), démontage écran par écran, décisions imiter / dépasser / ignorer, une fonctionnalité signature, et un backlog avec captures et critères visuels. On imite des fonctionnalités et des motifs d'interface, jamais le code, les textes ou l'identité visuelle d'un concurrent.
 - **`jarvis-design`** : une direction artistique écrite dans le dépôt (`design/direction.md` + jetons), proposée en 2 à 3 variantes que tu choisis, puis une grille de notation sur captures que l'auteur ET le relecteur remplissent. Un écran clé sous le seuil repart en corrections.
