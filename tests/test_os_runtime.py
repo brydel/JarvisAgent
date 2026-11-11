@@ -86,8 +86,12 @@ class ContratsRuntimeTest(test_missions.Base):
             rc = cli.main(["prompt-construire", "--projet", "projet-os", "--issue", "JOS-1", "--branche", branche,
                            "--regles", "AGENTS.md", "--role", "backend"])
         self.assertEqual(rc, 0)
-        self.assertIn('"role": "backend"', sortie.getvalue())
-        self.assertIn('"profile": "code"', sortie.getvalue())
+        # Le contrat reste une structure interne (vue des sessions, préflight) : il n'est plus recopié dans le prompt.
+        self.assertNotIn('"profile": "code"', sortie.getvalue())
+        self.assertNotIn("Contrat commun", sortie.getvalue())
+        self.assertIn("Développeur back-end", sortie.getvalue())
+        interne = specifications.pour_prompt(role="backend", projet="projet-os", issue="JOS-1", branche=branche)
+        self.assertEqual((interne["agent"]["role"], interne["agent"]["profile"]), ("backend", "code"))
         self.assertEqual(spec["agent"]["budget"]["max_duration_s"], None)
 
 

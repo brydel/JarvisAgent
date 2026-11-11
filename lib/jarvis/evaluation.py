@@ -120,12 +120,13 @@ def empreinte_brief(role: str) -> str:
 
 
 def consigne_complete(c: dict, brief: str | None = None) -> str:
-    """Consigne donnée à l'agent évalué. `brief` : un brief candidat à mesurer à la place de celui du rôle."""
-    from . import roles
-    r = roles.ou_defaut(c["role"])
-    return (f"# Ton rôle : {r['titre']}\n\n{brief if brief is not None else r['corps']}\n\n# Ta tâche\n\n{c['consigne'].strip()}\n\n"
-            "Travaille uniquement dans le dossier courant. Quand tu as fini, arrête-toi : une vérification "
-            "automatique jugera le résultat.")
+    """Consigne donnée à l'agent évalué. `brief` : un brief candidat à mesurer à la place de celui du rôle.
+
+    C'est le vrai prompt de l'usine (prompt_agent) : même brief, même protocole d'incertitude, même définition de
+    « fini » et même format de compte rendu qu'une tâche réelle — sans Linear ni PR, et sans contexte local
+    (mémoire, registre), pour que deux exécutions du même cas restent comparables."""
+    from . import prompt_agent, roles
+    return prompt_agent.pour_evaluation(roles.ou_defaut(c["role"]), c["consigne"], brief)
 
 
 def commande_agent(agent: str, modele_id: str, consigne: str) -> list[str]:

@@ -91,9 +91,16 @@ class ReseauApiTest(unittest.TestCase):
         message = json.loads(sortie.getvalue())
         self.assertEqual(message["auteur"], "chef")
         self.assertEqual(communaute.lecons(tenant_id=self.org), [])
-        contexte = communaute_runtime.contexte()
-        self.assertIn("modèles sur des tâches réelles", contexte)
-        self.assertIn("sans autorité", contexte)
+        # Une opinion du réseau n'entre plus dans le prompt des agents ; une leçon retenue après relecture, si.
+        from jarvis import prompt_agent, roles
+        role = roles.ou_defaut("backend")
+        self.assertNotIn("modèles sur des tâches réelles", "\n".join(prompt_agent.bloc_memoire("", "JOS-1", role)))
+        for decision in ("evaluer", "retenir"):
+            communaute.evaluer("", message["id"], auteur="proprietaire", decision=decision,
+                               contenu="Vérifié sur trois tâches.", preuves=["PR #12"], tenant_id=self.org)
+        retenu = "\n".join(prompt_agent.bloc_memoire("", "JOS-1", role))
+        self.assertIn("modèles sur des tâches réelles", retenu)
+        self.assertIn("leçon retenue après relecture", retenu)
 
     def test_le_bavardage_entre_agents_ne_reveille_pas_le_chef(self):
         communaute.publier(contenu="Bravo pour la PR #135 !", auteur="agent:design", type="felicitation", tenant_id=self.org)
@@ -102,9 +109,34 @@ class ReseauApiTest(unittest.TestCase):
             inject.assert_not_called()
         self.assertTrue(store.existe(communaute_runtime.ETAT), "le curseur avance : le message n'est pas relu en boucle")
 
+    def test_les_personas_ne_reveillent_plus_le_chef(self):
+        """Une persona de la vie sociale (« agent:<rôle> ») ne réveille jamais le chef, même pour une idée ou une
+        question ; l'humain, toujours."""
+        for genre in ("idee", "question", "entraide", "discussion"):
+            communaute.publier(contenu=f"Persona : {genre}", auteur="agent:design", type=genre, tenant_id=self.org)
+        with mock.patch("jarvis.agents.chef_running", return_value=True), mock.patch("jarvis.agents.chef_inject") as inject:
+            self.assertEqual(communaute_runtime.notifier(), 0)
+            inject.assert_not_called()
+        communaute.publier(contenu="Un avis ?", auteur="proprietaire", tenant_id=self.org)
+        with mock.patch("jarvis.agents.chef_running", return_value=True), \
+             mock.patch("jarvis.agents.chef_inject", return_value=True) as inject:
+            self.assertEqual(communaute_runtime.notifier(), 1)
+            self.assertIn('"auteur": "proprietaire"', inject.call_args.args[0])
+
+    def test_un_agent_en_tache_reveille_le_chef_pour_une_question_pas_pour_bavarder(self):
+        communaute.publier(contenu="Bravo !", auteur="agent:T-00042", type="felicitation", tenant_id=self.org)
+        with mock.patch("jarvis.agents.chef_running", return_value=True), mock.patch("jarvis.agents.chef_inject") as inject:
+            self.assertEqual(communaute_runtime.notifier(), 0)
+            inject.assert_not_called()
+        communaute.publier(contenu="Quelle base pour les tests ?", auteur="agent:T-00042", type="question", tenant_id=self.org)
+        with mock.patch("jarvis.agents.chef_running", return_value=True), \
+             mock.patch("jarvis.agents.chef_inject", return_value=True) as inject:
+            self.assertEqual(communaute_runtime.notifier(), 1)
+            self.assertIn("agent:T-00042", inject.call_args.args[0])
+
     def test_notification_non_acquittee_avant_remise_et_pas_de_boucle_chef(self):
-        # une idée (comme une question ou une demande d'aide) d'un agent réveille le chef ; le bavardage, non
-        communaute.publier(contenu="Une idée", auteur="agent:chercheur", type="idee", tenant_id=self.org)
+        # une idée (comme une question ou une demande d'aide) d'un agent EN TÂCHE réveille le chef ; le bavardage, non
+        communaute.publier(contenu="Une idée", auteur="agent:T-00007", type="idee", tenant_id=self.org)
         with mock.patch("jarvis.agents.chef_running", return_value=True), \
              mock.patch("jarvis.agents.chef_inject", side_effect=[False, True]) as inject:
             self.assertEqual(communaute_runtime.notifier(), 0)
