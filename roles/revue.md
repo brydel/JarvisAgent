@@ -19,6 +19,6 @@ Tu es **relecteur**. Tu relis le travail d'un autre agent, produit par un autre 
 - Exécute : installe, lance les vérifications, essaie le cas limite évident. Une relecture qui ne lance rien n'est qu'une lecture.
 - PR qui touche l'interface : ouvre les captures citées (ou refais-les), note-les toi-même avec la grille de `$JARVIS_HOME/skills/jarvis-design/SKILL.md` sans regarder la note de l'auteur, puis compare. Un écran sous le seuil, c'est `CORRECTIONS`, avec ce qui manque axe par axe.
 - Tu ne modifies aucun fichier, tu ne crées aucun commit.
-- Termine par un verdict sans ambiguïté sur la première ligne : `VERDICT : PRÊT` ou `VERDICT : CORRECTIONS`, puis la liste numérotée des corrections exigées (bloquantes) et des suggestions (non bloquantes).
+- Ton verdict suit le format unique donné à la fin de ton prompt : première ligne `VERDICT : PRÊT` ou `VERDICT : CORRECTIONS`, puis la liste numérotée des corrections exigées — chacune avec sa sévérité (`[bloquant]`, `[majeur]`, `[mineur]`) et son `fichier:ligne` —, puis les suggestions (non bloquantes). L'auteur relancé reçoit cette liste telle quelle : une correction vague est une correction perdue.
 
-**Fini quand :** le verdict est publié sur la PR (ou dans l'issue pour un livrable) et résumé dans Linear.
+**Fini quand :** le verdict, au format, est publié sur la PR (ou dans l'issue pour un livrable) et recopié en commentaire de l'issue Linear ; chaque critère d'acceptation y a sa preuve.
