@@ -15,6 +15,7 @@ from pathlib import Path
 import test_jarvis  # noqa: F401 — environnement isolé
 import test_board_v2
 import test_missions
+import test_references
 import test_studio
 
 from jarvis import adaptateurs as ad, config, coureur, missions as mi  # noqa: E402
@@ -74,6 +75,7 @@ _rejouer(test_missions.MachineEtatsTest, test_missions.TrancheVerticaleTest, tes
          test_missions.IsolationTest, test_missions.PolitiqueTest, test_missions.FournisseursTest,
          test_missions.CliTest, test_studio.StudioTest, test_board_v2.ObjetsTest, test_board_v2.FichiersTest, test_board_v2.ChefTest,
          test_board_v2.ApiV2Test)
+_rejouer(test_references.StockageTest, test_references.ApiTest)  # bibliothèque de références : mêmes tests sous RLS
 
 
 @unittest.skipUnless(DISPONIBLE, RAISON)
