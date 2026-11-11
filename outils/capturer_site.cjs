@@ -69,7 +69,10 @@ function extraire(limites) {
       }
     }
     for (const enfant of noeud.childNodes) parcourir(enfant);
+    // fin de bloc : saut de ligne ; fin d'un élément qui n'est pas du texte courant (bouton, lien, puce flex…) :
+    // une espace, sinon « Accueil » et « Board » voisins se collent en « AccueilBoard »
     if (BLOCS.has(balise)) sections[sections.length - 1].texte.push('\n');
+    else if (balise === 'A' || balise === 'BUTTON' || getComputedStyle(noeud).display !== 'inline') sections[sections.length - 1].texte.push(' ');
   };
   if (document.body) parcourir(document.body);
   const propres = sections.map((s, i) => {
@@ -286,10 +289,12 @@ async function principal() {
   }
 }
 
-principal().then((r) => { process.stdout.write(JSON.stringify(r) + '\n'); process.exit(0); })
+// La sortie peut dépasser le tampon du tube (64 Ko) : on ne quitte qu'une fois tout écrit.
+const rendre = (r) => process.stdout.write(JSON.stringify(r) + '\n', () => process.exit(0));
+principal().then(rendre)
   .catch((e) => {
     let message = String(e && e.message ? e.message : e).split('\n')[0].slice(0, 280);
     if (/ERR_TUNNEL_CONNECTION_FAILED|ERR_PROXY|ERR_ADDRESS_UNREACHABLE|ERR_NAME_NOT_RESOLVED/.test(message)) message = 'adresse refusée ou injoignable (réseau local, boucle locale, métadonnées ou hôte inconnu)';
     else if (/Timeout/.test(message)) message = 'le site met trop de temps à répondre';
-    process.stdout.write(JSON.stringify({ erreur: message }) + '\n'); process.exit(0);
+    rendre({ erreur: message });
   });

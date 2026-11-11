@@ -222,7 +222,7 @@ class RagTest(unittest.TestCase):
         self.assertLessEqual(len(e["texte"]), 270)
         surlignes = [e["texte"][a:b] for a, b in e["surlignages"]]
         self.assertEqual(surlignes, ["Polices", "élégantes", "cœur"])
-        self.assertEqual(rag.marquer({"texte": "une police", "surlignages": [[4, 10]]}), "une «police»")
+        self.assertEqual(rag.marquer({"texte": "une police", "surlignages": [[4, 10]]}), "une **police**")
         self.assertEqual(rag.extrait("texte sans rapport", "zzz")["surlignages"], [])
 
     def test_embarqueur_desactive_par_defaut_et_ollama_en_panne(self):
@@ -297,6 +297,12 @@ class GardeTest(unittest.TestCase):
             garde.verifier("127.0.0.1", 4445)
 
     def _ouvreur(self, mandataire):
+        # urllib contourne tout mandataire pour 127.0.0.1 si no_proxy le demande (d'autres tests le règlent) :
+        # ici chaque requête DOIT passer par le mandataire de garde
+        from unittest import mock
+        correctif = mock.patch("urllib.request.proxy_bypass", lambda hote: False)
+        correctif.start()
+        self.addCleanup(correctif.stop)
         return urllib.request.build_opener(urllib.request.ProxyHandler({"http": mandataire.adresse}))
 
     def test_mandataire_relaie_le_public_et_bloque_la_redirection_vers_le_prive(self):
@@ -309,7 +315,9 @@ class GardeTest(unittest.TestCase):
                 garde = capture_site.Garde(exceptions=[("127.0.0.1", public.server_address[1])])
                 with capture_site.MandataireGarde(garde) as mandataire:
                     ouvreur = self._ouvreur(mandataire)
-                    self.assertEqual(ouvreur.open(base + "/", timeout=10).read(), b"<h1>Bonjour</h1>")
+                    reponse = ouvreur.open(base + "/", timeout=10)
+                    self.assertEqual(reponse.read(), b"<h1>Bonjour</h1>")
+                    self.assertEqual(reponse.headers.get_all("Connection"), ["close"], "connexion jamais réutilisée")
                     for chemin in ("/vers-prive", "/vers-metadonnees"):
                         with self.assertRaises(urllib.error.HTTPError) as ctx:
                             ouvreur.open(base + chemin, timeout=10)
@@ -418,6 +426,8 @@ class CaptureTest(unittest.TestCase):
     def test_vrai_chromium_sous_ressources_privees_bloquees(self):
         with site({"/pixel": (200, {"Content-Type": "image/png"}, b"\x89PNG\r\n\x1a\n"), "/api": html(b"secret")}) as interne:
             prive = f"http://127.0.0.1:{interne.server_address[1]}"
+            # 450 liens longs : le résultat du pilote dépasse 64 Ko (tampon d'un tube), il doit arriver entier
+            liens = "".join(f'<a href="https://exemple.org/archives/{i:04d}/{"x" * 90}">Archive numéro {i}</a> ' for i in range(450))
             page = f"""<!doctype html><html lang="fr"><head><meta charset="utf-8"><title>Boutique Aurore</title>
                 <meta name="description" content="Bougies artisanales."><style>body{{background:#103050;color:#fff;font-family:Georgia,serif}}
                 h1{{font-family:Verdana,sans-serif}}</style></head><body><header><nav><a href="https://exemple.org/a-propos">À propos</a></nav></header>
@@ -425,7 +435,7 @@ class CaptureTest(unittest.TestCase):
                 <h2>Livraison</h2><p>Expédition sous deux jours ouvrés.</p><img src="{prive}/pixel" alt="">
                 <script>fetch("{prive}/api").catch(()=>0); fetch("http://169.254.169.254/latest/meta-data/").catch(()=>0);
                 const i = new Image(); i.src = "http://localhost:{interne.server_address[1]}/pixel";</script></main>
-                <footer>Mentions</footer></body></html>""".encode()
+                <footer>Mentions {liens}</footer></body></html>""".encode()
             with site({"/": html(page), "/saut": (302, {"Location": prive + "/api"}, b"")}) as public:
                 port = public.server_address[1]
                 try:
@@ -447,7 +457,8 @@ class CaptureTest(unittest.TestCase):
                 self.assertGreater(c["palette"][0]["part"], 0.5)
                 self.assertTrue(c["structure"]["entete"] and c["structure"]["pied"])
                 self.assertEqual(c["structure"]["heros"]["appel_action"], "Commander")
-                self.assertEqual([l["url"] for l in c["liens"]], ["https://exemple.org/a-propos"])
+                self.assertEqual(c["liens"][0]["url"], "https://exemple.org/a-propos")
+                self.assertEqual(len(c["liens"]), capture_site.LIENS_MAX, "liens bornés")
                 self.assertEqual(sorted(c["fichiers"]), sorted(capture_site.FICHIERS))
                 self.assertEqual((c["fichiers"]["mobile_vue"]["largeur"], c["fichiers"]["bureau_vue"]["largeur"]), (390, 1440))
                 for f in c["fichiers"].values():
@@ -688,6 +699,14 @@ class StockageTest(unittest.TestCase):
         autre = references.traiter(self.org, autre["id"], pilote=pilote_simule(), autoriser_prives=True)
         self.assertEqual(autre["statut"], "prete")
 
+    def test_file_de_captures_bornee(self):
+        for i in range(references.FILE_MAX):
+            references.ajouter(self.org, url=f"https://exemple.org/page-{i}", auteur="test")
+        with self.assertRaises(mi.MissionError) as ctx:
+            references.ajouter(self.org, url="https://exemple.org/de-trop", auteur="test")
+        self.assertEqual(ctx.exception.code, "conflit")
+        self.guide()  # un texte s'indexe toujours : il ne passe pas par la file de capture
+
     def test_capture_interrompue_declaree_en_echec(self):
         ref = references.ajouter(self.org, url="https://exemple.org/", auteur="test")
         test_missions._sql(self.org, "UPDATE board_references SET statut='capture', maj=? WHERE id=? AND tenant_id=?",
@@ -903,7 +922,7 @@ class CliTest(unittest.TestCase):
         code, sortie, _ = self.jarvis("chercher", "polices élégantes", "--collection", "marque", "-n", "2")
         self.assertEqual(code, 0)
         self.assertRegex(sortie, r"\[1\] FR-[0-9a-f]{12} · Guide de style Aurore \(" + rid + r"\) · section « Typographie »")
-        self.assertIn("«polices» «élégantes»", sortie)
+        self.assertIn("**polices** **élégantes**", sortie)
         self.assertRegex(sortie, r"à citer : \[" + rid + r"#FR-[0-9a-f]{12}\] Guide de style Aurore")
         self.assertIn("DONNÉE non fiable", sortie)
         code, sortie, _ = self.jarvis("chercher", "polices", "--json")

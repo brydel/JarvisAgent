@@ -140,8 +140,9 @@ class _Relais(socketserver.BaseRequestHandler):
         except ValueError:
             self._repondre(client, 400, "requête illisible")
             return
+        tunnel = methode.upper() == "CONNECT"
         try:
-            if methode.upper() == "CONNECT":
+            if tunnel:
                 hote, _, port_txt = cible.rpartition(":")
                 port = int(port_txt)
                 ip = serveur.garde.verifier(hote, port)
@@ -169,6 +170,13 @@ class _Relais(socketserver.BaseRequestHandler):
         try:
             if premier:
                 amont.sendall(premier)
+            if not tunnel:
+                # HTTP en clair : la réponse est marquée « Connection: close » pour que le navigateur ne réutilise pas
+                # cette connexion (déjà reliée à CE serveur) pour une requête destinée à un autre hôte
+                debut = self._reponse_sans_reutilisation(amont)
+                if not debut or not serveur.compter_octets(len(debut)):
+                    return
+                client.sendall(debut)
             self._relayer(client, amont, serveur)
         except OSError:
             pass
@@ -183,6 +191,21 @@ class _Relais(socketserver.BaseRequestHandler):
                            f"Content-Length: {len(corps)}\r\nConnection: close\r\n\r\n".encode() + corps)
         except OSError:
             pass
+
+    @staticmethod
+    def _reponse_sans_reutilisation(amont) -> bytes:
+        tete = b""
+        while b"\r\n\r\n" not in tete and len(tete) <= ENTETE_MAX:
+            bloc = amont.recv(8192)
+            if not bloc:
+                break
+            tete += bloc
+        entetes, separateur, reste = tete.partition(b"\r\n\r\n")
+        if not separateur:
+            return b""  # réponse sans en-têtes complets : rien n'est relayé
+        lignes = [l for l in entetes.split(b"\r\n")
+                  if not l.lower().startswith((b"connection:", b"keep-alive:", b"proxy-connection:"))]
+        return b"\r\n".join(lignes) + b"\r\nConnection: close\r\n\r\n" + reste
 
     @staticmethod
     def _relayer(client, amont, serveur) -> None:
@@ -281,9 +304,10 @@ def _pilote_node(configuration: dict) -> dict:
     if len(sortie) > SORTIE_MAX:
         raise CaptureRefusee("résultat de capture trop volumineux")
     try:
-        resultat = json.loads(sortie.decode("utf-8", "replace").strip().splitlines()[-1])
+        # dernière ligne de la sortie ; pas de splitlines() : un texte capturé peut contenir U+2028 ou U+0085
+        resultat = json.loads(sortie.decode("utf-8", "replace").strip().rsplit("\n", 1)[-1])
     except (ValueError, IndexError):
-        detail = erreurs.decode("utf-8", "replace").strip().splitlines()[-1:] or ["aucune sortie"]
+        detail = erreurs.decode("utf-8", "replace").strip().splitlines()[-1:] or ["sortie illisible"]
         raise CaptureRefusee(f"le pilote de capture a échoué ({detail[0][:200]})") from None
     if not isinstance(resultat, dict):
         raise CaptureRefusee("résultat de capture illisible")

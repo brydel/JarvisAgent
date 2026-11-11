@@ -340,8 +340,9 @@ def extrait(texte: str, question: str, *, largeur: int = 260) -> dict:
     return {"texte": prefixe + texte[debut:fin] + suffixe, "surlignages": marques}
 
 
-def marquer(e: dict, ouvre: str = "«", ferme: str = "»") -> str:
-    """Extrait en texte brut avec les mots trouvés entre marques (sortie de la ligne de commande)."""
+def marquer(e: dict, ouvre: str = "**", ferme: str = "**") -> str:
+    """Extrait en texte brut avec les mots trouvés entre marques (sortie de la ligne de commande). Par défaut
+    « **mot** » : les guillemets français sont trop fréquents dans les textes capturés pour servir de marque."""
     texte, sortie, curseur = e["texte"], [], 0
     for a, b in e["surlignages"]:
         sortie.append(texte[curseur:a] + ouvre + texte[a:b] + ferme)

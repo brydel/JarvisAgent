@@ -34,6 +34,7 @@ TEXTE_MAX = 300_000
 CANDIDATS = 50              # fragments retenus par moteur avant fusion
 VECTEURS_MAX = 5000         # fragments comparés par cosinus en Python pur (au-delà : les plus récents)
 REPLI_MAX = 5000            # fragments parcourus par le BM25 de repli
+FILE_MAX = 20               # captures en attente ou en cours, au plus
 INTERROMPUE_S = 600         # une capture « en cours » plus vieille que cela a été interrompue (arrêt du Studio)
 PANNE_S = 60                # après une panne de l'embarqueur, on ne le sollicite plus pendant ce délai
 AVERTISSEMENT = capture_site.AVERTISSEMENT
@@ -236,6 +237,10 @@ def ajouter(tenant_id: str, *, url: str = "", texte: str = "", objet_id: str = "
                                     "AND collection=? AND supprime=0", (tenant_id, source, collection)).fetchone()
             if existante:
                 return {**voir(tenant_id, existante["id"], _acces=a), "deja": True}
+            en_file = a.c.execute("SELECT COUNT(*) AS n FROM board_references WHERE tenant_id=? AND supprime=0 AND statut IN "
+                                  "('en_attente','capture','indexation')", (tenant_id,)).fetchone()["n"]
+            if en_file >= FILE_MAX:
+                raise MissionError("conflit", f"{FILE_MAX} captures sont déjà en file : attends qu'elles se terminent")
             a.c.execute("INSERT INTO board_references (id, tenant_id, type, source, titre, collection, etiquettes, statut, "
                         "auteur, cree, maj) VALUES (?,?,?,?,?,?,?,?,?,?,?)",
                         (rid, tenant_id, "site", source, titre, collection, json.dumps(tags, ensure_ascii=False),
@@ -540,7 +545,7 @@ def voir(tenant_id: str, reference_id: str, *, supprimees: bool = False, _acces:
                 "tronquee": bool(meta.get("tronquee")), "empreinte": r["empreinte"], "auteur": r["auteur"],
                 "index": {"fragments": v["n"] or 0, "vecteurs": v["v"] or 0, "modele": v["modele"] or "",
                           "dimension": v["dimension"] or 0, "version_index": v["version_index"] or 0},
-                "reseau": meta.get("reseau"), "nature": "donnee_non_fiable",
+                "reseau": meta.get("reseau"), "bac_a_sable": meta.get("bac_a_sable"), "nature": "donnee_non_fiable",
                 "avertissement": AVERTISSEMENT if r["type"] == "site" else ""}
     if _acces is not None:
         return lire(_acces)
@@ -672,6 +677,7 @@ def chercher(tenant_id: str, question: str, *, collection: str | None = None, et
                     "fragment_id": l["id"], "reference_id": l["reference_id"], "score": round(score, 6),
                     "rangs": {"mots": rangs_mots.get(ident), "vecteurs": rangs_vecteurs.get(ident)},
                     "section": l["section"], "position": l["position"], "extrait": rag.extrait(l["texte"], question),
+                    "section_surlignages": [list(p) for p in rag.plages(l["section"], question)],
                     "nature": "donnee_non_fiable",
                     "citation": {"reference_id": l["reference_id"], "titre": l["titre"], "url": url, "type": l["type"],
                                  "collection": l["collection"], "section": l["section"], "capture_le": l["capture_le"],
