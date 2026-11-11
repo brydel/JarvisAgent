@@ -12,6 +12,8 @@ interface Ligne {
   cmd: Commande<ContexteBoard>;
   libelle: string;
   groupe: string;
+  /** commande indisponible : la phrase du registre qui dit pourquoi */
+  raison: string | null;
 }
 
 export function Palette({ fermer }: { fermer: () => void }) {
@@ -29,13 +31,18 @@ export function Palette({ fermer }: { fermer: () => void }) {
       const parId = new Map(dispo.map((x) => [x.id, x]));
       const recents = registre.journal.recents(5).map((id) => parId.get(id)).filter((x): x is Commande<ContexteBoard> => Boolean(x));
       const vus = new Set(recents.map((x) => x.id));
-      return [...recents.map((cmd) => ({ cmd, libelle: libelleDe(cmd, c), groupe: "Récents" })),
-        ...dispo.filter((x) => !vus.has(x.id)).map((cmd) => ({ cmd, libelle: libelleDe(cmd, c), groupe: cmd.categorie }))];
+      return [...recents.map((cmd) => ({ cmd, libelle: libelleDe(cmd, c), groupe: "Récents", raison: null })),
+        ...dispo.filter((x) => !vus.has(x.id)).map((cmd) => ({ cmd, libelle: libelleDe(cmd, c), groupe: cmd.categorie, raison: null }))];
     }
+    // en recherche : les commandes indisponibles qui savent dire pourquoi sont trouvées aussi, grisées, après les autres
+    const raisons = new Map(registre.proposees(c, "palette").filter((p) => !p.etat.disponible && p.cmd.id !== "palette.ouvrir")
+      .map((p) => [p.cmd.id, p.etat.raison] as const));
+    const texte = (x: Commande<ContexteBoard>) => `${libelleDe(x, c)} ${x.categorie} ${x.motsCles ?? ""}`;
     // une commande souvent utilisée remonte un peu (journal local), sans jamais passer devant une bien meilleure correspondance
-    return chercher(q, dispo, (x) => `${libelleDe(x, c)} ${x.categorie} ${x.motsCles ?? ""}`,
-      (x) => Math.min(6, Math.log2(1 + (registre.journal.usage(x.id)?.n ?? 0))))
-      .slice(0, 40).map(({ element }) => ({ cmd: element, libelle: libelleDe(element, c), groupe: "" }));
+    const trouvees = chercher(q, dispo, texte, (x) => Math.min(6, Math.log2(1 + (registre.journal.usage(x.id)?.n ?? 0)))).slice(0, 40);
+    const grisees = chercher(q, registre.toutes().filter((x) => raisons.has(x.id)), texte).slice(0, 8);
+    return [...trouvees.map(({ element }) => ({ cmd: element, libelle: libelleDe(element, c), groupe: "", raison: null })),
+      ...grisees.map(({ element }) => ({ cmd: element, libelle: libelleDe(element, c), groupe: "", raison: raisons.get(element.id) ?? null }))];
   }, [registre, c, requete]);
 
   useEffect(() => setActif(0), [requete]);
@@ -44,7 +51,7 @@ export function Palette({ fermer }: { fermer: () => void }) {
   }, [actif]);
 
   const lancer = (l: Ligne | undefined) => {
-    if (!l) return;
+    if (!l || l.raison !== null) return;  // indisponible : la ligne dit pourquoi, rien ne s'exécute
     fermer();
     // après la fermeture : le focus revient au canevas avant l'exécution (plein écran, saisie d'un lien…)
     window.setTimeout(() => executer(l.cmd.id, "palette"), 0);
@@ -76,10 +83,10 @@ export function Palette({ fermer }: { fermer: () => void }) {
             return (
               <div key={l.cmd.id} role="presentation">
                 {titre && <div className="palette-groupe" role="presentation">{titre}</div>}
-                <div id={`palette-${l.cmd.id}`} role="option" aria-selected={i === actif} className="palette-ligne"
-                  onPointerMove={() => setActif(i)} onClick={() => lancer(l)}>
+                <div id={`palette-${l.cmd.id}`} role="option" aria-selected={i === actif} aria-disabled={l.raison !== null || undefined}
+                  className={`palette-ligne${l.raison !== null ? " indisponible" : ""}`} onPointerMove={() => setActif(i)} onClick={() => lancer(l)}>
                   <span className="palette-icone">{Icone ? <Icone size={16} aria-hidden /> : null}</span>
-                  <span className="palette-libelle">{l.libelle}</span>
+                  <span className="palette-libelle">{l.libelle}{l.raison !== null && <small className="palette-raison">Indisponible : {l.raison}</small>}</span>
                   {l.cmd.actif?.(c) && <Check size={14} className="palette-coche" aria-label="actif" />}
                   {!l.groupe && <span className="palette-categorie">{l.cmd.categorie}</span>}
                   {r && <kbd>{afficher(r)}</kbd>}

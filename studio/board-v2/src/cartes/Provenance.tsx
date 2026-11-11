@@ -2,11 +2,11 @@
 // discret (auteur humain ou agent, modèle si connu, date, version, sources liées). Tout vient de etat.ts : rien
 // n'est affiché quand la donnée n'existe pas.
 import { memo } from "react";
-import { Bot, CircleAlert, Clock3, Hourglass, Link2, User } from "lucide-react";
+import { Bot, CircleAlert, CircleCheck, Clock3, Hourglass, Link2, User } from "lucide-react";
 import type { ObjetBoard } from "../types";
 import { etatsCarte, provenance, type SorteEtat } from "./etat";
 
-const ICONES: Record<SorteEtat, typeof Clock3> = { bloquee: CircleAlert, attente: Hourglass, perimee: Clock3 };
+const ICONES: Record<SorteEtat, typeof Clock3> = { bloquee: CircleAlert, attente: Hourglass, perimee: Clock3, pret: CircleCheck };
 
 export const EtatsCarte = memo(function EtatsCarte({ objet }: { objet: ObjetBoard }) {
   const etats = etatsCarte(objet);

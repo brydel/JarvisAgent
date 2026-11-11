@@ -125,7 +125,8 @@ export function useServices(e: Entrees): ServicesBoard {
           toast(x instanceof Error ? x.message : "relation refusée", { erreur: true });
           return null;
         }
-        await sync.lireMaintenant([], [id]);
+        // les deux cartes sont relues avec la relation : leur résumé calculé (bloquée par, alimentée par…) en dépend
+        await sync.lireMaintenant(style === "defaut" || style === "utilise" ? [] : [source, cible], [id]);
         historique.ajouter({ libelle: "Relation", annuler: () => file.modifierLien(id, { supprime: true }), refaire: () => file.modifierLien(id, { supprime: false }) });
         return id;
       },
@@ -156,6 +157,18 @@ export function useServices(e: Entrees): ServicesBoard {
       grouper: (libelle, f) => E().historique.grouper(libelle, f),
       annuler: () => jouerHistorique("annuler"),
       retablir: () => jouerHistorique("refaire"),
+      historique: () => E().historique.etat(),
+      relire: async (id, action, options) => {
+        const { source, sync, toast } = E();
+        try {
+          const r = await source.relecture(id, action, options);
+          await sync.lireMaintenant([id]);
+          return r;
+        } catch (x) {
+          toast(x instanceof Error ? x.message : "relecture refusée", { erreur: true });
+          return null;
+        }
+      },
 
       copier: (ids) => {
         pressePapiers.current = { objets: ids.map(objet).filter((o): o is ObjetBoard => Boolean(o)), collages: 0 };
@@ -180,6 +193,15 @@ export function useServices(e: Entrees): ServicesBoard {
         rf.setEdges((es) => es.map((x) => (x.selected ? { ...x, selected: false } : x)));
       },
       inspecter: (id) => services.selectionner([id]),
+      allerA: (id) => {
+        const o = objet(id);
+        if (!o) {
+          E().toast("Cette carte n'est plus sur ce Board", { erreur: true });
+          return;
+        }
+        services.selectionner([id]);
+        services.montrer(boiteDe(o));
+      },
       ajuster: () => void E().rf.fitView({ duration: duree(220), padding: 0.08 }),
       zoomer: (facteur) => void E().rf.zoomTo(E().rf.getZoom() * facteur, { duration: duree(160) }),
       zoomA: (niveau) => void E().rf.zoomTo(niveau, { duration: duree(160) }),

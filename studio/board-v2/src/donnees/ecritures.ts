@@ -166,9 +166,12 @@ export class FileEcritures {
         if (o) versions[id] = o.version;
       }
       try {
+        // les cartes reliées par une relation à effet : leur résumé (bloquée par, alimentée par…) change avec ce retrait
+        const voisins = this.store.voisinsParEffet(presents);
         await this.source.supprimer(presents, false, versions);
         this.store.retirerObjets(presents);
         this.store.retirerSurcouche(cle);
+        if (voisins.length) await this.relire({ objets: voisins });
         return true;
       } catch (x) {
         if (estConflit(x)) {
@@ -189,6 +192,8 @@ export class FileEcritures {
       try {
         await this.source.supprimer(ids, true);
         await this.relire({ objets: ids });
+        const voisins = this.store.voisinsParEffet(ids);  // leurs relations sont revenues : leur résumé aussi
+        if (voisins.length) await this.relire({ objets: voisins });
         return true;
       } catch (x) {
         this.rappels.erreur?.(message(x));
@@ -203,9 +208,13 @@ export class FileEcritures {
     return this.enchainer(async () => {
       try {
         // état relu à l'envoi : une suppression encore en file a pu retirer la relation entre-temps
-        const r = await this.source.modifierLien(id, champs, this.store.lienServeur(id)?.version);
+        const avant = this.store.lienServeur(id);
+        const r = await this.source.modifierLien(id, champs, avant?.version);
         if (champs.supprime !== false && this.store.lienServeur(id)) this.store.confirmerLien(id, champs, r.version);
         else if (champs.supprime !== true) await this.relire({ liens: [id] });  // relation restaurée : absente du store
+        // type changé, relation retirée ou revenue : l'effet change, donc le résumé calculé de ses deux cartes aussi
+        const bouts = avant ?? this.store.lienServeur(id);
+        if (bouts && (champs.style !== undefined || champs.supprime !== undefined)) await this.relire({ objets: [bouts.source_id, bouts.cible_id] });
         return true;
       } catch (x) {
         if (estConflit(x)) {

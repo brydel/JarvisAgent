@@ -5,7 +5,7 @@ import { ArrowDown, ArrowLeft, ArrowRight, ArrowUp } from "lucide-react";
 import { boiteDe } from "../../outils/espace";
 import { centre, type Point } from "../../outils/geometrie";
 import type { ObjetBoard } from "../../types";
-import { enLecture, un, type ContexteBoard } from "../contexte";
+import { enLecture, raisonLecture, un, type ContexteBoard } from "../contexte";
 import type { Commande, Icone } from "../types";
 
 /** Voisin de `depuis` dans la direction (ux, uy) : le plus proche, les objets bien dans l'axe d'abord. */
@@ -35,6 +35,7 @@ export const commandesNavigation: Commande<ContexteBoard>[] = DIRECTIONS.map(([c
   id: `navigation.objet.${cle}`, libelle: `Aller à l'objet ${nom}`, icone, raccourci, categorie: "Navigation", niveau: "lecture",
   motsCles: "clavier voisin suivant sélectionner",
   disponible: (c) => !enLecture(c) && c.b.objets().length > 0,
+  raison: (c) => raisonLecture(c) ?? "Le Board est vide : il n'y a aucun objet où aller",
   executer: (c) => {
     const actuel = un(c) ?? c.selection[0];
     const depuis = actuel ? centre(boiteDe(actuel)) : c.b.centreVue();

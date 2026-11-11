@@ -100,8 +100,9 @@ export interface MetaObjet {
   pointes?: "fin" | "deux" | "aucune";
   ancres?: { de?: AncreFleche; vers?: AncreFleche };
   libelle?: string;
-  /** demande de relecture posée par l'humain sur un livrable (aucun agent n'est lancé par cette demande) */
-  relecture?: { demandee: number; par: string };
+  /** carte posée depuis la bibliothèque de références */
+  reference_id?: string;
+  livrable_de?: string;
   source?: string;
   compact?: boolean;
   [cle: string]: unknown;
@@ -116,6 +117,44 @@ export interface Proposition {
   mission_id?: string;
   /** « jarvis:auto » quand le chef l'a lancée seul */
   par?: string;
+}
+
+/** Une carte citée par le résumé des relations, avec la relation qui la relie. */
+export interface RefCarte {
+  id: string;
+  titre: string;
+  type: TypeObjet;
+  lien_id: string;
+}
+
+/** Effets des relations d'une carte, CALCULÉS par le serveur (lib/jarvis/board_relations.py) — jamais stockés. */
+export interface RelationsCarte {
+  /** vrai : son lancement est refusé et ses tâches en file ne sont confiées à personne */
+  bloquee: boolean;
+  bloquee_par: (RefCarte & { etat: string })[];
+  /** toutes ses dépendances (« dépend de »), terminées ou non ; `suivi: false` = la cible n'est pas un travail */
+  dependances: (RefCarte & { suivi: boolean; termine: boolean; etat: string })[];
+  /** cartes qui dépendent de celle-ci ; `attend` = encore bloquées par elle */
+  debloque: (RefCarte & { attend: boolean })[];
+  alimentee_par: (RefCarte & { sorte: "reference" | "livrable" | "contenu" | "en_attente" | "aucun" })[];
+  alimente: RefCarte[];
+  /** `effet` : la source est une référence de la bibliothèque, ses passages sont joints avec citation */
+  inspiree_par: (RefCarte & { reference_id: string | null; effet: boolean })[];
+}
+
+/** Dernière demande de relecture d'un livrable (lib/jarvis/board_relectures.py). Aucun agent n'est lancé par elle. */
+export interface Relecture {
+  id: string;
+  objet_id: string;
+  espace: string;
+  statut: "demandee" | "rendue" | "annulee";
+  demande_par: string;
+  note: string;
+  verdict: "" | "pret" | "corrections";
+  avis: string;
+  rendu_par: string;
+  cree: number;
+  maj: number;
 }
 
 export interface ObjetBoard {
@@ -143,6 +182,10 @@ export interface ObjetBoard {
   /** qui a posé l'objet : « studio » (toi), « chef », « telegram »… tel qu'enregistré par le serveur */
   auteur?: string;
   artefacts?: { id: string; fournisseur: string; factice: number; revue: string; contenu: string }[];
+  /** effets calculés des relations (absent : aucune relation à effet ne touche la carte) */
+  relations?: RelationsCarte;
+  /** dernière demande de relecture (absent : jamais demandée) */
+  relecture?: Relecture;
 }
 
 export type StyleLien = "defaut" | "inspire" | "alimente" | "utilise" | "depend";

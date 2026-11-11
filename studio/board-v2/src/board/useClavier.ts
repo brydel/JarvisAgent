@@ -24,9 +24,18 @@ export function useClavier({ registre, contexte, executer }: AccesCommandes): vo
     };
     const touche = (e: KeyboardEvent) => {
       const cmd = trouver(e);
-      if (!cmd) return;
+      if (cmd) {
+        e.preventDefault();
+        executer(cmd.id, "raccourci");
+        return;
+      }
+      // raccourci connu mais indisponible ici : le registre dit pourquoi (message), au lieu d'un silence
+      if (e.defaultPrevented || e.repeat || dansChamp(e.target) || activeUnControle(e) || ui.lire().presentation !== null || ui.lire().palette) return;
+      if (document.querySelector("dialog[open], [aria-modal='true'], .visionneuse")) return;
+      const refus = registre.refusPourTouche(e, contexte());
+      if (!refus) return;
       e.preventDefault();
-      executer(cmd.id, "raccourci");
+      executer(refus.commande.id, "raccourci");  // indisponible : `surRefus` affiche la raison, rien ne s'exécute
     };
     // Alt+flèche (aller à l'objet voisin) est pris AVANT React Flow, qui sinon déplacerait l'objet qui a le focus
     const avant = (e: KeyboardEvent) => {

@@ -4,7 +4,7 @@
 import type { Modification, NouvelObjet } from "../api";
 import type { EtatUi, StoreUi } from "../etat/ui";
 import type { Boite, Point } from "../outils/geometrie";
-import type { LienBoard, ObjetBoard, StyleLien } from "../types";
+import type { LienBoard, ObjetBoard, Relecture, StyleLien } from "../types";
 
 export interface OptionsToast {
   erreur?: boolean;
@@ -34,6 +34,10 @@ export interface ServicesBoard {
   grouper<T>(libelle: string, f: () => Promise<T>): Promise<T>;
   annuler(): Promise<void>;
   retablir(): Promise<void>;
+  /** libellé du prochain « annuler » et du prochain « rétablir » (null : rien à faire) */
+  historique(): { annuler: string | null; refaire: string | null };
+  /** « Faire relire » : demande, retrait ou verdict, enregistrés dans la file du serveur. Aucun agent n'est lancé. */
+  relire(id: string, action: "demander" | "annuler" | "rendre", options?: { verdict?: "pret" | "corrections"; avis?: string }): Promise<Relecture | null>;
   /* ---- presse-papiers ---- */
   copier(ids: string[]): void;
   coller(ou?: Point): Promise<void>;
@@ -41,6 +45,8 @@ export interface ServicesBoard {
   /* ---- sélection et vue ---- */
   selectionner(ids: string[]): void;
   inspecter(id: string): void;
+  /** sélectionne la carte et l'amène dans la vue (navigation depuis « bloquée par X », « alimentée par Y »…) */
+  allerA(id: string): void;
   ajuster(): void;
   zoomer(facteur: number): void;
   zoomA(niveau: number): void;
@@ -79,3 +85,11 @@ export const deType = (c: ContexteBoard, ...types: string[]): ObjetBoard | undef
 };
 /** mode présentation ou zen : les commandes d'écriture au clavier sont suspendues */
 export const enLecture = (c: ContexteBoard): boolean => c.ui.presentation !== null;
+
+/* Raisons d'indisponibilité partagées (une phrase, adressée à l'utilisateur). */
+export const RAISON_LECTURE = "Rien ne se modifie pendant la présentation : quitte-la avec Échap";
+export const RAISON_SELECTION = "Sélectionne d'abord un objet du Board";
+export const RAISON_UNE_CARTE = "Sélectionne une seule carte";
+export const raisonLecture = (c: ContexteBoard): string | null => (enLecture(c) ? RAISON_LECTURE : null);
+/** écriture sur la sélection : présentation en cours, puis sélection vide */
+export const raisonSelection = (c: ContexteBoard): string | null => raisonLecture(c) ?? (c.selection.length ? null : RAISON_SELECTION);

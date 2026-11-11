@@ -5,7 +5,7 @@ import { ordreDeLecture } from "../../outils/disposition";
 import { boiteDe } from "../../outils/espace";
 import { englobante } from "../../outils/geometrie";
 import type { ObjetBoard } from "../../types";
-import { deType, type ContexteBoard } from "../contexte";
+import { RAISON_LECTURE, RAISON_SELECTION, deType, type ContexteBoard } from "../contexte";
 import type { Commande, Icone } from "../types";
 
 /** Cadres du Board dans l'ordre de lecture : ce sont les diapositives de la présentation. */
@@ -33,13 +33,14 @@ const THEMES: [Theme, string, Icone, string][] = [
 export const commandesAffichage: Commande<ContexteBoard>[] = [
   /* ---- Échap : la première commande disponible gagne (présentation, concentration, zen, outil, sélection) ---- */
   { id: "presentation.quitter", libelle: "Quitter la présentation", icone: X, raccourci: "echap", categorie: "Affichage", niveau: "lecture",
-    disponible: (c) => c.ui.presentation !== null,
+    disponible: (c) => c.ui.presentation !== null, raison: () => "Aucune présentation en cours",
     executer: (c) => {
       c.b.ui.definir({ presentation: null, focus: null });
       void c.b.pleinEcran(false);
     } },
   { id: "affichage.concentration.quitter", libelle: "Quitter le mode concentration", icone: X, raccourci: "echap", categorie: "Affichage", niveau: "lecture",
-    disponible: (c) => c.ui.focus !== null && c.ui.presentation === null, executer: (c) => c.b.ui.definir({ focus: null }) },
+    disponible: (c) => c.ui.focus !== null && c.ui.presentation === null,
+    raison: (c) => (c.ui.focus === null ? "Aucun cadre n'est mis en avant" : null), executer: (c) => c.b.ui.definir({ focus: null }) },
   { id: "affichage.zen.quitter", libelle: "Quitter le mode zen", icone: X, raccourci: "echap", categorie: "Affichage", niveau: "lecture",
     disponible: (c) => c.ui.zen && c.ui.outil === "selection" && !c.selection.length, executer: (c) => c.b.ui.definir({ zen: false }) },
   { id: "outil.revenir", libelle: "Revenir à l'outil de sélection", icone: MousePointer2, raccourci: "echap", categorie: "Outils", niveau: "lecture",
@@ -58,7 +59,8 @@ export const commandesAffichage: Commande<ContexteBoard>[] = [
     categorie: "Affichage", niveau: "lecture", actif: (c) => c.ui.pleinEcran, executer: (c) => c.b.pleinEcran(!c.ui.pleinEcran) },
   { id: "affichage.zen", libelle: (c) => (c.ui.zen ? "Quitter le mode zen" : "Mode zen (masquer l'interface)"), icone: PanelTopClose, raccourci: "mod+.",
     categorie: "Affichage", niveau: "lecture", motsCles: "sans distraction", actif: (c) => c.ui.zen,
-    disponible: (c) => c.ui.presentation === null, executer: (c) => c.b.ui.definir({ zen: !c.ui.zen }) },
+    disponible: (c) => c.ui.presentation === null, raison: () => "La présentation masque déjà l'interface : quitte-la avec Échap",
+    executer: (c) => c.b.ui.definir({ zen: !c.ui.zen }) },
   { id: "affichage.minicarte", libelle: (c) => (c.ui.minicarte ? "Masquer la minicarte" : "Afficher la minicarte"), icone: IconeCarte, raccourci: "shift+m",
     categorie: "Affichage", niveau: "lecture", actif: (c) => c.ui.minicarte, executer: (c) => c.b.ui.definir({ minicarte: !c.ui.minicarte }) },
   { id: "affichage.grille", libelle: "Magnétisme de la grille", icone: Grid3x3, raccourci: "shift+g", categorie: "Affichage", niveau: "lecture",
@@ -69,7 +71,7 @@ export const commandesAffichage: Commande<ContexteBoard>[] = [
   { id: "vue.ajuster", libelle: "Ajuster à la vue", icone: Maximize, raccourci: "shift+1", categorie: "Navigation", niveau: "lecture",
     motsCles: "tout voir zoom", executer: (c) => c.b.ajuster() },
   { id: "vue.selection", libelle: "Zoomer sur la sélection", icone: Focus, raccourci: "shift+2", categorie: "Navigation", niveau: "lecture",
-    disponible: (c) => c.selection.length > 0, executer: (c) => c.b.cadrer(englobante(c.selection.map(boiteDe))!, 0.2) },
+    disponible: (c) => c.selection.length > 0, raison: () => RAISON_SELECTION, executer: (c) => c.b.cadrer(englobante(c.selection.map(boiteDe))!, 0.2) },
   { id: "vue.cent", libelle: "Zoom à 100 %", raccourci: "shift+0", categorie: "Navigation", niveau: "lecture", executer: (c) => c.b.zoomA(1) },
   { id: "vue.zoomAvant", libelle: "Zoom avant", icone: ZoomIn, raccourci: ["mod+=", "+"], categorie: "Navigation", niveau: "lecture", executer: (c) => c.b.zoomer(1.25) },
   { id: "vue.zoomArriere", libelle: "Zoom arrière", icone: ZoomOut, raccourci: ["mod+-", "-"], categorie: "Navigation", niveau: "lecture", executer: (c) => c.b.zoomer(0.8) },
@@ -77,6 +79,7 @@ export const commandesAffichage: Commande<ContexteBoard>[] = [
   { id: "affichage.concentration", libelle: "Se concentrer sur ce cadre", icone: Minimize2, raccourci: "shift+c", categorie: "Affichage", niveau: "lecture",
     emplacements: ["flottante", "menu"], motsCles: "focus estomper le reste",
     disponible: (c) => Boolean(deType(c, "cadre")) && c.ui.presentation === null,
+    raison: (c) => (c.ui.presentation !== null ? RAISON_LECTURE : "Sélectionne un cadre (outil Cadre, touche F) sur lequel te concentrer"),
     executer: (c) => {
       const cadre = deType(c, "cadre")!;
       c.b.ui.definir({ focus: cadre.id });
@@ -85,6 +88,8 @@ export const commandesAffichage: Commande<ContexteBoard>[] = [
   { id: "presentation.demarrer", libelle: "Présenter (les cadres deviennent des diapositives)", icone: Presentation, raccourci: "shift+p",
     categorie: "Affichage", niveau: "lecture", emplacements: ["flottante", "menu"], motsCles: "diaporama slides",
     disponible: (c) => c.ui.presentation === null && c.b.objets().some((o) => o.type === "cadre"),
+    raison: (c) => (c.ui.presentation !== null ? "La présentation est déjà en cours"
+      : "Aucun cadre sur ce Board : trace un cadre (touche F), il deviendra une diapositive"),
     executer: (c) => {
       const cadres = diapositives(c.b.objets());
       const depart = deType(c, "cadre");
@@ -92,7 +97,7 @@ export const commandesAffichage: Commande<ContexteBoard>[] = [
       montrer(c, depart ? Math.max(0, cadres.findIndex((x) => x.id === depart.id)) : 0);
     } },
   { id: "presentation.suivante", libelle: "Diapositive suivante", icone: ChevronRight, raccourci: ["droite", "bas", "espace", "entree"], categorie: "Affichage", niveau: "lecture",
-    disponible: (c) => c.ui.presentation !== null, executer: (c) => montrer(c, (c.ui.presentation ?? 0) + 1) },
+    disponible: (c) => c.ui.presentation !== null, raison: () => "Aucune présentation en cours", executer: (c) => montrer(c, (c.ui.presentation ?? 0) + 1) },
   { id: "presentation.precedente", libelle: "Diapositive précédente", icone: ChevronLeft, raccourci: ["gauche", "haut"], categorie: "Affichage", niveau: "lecture",
-    disponible: (c) => c.ui.presentation !== null, executer: (c) => montrer(c, (c.ui.presentation ?? 0) - 1) },
+    disponible: (c) => c.ui.presentation !== null, raison: () => "Aucune présentation en cours", executer: (c) => montrer(c, (c.ui.presentation ?? 0) - 1) },
 ];

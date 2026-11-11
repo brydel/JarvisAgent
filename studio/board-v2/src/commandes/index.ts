@@ -30,9 +30,10 @@ export function creerRegistreBoard(options: OptionsRegistre<ContexteBoard> = {})
       motsCles: "chercher une action", executer: (c) => c.b.ui.definir({ palette: !c.ui.palette, menu: null }) },
     { id: "navigation.rechercher", libelle: "Rechercher dans le Board", icone: Search, raccourci: ["/", "mod+f"], categorie: "Navigation", niveau: "lecture",
       motsCles: "filtrer trouver une carte", disponible: (c) => c.ui.presentation === null && !c.ui.zen,
+      raison: (c) => (c.ui.presentation !== null ? "La recherche est masquée pendant la présentation" : "La recherche est masquée en mode zen : quitte-le avec Ctrl+."),
       executer: () => document.querySelector<HTMLInputElement>(".topbar input[type='search']")?.focus() },
     { id: "menu.ouvrir", libelle: "Ouvrir le menu contextuel", raccourci: ["shift+f10", "contextmenu"], categorie: "Navigation", niveau: "lecture",
-      motsCles: "clic droit actions", disponible: (c) => c.ui.presentation === null,
+      motsCles: "clic droit actions", disponible: (c) => c.ui.presentation === null, raison: () => "Aucun menu pendant la présentation",
       // au clavier : le menu s'ouvre au centre du canevas, sur la sélection en cours
       executer: (c) => {
         const r = document.querySelector(".canevas")?.getBoundingClientRect();

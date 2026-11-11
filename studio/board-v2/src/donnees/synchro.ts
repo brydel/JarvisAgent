@@ -30,15 +30,23 @@ export function planifier(e: Evenement, store: StoreBoard, espace: string): Plan
     plan.reglages = true;
   } else if (e.type === "board_supprime") {
     plan.retirerObjets = chaines(d.objets);
+    // les cartes reliées à celles qui partent par une relation à effet : leur résumé calculé change
+    plan.objets = store.voisinsParEffet(plan.retirerObjets).filter((id) => !plan.retirerObjets.includes(id));
   } else if (e.type === "board_restaure") {
     plan.objets = chaines(d.objets);
   } else if (e.type === "board_lien" || e.type === "board_lien_maj") {
     const id = typeof d.lien_id === "string" ? d.lien_id : "";
+    const local = id ? store.lienServeur(id) : undefined;
+    // notre propre écriture (version déjà connue, ou relation déjà retirée ici) : la file a relu ce qu'il fallait
+    const echo = d.supprime === true ? !local : Boolean(local && version !== null && (local.version ?? 0) >= version);
     if (!id) plan.complet = true;
     else if (d.supprime === true) plan.retirerLiens = [id];
-    else {
-      const local = store.lienServeur(id);
-      if (!(local && version !== null && (local.version ?? 0) >= version)) plan.liens = [id];
+    else if (!echo) plan.liens = [id];
+    // le type d'une relation a un effet : le résumé calculé de ses deux cartes change avec elle
+    if (id && !echo && d.style !== "defaut" && d.style !== "utilise") {
+      for (const bout of [d.source_id, d.cible_id, local?.source_id, local?.cible_id]) {
+        if (typeof bout === "string" && store.objetServeur(bout) && !plan.objets.includes(bout)) plan.objets.push(bout);
+      }
     }
   } else if (e.type.startsWith("board_") && e.type !== "board_fichier") {
     const ids = typeof d.objet_id === "string" ? [d.objet_id] : chaines(d.objets);

@@ -24,8 +24,15 @@ export interface Commande<C> {
   motsCles?: string;
   /** où la proposer en plus de la palette (toutes les commandes y sont) */
   emplacements?: Emplacement[];
-  /** hors palette : la commande est masquée quand elle n'est pas disponible (défaut : vrai) */
+  /** la commande peut s'exécuter dans ce contexte (défaut : vrai) */
   disponible?(c: C): boolean;
+  /** POURQUOI elle ne peut pas s'exécuter, en une phrase destinée à l'utilisateur ; null si elle est simplement hors
+   *  sujet. N'est consultée que si `disponible` est faux. C'est la seule source des raisons affichées : info-bulle
+   *  d'un bouton grisé, ligne grisée de la palette et du menu contextuel, message d'un raccourci refusé. */
+  raison?(c: C): string | null;
+  /** la commande concerne ce qui est visé même quand elle n'est pas exécutable : menu contextuel et barre flottante
+   *  la montrent alors grisée, avec sa raison, au lieu de la cacher (défaut : faux) */
+  concerne?(c: C): boolean;
   /** bascule : état courant (aria-pressed, coche dans la palette) */
   actif?(c: C): boolean;
   executer(c: C): void | Promise<void>;
@@ -33,6 +40,20 @@ export interface Commande<C> {
   annuler?(c: C): void | Promise<void>;
   /** texte de la demande de confirmation (niveau « sensible ») */
   confirmation?(c: C): string | null;
+}
+
+/** État d'une commande dans un contexte : exécutable, ou non avec la phrase qui dit pourquoi (null : hors sujet). */
+export interface EtatCommande {
+  disponible: boolean;
+  raison: string | null;
+  /** à montrer grisée là où elle est proposée (menu, barre flottante) */
+  concerne: boolean;
+}
+
+export function etatDe<C>(cmd: Commande<C>, c: C): EtatCommande {
+  if (cmd.disponible?.(c) ?? true) return { disponible: true, raison: null, concerne: true };
+  const raison = cmd.raison?.(c) ?? null;
+  return { disponible: false, raison, concerne: Boolean(raison) && Boolean(cmd.concerne?.(c)) };
 }
 
 export function libelleDe<C>(cmd: Commande<C>, c: C): string {

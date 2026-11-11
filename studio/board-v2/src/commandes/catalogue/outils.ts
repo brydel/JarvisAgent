@@ -1,7 +1,7 @@
 // Outils du tableau blanc : un mode à la fois, une touche chacun (V, H, N, T, R, O, D, A, P, S, E, F, L).
 import { Circle, Diamond, Eraser, Frame, Hand, Highlighter, Lasso, MousePointer2, MoveUpRight, Pencil, Square, StickyNote, Type } from "lucide-react";
 import type { IdOutil } from "../../etat/ui";
-import { enLecture, type ContexteBoard } from "../contexte";
+import { enLecture, raisonLecture, type ContexteBoard } from "../contexte";
 import type { Commande, Icone } from "../types";
 
 export interface DefOutil {
@@ -33,7 +33,7 @@ export const OUTILS: DefOutil[] = [
 export const commandesOutils: Commande<ContexteBoard>[] = OUTILS.map((o) => ({
   id: `outil.${o.id}`, libelle: `Outil : ${o.libelle}`, icone: o.icone, raccourci: o.touche, categorie: "Outils", niveau: "lecture",
   motsCles: `${o.aide} mode`,
-  disponible: (c) => !enLecture(c),
+  disponible: (c) => !enLecture(c), raison: raisonLecture,
   actif: (c) => c.ui.outil === o.id,
   executer: (c) => c.b.ui.definir({ outil: o.id, liaison: null }),
 }));

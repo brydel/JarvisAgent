@@ -103,6 +103,19 @@ export class StoreBoard {
     return this.liensServeur.get(id);
   }
 
+  /** Autres bouts des relations À EFFET (dépend de, alimente, inspire) qui touchent ces cartes : leur résumé calculé
+   *  par le serveur change quand une de ces cartes ou relations change, il faut les relire. */
+  voisinsParEffet(ids: Iterable<string>): string[] {
+    const cible = new Set(ids);
+    const voisins = new Set<string>();
+    for (const l of this.liensServeur.values()) {
+      if (l.style === "defaut" || l.style === "utilise") continue;
+      if (cible.has(l.source_id) && !cible.has(l.cible_id)) voisins.add(l.cible_id);
+      if (cible.has(l.cible_id) && !cible.has(l.source_id)) voisins.add(l.source_id);
+    }
+    return [...voisins];
+  }
+
   objetsDeMission(missionId: string): string[] {
     const ids: string[] = [];
     for (const o of this.objetsServeur.values()) if (o.mission_id === missionId) ids.push(o.id);

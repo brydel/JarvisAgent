@@ -5,7 +5,7 @@ import { ui } from "../etat/ui";
 import type { ContexteBoard } from "./contexte";
 import type { RegistreBoard } from "./index";
 import { afficher } from "./raccourcis";
-import { libelleDe, raccourcisDe, type Commande, type Origine } from "./types";
+import { etatDe, libelleDe, raccourcisDe, type Commande, type Origine } from "./types";
 
 export interface AccesCommandes {
   registre: RegistreBoard;
@@ -22,10 +22,21 @@ export function useCommandes(): AccesCommandes {
   return a;
 }
 
-/** « Aligner à gauche (Alt+A) » : libellé et premier raccourci, pour une info-bulle. */
+/** « Aligner à gauche (Alt+A) » : libellé et premier raccourci, pour une info-bulle. Commande indisponible : la
+ *  raison déclarée par le registre suit (« Annuler (Ctrl+Z) — indisponible : rien à annuler »). */
 export function titreCommande(cmd: Commande<ContexteBoard>, c: ContexteBoard): string {
   const r = raccourcisDe(cmd)[0];
-  return r ? `${libelleDe(cmd, c)} (${afficher(r)})` : libelleDe(cmd, c);
+  const base = r ? `${libelleDe(cmd, c)} (${afficher(r)})` : libelleDe(cmd, c);
+  const etat = etatDe(cmd, c);
+  return etat.disponible ? base : `${base} — indisponible : ${etat.raison ?? "hors de ce contexte"}`;
+}
+
+/** Abonnement à l'historique (annuler / rétablir) : les boutons qui en dépendent se mettent à jour. */
+function useHistorique(registre: RegistreBoard): void {
+  useSyncExternalStore(registre.historique.abonner, () => {
+    const e = registre.historique.etat();
+    return `${e.annuler ?? ""}\u0000${e.refaire ?? ""}`;
+  });
 }
 
 interface PropsBouton {
@@ -42,14 +53,18 @@ interface PropsBouton {
 export function BoutonCommande({ id, origine = "bouton", texte = false, classe, taille = 16, children }: PropsBouton) {
   const { registre, contexte, executer } = useCommandes();
   useSyncExternalStore(ui.abonner, ui.lire);
+  useHistorique(registre);
   const cmd = registre.obtenir(id);
   if (!cmd) return null;
   const c = contexte();
   const Icone = cmd.icone;
   const libelle = libelleDe(cmd, c);
+  const etat = etatDe(cmd, c);
+  // grisé mais focalisable et cliquable (aria-disabled) : l'info-bulle et le clic disent POURQUOI, un `disabled` natif
+  // ne dirait rien au clavier ni au lecteur d'écran
   return (
-    <button type="button" className={classe} title={titreCommande(cmd, c)} aria-label={libelle} aria-pressed={cmd.actif ? cmd.actif(c) : undefined}
-      disabled={!(cmd.disponible?.(c) ?? true)} onClick={() => executer(id, origine)}>
+    <button type="button" className={classe} title={titreCommande(cmd, c)} aria-label={etat.disponible ? libelle : `${libelle} — indisponible : ${etat.raison ?? "hors de ce contexte"}`}
+      aria-pressed={cmd.actif ? cmd.actif(c) : undefined} aria-disabled={!etat.disponible || undefined} onClick={() => executer(id, origine)}>
       {children ?? (Icone ? <Icone size={taille} aria-hidden /> : null)}
       {texte && <span>{libelle}</span>}
     </button>

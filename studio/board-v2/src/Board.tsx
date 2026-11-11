@@ -80,6 +80,12 @@ export function Board({ source, charge }: Props) {
       : "Cet élément a été modifié ailleurs : ta modification est annulée, voici sa dernière version", { erreur: true }),
     erreur: (m) => toast(`Non enregistré : ${m}`, { erreur: true }),
     evenement: (e) => {
+      // une dépendance vient de se terminer : la carte qui l'attendait est libre (titre fourni par le serveur)
+      if (e.type === "board_debloquee") {
+        const titre = typeof e.donnees.titre === "string" ? e.donnees.titre : "";
+        toast(titre ? `« ${titre} » est débloquée : ce dont elle dépendait est terminé` : "Une carte est débloquée : ce dont elle dépendait est terminé");
+        return;
+      }
       if (e.type !== "board_propositions") return;
       const n = Number(e.donnees.n ?? 0), l = Number(e.donnees.liens ?? 0);
       toast(`Jarvis a contextualisé un élément : ${n} action${n > 1 ? "s" : ""} proposée${n > 1 ? "s" : ""}`
@@ -91,6 +97,8 @@ export function Board({ source, charge }: Props) {
   const registre = useMemo(() => creerRegistreBoard({
     confirmer: (texte) => window.confirm(texte),
     surErreur: (x) => toast(x instanceof Error ? x.message : "action impossible", { erreur: true }),
+    // commande demandée alors qu'elle est indisponible (raccourci, bouton grisé) : sa raison, telle que déclarée
+    surRefus: (raison, cmd) => toast(`${typeof cmd.libelle === "string" ? cmd.libelle : "Action"} — indisponible : ${raison}`),
   }), [toast]);
   const servicesRef = useRef<ServicesBoard | null>(null);
   const lireServices = useCallback(() => servicesRef.current!, []);

@@ -19,7 +19,8 @@ export function BarreFlottante({ selection }: { selection: ObjetBoard[] }) {
   const ref = useRef<HTMLDivElement>(null);
   const [largeur, setLargeur] = useState(0);
   const c = useMemo(() => contexte({ selection }), [contexte, selection]);
-  const commandes = useMemo(() => registre.disponibles(c, "flottante"), [registre, c]);
+  const proposees = useMemo(() => registre.proposees(c, "flottante"), [registre, c]);
+  const commandes = useMemo(() => proposees.map((p) => p.cmd), [proposees]);
   const dessins = selection.every((o) => TYPES_TABLEAU.has(o.type));
   const cartes = selection.every((o) => !TYPES_TABLEAU.has(o.type));
   useLayoutEffect(() => setLargeur(ref.current?.offsetWidth ?? 0), [commandes.length, dessins, cartes, selection.length]);
@@ -39,13 +40,14 @@ export function BarreFlottante({ selection }: { selection: ObjetBoard[] }) {
     <div ref={ref} className="selection barre-flottante nodrag nopan" role="toolbar" aria-label="Sélection"
       style={{ left: x, top: Math.max(8, y), visibility: largeur ? "visible" : "hidden" }}>
       {selection.length > 1 && <span className="compte-sel tab-num">{selection.length} objets</span>}
-      {commandes.map((cmd, i) => {
+      {proposees.map(({ cmd, etat }, i) => {
         const Icone = cmd.icone;
         const libelle = libelleDe(cmd, c);
         return (
           <span key={cmd.id} className="groupe-flottant">
             {i > 0 && commandes[i - 1]!.categorie !== cmd.categorie && <span className="sep" aria-hidden />}
-            <button type="button" title={titreCommande(cmd, c)} aria-label={libelle} aria-pressed={cmd.actif ? Boolean(cmd.actif(c)) : undefined}
+            <button type="button" title={titreCommande(cmd, c)} aria-label={etat.disponible ? libelle : `${libelle} — indisponible : ${etat.raison}`}
+              aria-pressed={cmd.actif ? Boolean(cmd.actif(c)) : undefined} aria-disabled={!etat.disponible || undefined}
               className={cmd.id === "edition.supprimer" ? "danger" : undefined} onClick={() => executer(cmd.id, "flottante", { selection })}>
               {Icone ? <Icone size={16} aria-hidden /> : libelle}
             </button>

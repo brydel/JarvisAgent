@@ -6,6 +6,8 @@ import type { MenuOuvert } from "../etat/ui";
 import type { ContexteBoard } from "./contexte";
 import { afficher } from "./raccourcis";
 import { useCommandes } from "./react";
+import { EFFETS } from "../relations/effets";
+import type { StyleLien } from "../types";
 import { libelleDe, raccourcisDe } from "./types";
 
 export function MenuContextuel({ menu, extra, fermer }: {
@@ -15,7 +17,8 @@ export function MenuContextuel({ menu, extra, fermer }: {
   const ref = useRef<HTMLDivElement>(null);
   const [pos, setPos] = useState({ x: menu.x, y: menu.y });
   const c = useMemo(() => contexte(extra), [contexte, extra]);
-  const commandes = useMemo(() => registre.disponibles(c, "menu"), [registre, c]);
+  const proposees = useMemo(() => registre.proposees(c, "menu"), [registre, c]);
+  const commandes = useMemo(() => proposees.map((p) => p.cmd), [proposees]);
 
   // garde le menu dans la fenêtre, puis donne le focus à sa première entrée
   useLayoutEffect(() => {
@@ -53,18 +56,26 @@ export function MenuContextuel({ menu, extra, fermer }: {
         else if (e.key === "End") { e.preventDefault(); deplacer("fin"); }
         else if (e.key === "Tab") { e.preventDefault(); fermer(); }
       }}>
-      {commandes.map((cmd, i) => {
+      {proposees.map(({ cmd, etat }, i) => {
         const Icone = cmd.icone;
         const r = raccourcisDe(cmd)[0];
         const coche = cmd.actif?.(c);
+        // un type de relation dit ce qu'il change ; une commande indisponible dit pourquoi (raison du registre)
+        const aide = !etat.disponible ? etat.raison : cmd.id.startsWith("relation.type.") ? EFFETS[cmd.id.slice(14) as StyleLien]?.phrase : null;
         return (
           <div key={cmd.id} role="presentation">
             {i > 0 && commandes[i - 1]!.categorie !== cmd.categorie && <div className="menu-separateur" role="separator" />}
             <button type="button" role={cmd.actif ? "menuitemcheckbox" : "menuitem"} aria-checked={cmd.actif ? Boolean(coche) : undefined}
-              className={cmd.id === "edition.supprimer" || cmd.id === "relation.supprimer" ? "danger" : undefined}
-              onClick={() => { fermer(); executer(cmd.id, "menu", extra); }}>
+              aria-disabled={!etat.disponible || undefined} aria-describedby={aide ? `aide-${cmd.id}` : undefined} title={aide ?? undefined}
+              className={[cmd.id === "edition.supprimer" || cmd.id === "relation.supprimer" ? "danger" : "", aide ? "avec-aide" : ""].join(" ").trim() || undefined}
+              onClick={() => {
+                if (!etat.disponible) return;  // reste ouvert : la raison est sous le libellé
+                fermer();
+                executer(cmd.id, "menu", extra);
+              }}>
               <span className="menu-icone">{coche ? <Check size={15} aria-hidden /> : Icone ? <Icone size={15} aria-hidden /> : null}</span>
-              <span className="menu-libelle">{libelleDe(cmd, c)}</span>
+              <span className="menu-libelle">{libelleDe(cmd, c)}
+                {aide && <small id={`aide-${cmd.id}`} className={etat.disponible ? "menu-aide" : "menu-aide raison"}>{aide}</small>}</span>
               {r && <kbd>{afficher(r)}</kbd>}
             </button>
           </div>

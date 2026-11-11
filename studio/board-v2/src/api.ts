@@ -2,7 +2,8 @@
 // - SourceReelle : l'API authentifiée du Studio (lib/jarvis/studio_api.py), seule source de vérité ;
 // - SourceDemo   : jeu de démonstration EN MÉMOIRE (src/demo/fixture.ts), signalé « DÉMO », jamais persisté,
 //                  jamais présenté comme des missions ou des agents réels.
-import type { Approbation, Asset, DeltaBoard, EspaceBoard, EtatBoard, Evenement, LienBoard, ObjetBoard, ReglagesBoard, StyleLien } from "./types";
+import { calculerRelations, creeraitBoucle, phraseBlocage } from "./relations/effets";
+import type { Approbation, Asset, DeltaBoard, EspaceBoard, EtatBoard, Evenement, LienBoard, ObjetBoard, ReglagesBoard, Relecture, StyleLien } from "./types";
 import { fixtureDemo, inspectionDemo } from "./demo/fixture";
 import type { DemandeMission } from "./components/DialogueMission";
 
@@ -82,6 +83,8 @@ export interface Source {
   lancerMission(demande: DemandeMission, x: number, y: number): Promise<string>;
   contextualiser(objetId: string): Promise<void>;
   deciderProposition(objetId: string, index: number, decision: "lancer" | "ecarter"): Promise<{ carte_id?: string }>;
+  /** « Faire relire » : demande suivie côté serveur (file lisible par le chef). Aucun agent n'est lancé. */
+  relecture(objetId: string, action: "demander" | "annuler" | "rendre", options?: { verdict?: "pret" | "corrections"; avis?: string }): Promise<Relecture>;
 }
 
 export interface Inspection {
@@ -178,6 +181,9 @@ export class SourceReelle implements Source {
   async contextualiser(objetId: string) {
     await poster(`/api/v2/objets/${objetId}/contextualiser`, {});
   }
+  relecture(objetId: string, action: "demander" | "annuler" | "rendre", options: { verdict?: "pret" | "corrections"; avis?: string } = {}) {
+    return poster<Relecture>(`/api/v2/objets/${objetId}/relecture`, { action, ...options });
+  }
   deciderProposition(objetId: string, index: number, decision: "lancer" | "ecarter") {
     return poster<{ carte_id?: string }>(`/api/v2/objets/${objetId}/propositions`, { index, decision });
   }
@@ -202,12 +208,22 @@ export class SourceDemo implements Source {
     this.compteur += 1;
     return `${p}-demo${String(this.compteur).padStart(7, "0")}`;
   }
+  /** Le résumé des relations est calculé ici comme le fait le serveur (relations/effets.ts) : la démo n'a pas de serveur. */
+  private avecRelations(objets: ObjetBoard[]): ObjetBoard[] {
+    const resumes = calculerRelations(this.etat.objets, this.etat.liens);
+    return objets.map((o) => {
+      const { relations: _r, relecture: _l, ...reste } = o;
+      const relations = resumes.get(o.id), relecture = this.relecturesDemo.get(o.id);
+      return { ...reste, ...(relations ? { relations } : {}), ...(relecture ? { relecture } : {}) };
+    });
+  }
+  private relecturesDemo = new Map<string, Relecture>();
   async charger() {
-    return structuredClone(this.etat);
+    return structuredClone({ ...this.etat, objets: this.avecRelations(this.etat.objets) });
   }
   async lire(demande: { objets?: string[]; liens?: string[] }): Promise<DeltaBoard> {
     const ids = new Set(demande.objets ?? []), idsLiens = new Set(demande.liens ?? []);
-    const objets = this.etat.objets.filter((o) => ids.has(o.id));
+    const objets = this.avecRelations(this.etat.objets.filter((o) => ids.has(o.id)));
     const liens = this.etat.liens.filter((l) => idsLiens.has(l.id) || ids.has(l.source_id) || ids.has(l.cible_id));
     return structuredClone({
       espace: this.espace, objets, liens, reglages: this.reglagesDemo,
@@ -266,14 +282,24 @@ export class SourceDemo implements Source {
     this.etat.liens = this.etat.liens.filter((l) => !this.liensSupprimes.has(l.id));
     return {};
   }
+  private refuserBoucle(source: string, cible: string, sauf?: string) {
+    const boucle = creeraitBoucle(this.etat.liens, source, cible, sauf);
+    if (!boucle) return;
+    const nom = (id: string) => `« ${(this.etat.objets.find((o) => o.id === id)?.meta.titre ?? id)} »`;
+    throw new ErreurApi(`dépendance refusée : elle fermerait une boucle (${boucle.map(nom).join(" → ")})`, 409);
+  }
   async lier(source: string, cible: string, libelle: string, style: StyleLien) {
+    if (style === "depend") this.refuserBoucle(source, cible);
     const id = this.id("BL");
-    this.etat.liens.push({ id, source_id: source, cible_id: cible, libelle, style });
+    this.etat.liens.push({ id, source_id: source, cible_id: cible, libelle, style, version: 1 });
     return id;
   }
   async modifierLien(id: string, champs: { libelle?: string; style?: StyleLien; supprime?: boolean }) {
     const l = this.etat.liens.find((x) => x.id === id) ?? this.liensSupprimes.get(id);
     if (!l) return {};
+    if ((champs.style ?? l.style) === "depend" && champs.supprime !== true && (l.style !== "depend" || this.liensSupprimes.has(id))) {
+      this.refuserBoucle(l.source_id, l.cible_id, id);
+    }
     if (champs.libelle !== undefined) l.libelle = champs.libelle;
     if (champs.style !== undefined) l.style = champs.style;
     if (champs.supprime === true) {
@@ -315,7 +341,26 @@ export class SourceDemo implements Source {
     l.push({ id: this.id("CM"), auteur: "vous (démo)", texte, cree: Date.now() / 1000 });
     this.commentairesDemo.set(objetId, l);
   }
+  async relecture(objetId: string, action: "demander" | "annuler" | "rendre", options: { verdict?: "pret" | "corrections"; avis?: string } = {}) {
+    const maintenant = Date.now() / 1000;
+    const ouverte = this.relecturesDemo.get(objetId);
+    if (action === "demander") {
+      if (ouverte?.statut === "demandee") return ouverte;
+      const r: Relecture = { id: this.id("RL"), objet_id: objetId, espace: this.espace, statut: "demandee", demande_par: "vous (démo)", note: "",
+        verdict: "", avis: "", rendu_par: "", cree: maintenant, maj: maintenant };
+      this.relecturesDemo.set(objetId, r);
+      return r;
+    }
+    if (ouverte?.statut !== "demandee") throw new ErreurApi("aucune demande de relecture ouverte", 404);
+    const r: Relecture = { ...ouverte, statut: action === "annuler" ? "annulee" : "rendue", verdict: action === "rendre" ? options.verdict ?? "pret" : "",
+      avis: options.avis ?? "", rendu_par: "vous (démo)", maj: maintenant };
+    this.relecturesDemo.set(objetId, r);
+    return r;
+  }
   async contextualiser(objetId: string) {
+    // même refus que le serveur : une carte bloquée par une dépendance ne se lance pas
+    const blocage = phraseBlocage(calculerRelations(this.etat.objets, this.etat.liens).get(objetId));
+    if (blocage) throw new ErreurApi(`carte ${blocage.charAt(0).toLowerCase()}${blocage.slice(1)} : termine d'abord ce dont elle dépend`, 409);
     // démo : aucun modèle n'est appelé ; la carte le dit
     const o = this.etat.objets.find((x) => x.id === objetId);
     if (o) o.meta = { ...o.meta, jarvis_resume: "Mode démo : aucune IA n'a lu cet élément.", propositions: [] };

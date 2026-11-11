@@ -1,9 +1,10 @@
 // Ce qu'une carte sait dire d'elle-même À PARTIR DES DONNÉES RÉELLES : son état (bloquée, en attente de toi,
 // périmée) et sa provenance (qui l'a posée, quel modèle a produit le livrable, quand, quelle version, combien de
 // sources). Rien n'est inventé : une information absente des données n'est pas affichée. Fonctions pures, testées.
+import { phraseBlocage } from "../relations/effets";
 import type { ObjetBoard } from "../types";
 
-export type SorteEtat = "bloquee" | "attente" | "perimee";
+export type SorteEtat = "bloquee" | "attente" | "perimee" | "pret";
 export interface EtatCarte {
   sorte: SorteEtat;
   /** libellé court affiché sur la carte */
@@ -30,9 +31,19 @@ export function etatsCarte(o: ObjetBoard): EtatCarte[] {
     const n = o.meta.propositions.filter((p) => p.statut === "proposee").length;
     etats.push({ sorte: "attente", texte: "Attend ta décision", raison: `${n} action${n > 1 ? "s" : ""} proposée${n > 1 ? "s" : ""} par Jarvis, sans réponse` });
   }
-  if (o.meta.relecture && Number.isFinite(o.meta.relecture.demandee)) {
-    etats.push({ sorte: "attente", texte: "Relecture demandée", raison: "Tu as demandé une relecture de ce livrable ; aucun agent n'est lancé par cette demande" });
+  // relecture : la demande suivie par le serveur (file lisible par le chef) et son dernier verdict
+  const rl = o.relecture;
+  if (rl?.statut === "demandee") {
+    etats.push({ sorte: "attente", texte: "Relecture demandée", raison: `Demande ${rl.id}, dans la file du chef (jarvis board relectures). Aucun agent n'est lancé par cette demande.` });
+  } else if (rl?.statut === "rendue" && rl.verdict === "corrections") {
+    etats.push({ sorte: "bloquee", texte: "Corrections demandées", raison: `Relecture ${rl.id} : corrections demandées${rl.avis ? ` — ${rl.avis}` : ""}` });
+  } else if (rl?.statut === "rendue" && rl.verdict === "pret") {
+    etats.push({ sorte: "pret", texte: "Relu : prêt", raison: `Relecture ${rl.id} : livrable jugé prêt${rl.avis ? ` — ${rl.avis}` : ""}` });
   }
+
+  // bloquée par une dépendance (« dépend de ») non terminée : le serveur refuse son lancement et retient ses tâches
+  const blocage = phraseBlocage(o.relations);
+  if (blocage) etats.push({ sorte: "bloquee", texte: "Bloquée", raison: `${blocage}. Son lancement est refusé tant que ce n'est pas terminé.` });
 
   // bloquée : une tâche de la mission a échoué ou attend un exécutant, ou le chef a marqué la carte de travail
   const echec = m?.taches.find((t) => ECHECS.has(t.statut));

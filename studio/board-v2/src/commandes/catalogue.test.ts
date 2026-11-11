@@ -18,10 +18,11 @@ interface Double {
   journal: string[];
   selection: string[];
   toasts: string[];
+  historique: { annuler: string | null; refaire: string | null };
 }
 
 function double(objets: ObjetBoard[], liens: LienBoard[] = []): Double {
-  const d: Double = { objets, liens, journal: [], selection: [], toasts: [], b: null as unknown as ServicesBoard };
+  const d: Double = { objets, liens, journal: [], selection: [], toasts: [], historique: { annuler: "Geste", refaire: "Geste" }, b: null as unknown as ServicesBoard };
   const ui = new StoreUi({ theme: "nuit", minicarte: true, grille: false, guides: true, couleur: "indigo", epaisseur: 6 });
   let n = 0;
   d.b = {
@@ -51,6 +52,9 @@ function double(objets: ObjetBoard[], liens: LienBoard[] = []): Double {
     commenter: async (id, texte) => { d.journal.push(`commenter:${id}:${texte}`); },
     grouper: (libelle, f) => { d.journal.push(`groupe:${libelle}`); return f(); },
     annuler: async () => { d.journal.push("annuler"); }, retablir: async () => { d.journal.push("retablir"); },
+    historique: () => d.historique,
+    relire: async (id, action, options) => { d.journal.push(`relire:${id}:${action}${options?.verdict ? `:${options.verdict}` : ""}`); return null; },
+    allerA: (id) => { d.journal.push(`allerA:${id}`); },
     copier: (ids) => { d.journal.push(`copier:${ids.join(",")}`); }, coller: async () => { d.journal.push("coller"); }, peutColler: () => true,
     selectionner: (ids) => { d.selection = ids; }, inspecter: (id) => { d.journal.push(`inspecter:${id}`); },
     ajuster: () => { d.journal.push("ajuster"); }, zoomer: (f) => { d.journal.push(`zoomer:${f}`); }, zoomA: (z) => { d.journal.push(`zoomA:${z}`); },
@@ -71,11 +75,148 @@ beforeEach(() => {
   registre = creerRegistreBoard({ journal: new JournalUsage(null), confirmer: () => true });
 });
 
+describe("une commande indisponible dit pourquoi (raison du registre)", () => {
+  const CONTEXTES = (d: Double): [string, ContexteBoard][] => [
+    ["rien de sélectionné", ctx(d)], ["une note", ctx(d, ["A"])], ["deux cartes", ctx(d, ["A", "B"])], ["une mission", ctx(d, ["M"])],
+    ["un trait", ctx(d, ["T"])], ["une relation", ctx(d, [], { lien: d.liens[0] })],
+    ["en présentation", { ...ctx(d, ["A"]), ui: { ...d.b.ui.lire(), presentation: 0 } }],
+  ];
+  const jeu = () => {
+    const d = double([carte("A"), carte("B", { x: 500 }), carte("M", { type: "mission" }), carte("T", { type: "trait" }), carte("C", { type: "cadre" })],
+      [lien("L1", "A", "B")]);
+    d.historique = { annuler: null, refaire: null };
+    d.b.peutColler = () => false;
+    return d;
+  };
+
+  it("toute commande proposée grisée (menu, barre flottante, palette) porte une phrase", () => {
+    const d = jeu();
+    let grisees = 0;
+    for (const [nom, c] of CONTEXTES(d)) {
+      for (const lieu of ["menu", "flottante", "palette"] as const) {
+        for (const { cmd, etat } of registre.proposees(c, lieu)) {
+          if (etat.disponible) continue;
+          grisees += 1;
+          expect(etat.raison, `${cmd.id} (${lieu}, ${nom})`).toMatch(/^[A-ZÀ-Ü].{12,}/);
+        }
+      }
+    }
+    expect(grisees).toBeGreaterThan(100);
+  });
+
+  it("les boutons fixes de l'interface ont toujours une raison quand ils sont grisés", () => {
+    const d = jeu();
+    const boutons = ["edition.annuler", "edition.retablir", "vue.zoomArriere", "vue.zoomAvant", "vue.ajuster", "affichage.grille",
+      "affichage.theme.basculer", "presentation.demarrer", "palette.ouvrir"];
+    for (const id of boutons) {
+      for (const [nom, c] of CONTEXTES(d)) {
+        const e = registre.etat(id, c);
+        if (!e.disponible) expect(e.raison, `${id} (${nom})`).toBeTruthy();
+      }
+    }
+    const sansCadre = double([carte("A")]);
+    expect(registre.etat("presentation.demarrer", ctx(sansCadre)).raison).toMatch(/Aucun cadre sur ce Board/);
+    expect(registre.etat("edition.annuler", ctx(d)).raison).toMatch(/^Rien à annuler/);
+    expect(registre.etat("edition.retablir", ctx(d)).raison).toMatch(/^Rien à rétablir/);
+  });
+
+  it("la raison dépend du contexte : sélection, verrou, presse-papiers, présentation", () => {
+    const d = jeu();
+    const raison = (id: string, c: ContexteBoard) => registre.etat(id, c).raison;
+    expect(raison("disposition.aligner.gauche", ctx(d, ["A"]))).toBe("Sélectionne au moins deux objets à aligner");
+    expect(raison("disposition.repartir.horizontal", ctx(d, ["A", "B"]))).toBe("Sélectionne au moins trois objets à répartir");
+    d.objets = d.objets.map((o) => (o.id === "B" ? { ...o, verrouille: 1 } : o));
+    expect(raison("disposition.aligner.gauche", ctx(d, ["A", "B"]))).toMatch(/Trop d'objets verrouillés pour aligner/);
+    expect(raison("edition.coller", ctx(d))).toMatch(/Presse-papiers du Board vide/);
+    expect(raison("edition.dupliquer", ctx(d, ["M"]))).toMatch(/travail réel : elle ne se duplique pas/);
+    expect(raison("carte.relier", ctx(d, ["T"]))).toMatch(/ne se relie pas/);
+    expect(raison("edition.supprimer", ctx(d))).toBe("Sélectionne d'abord un objet du Board");
+    const presentation = { ...ctx(d, ["A"]), ui: { ...d.b.ui.lire(), presentation: 0 } };
+    expect(raison("edition.supprimer", presentation)).toMatch(/pendant la présentation/);
+    expect(raison("outil.crayon", presentation)).toMatch(/pendant la présentation/);
+    // hors sujet (aucune raison à donner) : la commande reste simplement absente des menus
+    expect(registre.etat("edition.deselectionner", ctx(d))).toEqual({ disponible: false, raison: null, concerne: false });
+  });
+
+  it("menu et barre flottante : grisée seulement si la commande concerne la cible ; palette : dès qu'elle sait dire pourquoi", () => {
+    const d = jeu();
+    const grisees = (c: ContexteBoard, lieu: "menu" | "flottante" | "palette") => registre.proposees(c, lieu).filter((p) => !p.etat.disponible).map((p) => p.cmd.id);
+    expect(grisees(ctx(d, ["A"]), "flottante")).toEqual([]);             // une note : rien de grisé, rien de bruyant
+    expect(grisees(ctx(d, ["A", "B"]), "flottante")).toEqual(["disposition.repartir.horizontal", "disposition.repartir.vertical"]);
+    expect(grisees(ctx(d, ["M"]), "menu")).toEqual(expect.arrayContaining(["edition.couper", "edition.dupliquer", "carte.relecture"]));
+    expect(grisees(ctx(d), "menu")).toEqual(["edition.coller"]);
+    expect(grisees(ctx(d), "palette")).toEqual(expect.arrayContaining(["edition.supprimer", "disposition.aligner.gauche", "carte.analyser", "relation.type.depend"]));
+  });
+
+  it("exécuter une commande indisponible ne fait rien et rend sa raison (raccourci, clic sur un bouton grisé)", async () => {
+    const refus: string[] = [];
+    const r = creerRegistreBoard({ journal: new JournalUsage(null), surRefus: (raison, cmd) => refus.push(`${cmd.id}: ${raison}`) });
+    const d = jeu();
+    expect(await r.executer("edition.annuler", ctx(d), "raccourci")).toBe("indisponible");
+    expect(refus).toEqual(["edition.annuler: Rien à annuler : aucun geste n'a encore été fait sur ce Board"]);
+    expect(d.journal).toEqual([]);
+    expect(r.journal.usage("edition.annuler")).toBeUndefined();
+    // au clavier : Ctrl+Z sans rien à annuler est un refus expliqué ; Échap ou Entrée sans objet restent silencieux
+    expect(r.pourTouche({ key: "z", ctrlKey: true }, ctx(d))).toBeUndefined();
+    expect(r.refusPourTouche({ key: "z", ctrlKey: true }, ctx(d))).toMatchObject({ raison: expect.stringMatching(/^Rien à annuler/) });
+    expect(r.refusPourTouche({ key: "Escape" }, ctx(d))).toBeUndefined();
+    expect(r.refusPourTouche({ key: "Enter" }, ctx(d))).toBeUndefined();
+    expect(r.refusPourTouche({ key: "Delete" }, ctx(d))?.raison).toBe("Sélectionne d'abord un objet du Board");
+    d.historique = { annuler: "Déplacement", refaire: null };
+    expect(r.refusPourTouche({ key: "z", ctrlKey: true }, ctx(d))).toBeUndefined();
+    expect(r.pourTouche({ key: "z", ctrlKey: true }, ctx(d))?.id).toBe("edition.annuler");
+  });
+});
+
+describe("relations à effet : ce que les commandes en disent", () => {
+  const bloquee = { bloquee: true, bloquee_par: [{ id: "M", titre: "Valider le budget", type: "mission" as const, lien_id: "L1", etat: "en cours" }],
+    dependances: [{ id: "M", titre: "Valider le budget", type: "mission" as const, lien_id: "L1", suivi: true, termine: false, etat: "en cours" }],
+    debloque: [], alimentee_par: [], alimente: [], inspiree_par: [] };
+
+  it("« Analyser avec Jarvis » est grisée sur une carte bloquée, avec ce qui la bloque", async () => {
+    const d = double([carte("N", { relations: bloquee }), carte("M", { type: "mission" })], [lien("L1", "N", "M", { style: "depend" })]);
+    const e = registre.proposees(ctx(d, ["N"]), "flottante").find((p) => p.cmd.id === "carte.analyser")!.etat;
+    expect(e).toMatchObject({ disponible: false, concerne: true });
+    expect(e.raison).toBe("Bloquée par « Valider le budget » (en cours) : termine d'abord ce dont elle dépend, ou retire la relation « Dépend de »");
+    expect(await registre.executer("carte.analyser", ctx(d, ["N"]))).toBe("indisponible");
+    expect(d.journal).toEqual([]);
+    expect(etatsCarte(d.b.objet("N")!).map((x) => [x.sorte, x.texte])).toEqual([["bloquee", "Bloquée"]]);
+    expect(etatsCarte(d.b.objet("N")!)[0]!.raison).toContain("« Valider le budget » (en cours)");
+    // débloquée (le serveur ne la dit plus bloquée) : la commande revient
+    d.objets = [carte("N", { relations: { ...bloquee, bloquee: false, bloquee_par: [] } }), carte("M", { type: "mission" })];
+    expect(registre.disponible("carte.analyser", ctx(d, ["N"]))).toBe(true);
+    expect(etatsCarte(d.b.objet("N")!)).toEqual([]);
+  });
+
+  it("choisir un type de relation dit ce que ça change, avec les deux cartes nommées", async () => {
+    const d = double([carte("A", { meta: { titre: "Synthèse" } }), carte("B", { meta: { titre: "Collecte" } })], [lien("L1", "A", "B")]);
+    const c = ctx(d, [], { lien: d.liens[0] });
+    await registre.executer("relation.type.depend", c, "menu");
+    expect(d.journal).toEqual(['lien:L1:{"style":"depend"}']);
+    expect(d.toasts[0]).toBe("Dépend de — « Synthèse » sera bloquée tant que « Collecte » n'est pas terminée : son lancement sera refusé.");
+    await registre.executer("relation.type.alimente", c, "menu");
+    expect(d.toasts[1]).toBe("Alimente — Le livrable (ou le contenu) de « Synthèse » sera joint, comme donnée, au travail de « Collecte ».");
+    await registre.executer("relation.type.defaut", c, "menu");
+    expect(d.toasts[2]).toMatch(/Simple repère/);
+  });
+
+  it("« Dépend de » est grisée si elle fermerait une boucle, avec le trajet", () => {
+    const d = double([carte("A", { meta: { titre: "Alpha" } }), carte("B", { meta: { titre: "Bravo" } }), carte("C", { meta: { titre: "Charlie" } })],
+      [lien("L1", "A", "B", { style: "depend" }), lien("L2", "B", "C", { style: "depend" }), lien("L3", "C", "A", { style: "inspire" })]);
+    const e = registre.etat("relation.type.depend", ctx(d, [], { lien: d.liens[2] }));
+    expect(e.disponible).toBe(false);
+    expect(e.raison).toBe("Fermerait une boucle (« Charlie » → « Alpha » → « Bravo » → « Charlie ») : plus aucune de ces cartes ne pourrait démarrer");
+    expect(registre.etat("relation.type.alimente", ctx(d, [], { lien: d.liens[2] })).disponible).toBe(true);
+    expect(registre.etat("relation.type.depend", ctx(d, [], { lien: d.liens[0] })).disponible).toBe(true);  // déjà une dépendance
+    expect(registre.etat("relation.type.depend", ctx(d)).raison).toMatch(/clic droit sur une flèche/);
+  });
+});
+
 describe("catalogue des commandes du Board", () => {
   it("chaque commande a un identifiant « domaine.action », un libellé français et une catégorie", () => {
     const d = double([carte("A")]);
     const toutes = registre.toutes();
-    expect(toutes.length).toBe(109);
+    expect(toutes.length).toBe(111);  // + les deux verdicts de relecture
     for (const c of toutes) {
       expect(c.id).toMatch(/^[a-z]+(\.[a-zA-Z0-9]+)+$/);
       expect(libelleDe(c, ctx(d, ["A"])).length).toBeGreaterThan(3);
@@ -175,15 +316,30 @@ describe("catalogue des commandes du Board", () => {
     expect(d.toasts[0]).toMatch(/Rien n'est confié à un agent/);
   });
 
-  it("« faire relire » pose la demande sur la carte et la commente ; relancée, elle la retire", async () => {
-    const d = double([carte("L", { artefacts: [{ id: "a", fournisseur: "claude", factice: 0, revue: "", contenu: "x" }] })]);
+  it("« faire relire » passe par la file du serveur ; demande ouverte : la retirer ou rendre un verdict", async () => {
+    const artefacts = [{ id: "a", fournisseur: "claude", factice: 0, revue: "acceptee", contenu: "x" }];
+    const d = double([carte("L", { artefacts })]);
     await registre.executer("carte.relecture", ctx(d, ["L"]));
-    expect(d.b.objet("L")!.meta.relecture).toMatchObject({ par: "humain" });
-    expect(d.journal).toEqual(["modifier:Demande de relecture", "commenter:L:Relecture demandée."]);
+    expect(d.journal).toEqual(["relire:L:demander"]);  // ni meta bricolée, ni commentaire : une vraie demande
+    expect(registre.etat("carte.relecture.pret", ctx(d, ["L"]))).toMatchObject({ disponible: false, raison: expect.stringContaining("Aucune relecture n'est en attente") });
+    // le serveur a enregistré la demande : la carte la porte, le libellé et les verdicts suivent
+    const demande = { id: "RL-1", objet_id: "L", espace: "accueil", statut: "demandee", demande_par: "studio:humain", note: "", verdict: "", avis: "", rendu_par: "", cree: 1, maj: 1 } as const;
+    d.objets = [carte("L", { artefacts, relecture: { ...demande } })];
     expect(etatsCarte(d.b.objet("L")!).map((e) => e.texte)).toEqual(["Relecture demandée"]);
+    expect(etatsCarte(d.b.objet("L")!)[0]!.raison).toContain("Aucun agent n'est lancé");
     expect(libelleDe(registre.obtenir("carte.relecture")!, ctx(d, ["L"]))).toBe("Retirer la demande de relecture");
+    await registre.executer("carte.relecture.corrections", ctx(d, ["L"]));
     await registre.executer("carte.relecture", ctx(d, ["L"]));
-    expect(d.b.objet("L")!.meta.relecture).toBeUndefined();
+    expect(d.journal.slice(1)).toEqual(["relire:L:rendre:corrections", "relire:L:annuler"]);
+    d.objets = [carte("L", { artefacts, relecture: { ...demande, statut: "rendue", verdict: "corrections", avis: "Prix faux" } })];
+    expect(etatsCarte(d.b.objet("L")!).map((e) => [e.sorte, e.texte])).toEqual([["bloquee", "Corrections demandées"]]);
+    d.objets = [carte("L", { artefacts, relecture: { ...demande, statut: "rendue", verdict: "pret" } })];
+    expect(etatsCarte(d.b.objet("L")!).map((e) => [e.sorte, e.texte])).toEqual([["pret", "Relu : prêt"]]);
+    // une mission sans livrable : la commande est montrée grisée, avec la raison
+    const m = double([carte("M", { type: "mission" }), carte("N")]);
+    expect(registre.proposees(ctx(m, ["M"]), "menu").find((p) => p.cmd.id === "carte.relecture")?.etat)
+      .toEqual({ disponible: false, concerne: true, raison: "Cette mission n'a pas encore rendu de livrable : il n'y a rien à relire" });
+    expect(registre.proposees(ctx(m, ["N"]), "menu").some((p) => p.cmd.id === "carte.relecture")).toBe(false);
   });
 
   it("« trouver des cartes proches » sélectionne par vocabulaire commun, et le dit", async () => {
