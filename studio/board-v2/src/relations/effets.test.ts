@@ -7,7 +7,7 @@ import { FauxServeur, carte, lien } from "../donnees/essais";
 import { StoreBoard } from "../donnees/store";
 import { planifier } from "../donnees/synchro";
 import type { DeltaBoard, Evenement, ObjetBoard } from "../types";
-import { EFFETS, calculerRelations, creeraitBoucle, lignesRelations, lireFleche, phraseBlocage, phraseConcrete } from "./effets";
+import { EFFETS, calculerRelations, creeraitBoucle, etiquetteParlante, libelleUtile, lignesRelations, lireFleche, phraseBlocage, phraseConcrete } from "./effets";
 
 const mission = (id: string, statut: string, extra: Partial<ObjetBoard> = {}) => carte(id, {
   type: "mission", mission_id: `MI-${id}`, meta: { titre: `Mission ${id}` },
@@ -66,11 +66,13 @@ describe("calcul du résumé (mode démo) : mêmes règles que le serveur", () =
   it("les lignes affichées sur la carte viennent toutes du résumé", () => {
     expect(lignesRelations(r.get("B")).map((l) => `${l.verbe} ${l.carte.titre} (${l.precision})`)).toEqual([
       "Bloquée par Mission A (en cours)", "Bloquée par JAR-1 (corrections demandées)"]);
+    // sur la carte : seulement ce qui a un effet en ce moment ; le reste (rien à joindre, dépendance levée) est dit par la flèche
     expect(lignesRelations(r.get("N")).map((l) => [l.sorte, l.verbe, l.carte.id, l.precision])).toEqual([
-      ["alimentee", "Alimentée par", "F", "livrable"], ["alimentee", "Alimentée par", "A", "rien encore"], ["alimentee", "Alimentée par", "S", "sans effet"],
-      ["citee", "Cite", "R", "référence"]]);
+      ["alimentee", "Alimentée par", "F", "livrable"], ["citee", "Cite", "R", "référence"]]);
+    expect(lignesRelations(r.get("N"), true).map((l) => [l.carte.id, l.precision])).toEqual([["F", "livrable"], ["A", "rien encore"], ["S", "sans effet"], ["R", "référence"]]);
     expect(lignesRelations(r.get("A")).map((l) => [l.sorte, l.verbe, l.carte.id])).toEqual([["debloque", "Débloquera", "B"]]);
-    expect(lignesRelations(r.get("F")).map((l) => [l.sorte, l.verbe])).toEqual([["libere", "A débloqué"]]);
+    expect(lignesRelations(r.get("F"))).toEqual([]);
+    expect(lignesRelations(r.get("F"), true).map((l) => [l.sorte, l.verbe])).toEqual([["libere", "A débloqué"]]);
     expect(lignesRelations(undefined)).toEqual([]);
   });
 
@@ -92,6 +94,12 @@ describe("calcul du résumé (mode démo) : mêmes règles que le serveur", () =
     expect(lire("u1")).toMatchObject({ etat: "neutre", libelle: "Utilisé par" });
     // résumé pas encore reçu du serveur : rien n'est affirmé
     expect(lireFleche(liens[0]!, objets[1], objets[0])).toMatchObject({ etat: "neutre", libelle: "Dépend de" });
+    // l'étiquette reste visible seulement quand la flèche fait quelque chose ; le libellé de l'humain n'est pas une redite
+    expect((["bloquante", "debloquee", "jointe", "inerte", "non_suivie", "neutre"] as const).map(etiquetteParlante)).toEqual([true, true, true, false, false, false]);
+    expect(libelleUtile("Alimente", lire("a1"), "Alimente")).toBe("");
+    expect(libelleUtile("livrable", lire("a1"), "Alimente")).toBe("");
+    expect(libelleUtile("chiffres du T3", lire("a1"), "Alimente")).toBe("chiffres du T3");
+    expect(libelleUtile("", lire("d1"), "Dépend de")).toBe("");
   });
 });
 

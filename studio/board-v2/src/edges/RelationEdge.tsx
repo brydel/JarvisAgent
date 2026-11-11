@@ -2,9 +2,10 @@ import { memo, useState } from "react";
 import {
   BaseEdge, EdgeLabelRenderer, Position, getBezierPath, useInternalNode, useReactFlow, type Edge, type EdgeProps, type InternalNode,
 } from "@xyflow/react";
-import { Sparkles, X } from "lucide-react";
+import { ArrowRightToLine, CircleCheck, CircleDashed, Lock, Sparkles, X } from "lucide-react";
 import { contourDe } from "../outils/fleche";
 import { pointSurContour } from "../outils/geometrie";
+import { etiquetteParlante, libelleUtile, type EtatFleche, type LectureFleche } from "../relations/effets";
 import type { CoteLien, DonneesNoeud, StyleLien } from "../types";
 
 export interface DonneesLien extends Record<string, unknown> {
@@ -15,10 +16,12 @@ export interface DonneesLien extends Record<string, unknown> {
   /** hors du cadre mis en avant (concentration, présentation) : trait atténué, étiquette masquée */
   estompe?: boolean;
   cotes?: { s: CoteLien; sf: number; t: CoteLien; tf: number; c?: number; lt?: number };
+  /** ce que la relation fait en ce moment, lu dans le résumé calculé par le serveur (relations/effets.ts) */
+  lecture?: LectureFleche;
 }
 
-/** Un rendu distinct par type de relation : couleur ET tracé (le type se lit aussi sans la couleur). Le type n'a
- *  aujourd'hui aucun effet métier (blocage, relais de livrable) : il qualifie le lien, rien de plus. */
+/** Un rendu distinct par type de relation : couleur ET tracé (le type se lit aussi sans la couleur). L'EFFET du
+ *  moment (bloquante, débloquée, jointe, sans effet) modifie ce rendu : voir RENDU_ETAT. */
 export const RENDU_RELATION: Record<StyleLien, { couleur: string; tirets?: string; epaisseur: number; nom: string }> = {
   defaut: { couleur: "var(--edge-default)", epaisseur: 2.6, nom: "Relation" },
   inspire: { couleur: "var(--edge-inspire)", tirets: "2 7", epaisseur: 3, nom: "Inspire" },
@@ -26,6 +29,22 @@ export const RENDU_RELATION: Record<StyleLien, { couleur: string; tirets?: strin
   utilise: { couleur: "var(--edge-utilise)", tirets: "7 7", epaisseur: 2.6, nom: "Utilisé par" },
   depend: { couleur: "var(--edge-depend)", tirets: "14 5 3 5", epaisseur: 2.8, nom: "Dépend de" },
 };
+
+/** L'effet du moment se voit sur le trait : une dépendance BLOQUANTE est rouge, pleine et épaisse, avec un cadenas ;
+ *  débloquée, elle redevient fine et verte ; une relation qui ne joint rien (ou ne bloque rien) est atténuée. */
+export const RENDU_ETAT: Record<EtatFleche, { couleur?: string; tirets?: string | null; epaisseur?: number; opacite?: number; icone?: typeof Lock }> = {
+  bloquante: { couleur: "var(--edge-bloquante)", tirets: null, epaisseur: 4.2, icone: Lock },
+  debloquee: { couleur: "var(--edge-debloquee)", tirets: "3 6", epaisseur: 2.4, icone: CircleCheck },
+  non_suivie: { opacite: 0.55, icone: CircleDashed },
+  jointe: { icone: ArrowRightToLine },
+  inerte: { opacite: 0.55, icone: CircleDashed },
+  neutre: {},
+};
+
+/** Couleur du trait (et de sa pointe) pour ce type dans cet état. */
+export function couleurRelation(style: StyleLien, etat: EtatFleche = "neutre"): string {
+  return RENDU_ETAT[etat].couleur ?? (RENDU_RELATION[style] ?? RENDU_RELATION.defaut).couleur;
+}
 
 const POS: Record<CoteLien, Position> = { top: Position.Top, right: Position.Right, bottom: Position.Bottom, left: Position.Left };
 
@@ -84,15 +103,26 @@ export const RelationEdge = memo(function RelationEdge({ id, source, target, dat
   const [chemin, cx, cy] = getBezierPath({ sourceX: a.x, sourceY: a.y, sourcePosition: a.cote, targetX: b.x, targetY: b.y, targetPosition: b.cote, curvature: c?.c ?? 0.35 });
   const [lx, ly] = pointSur(chemin, c?.lt, cx, cy);
   const rendu = RENDU_RELATION[data.style] ?? RENDU_RELATION.defaut;
-  const couleur = rendu.couleur;
+  const lecture = data.lecture;
+  const etat = lecture?.etat ?? "neutre";
+  const effet = RENDU_ETAT[etat];
+  const couleur = couleurRelation(data.style, etat);
+  const tirets = effet.tirets === null ? undefined : effet.tirets ?? rendu.tirets;
+  const Etat = effet.icone;
+  // une relation à effet garde son étiquette visible : c'est elle qui dit ce que la flèche fait (« bloque », « débloquée »…)
+  const parlante = etiquetteParlante(etat);
+  // le libellé de l'humain n'est répété que s'il dit autre chose que l'effet
+  const libelle = parlante && lecture ? libelleUtile(data.libelle, lecture, rendu.nom) : data.libelle;
+  const aide = [lecture?.detail, data.auteur === "jarvis" ? "Relation tracée par Jarvis. Faux ? Sélectionne-la et retire-la." : ""].filter(Boolean).join(" ");
   return (
     <>
-      <BaseEdge id={id} path={chemin} markerEnd={markerEnd} interactionWidth={18}
-        style={{ stroke: couleur, strokeWidth: rendu.epaisseur + (selected ? 0.9 : 0), strokeDasharray: rendu.tirets, strokeLinecap: rendu.tirets ? "round" : undefined, color: couleur }} />
-      {!data.estompe && (data.libelle || edition || selected) && (
+      <BaseEdge id={id} path={chemin} markerEnd={markerEnd} interactionWidth={18} className={`relation etat-${etat}`}
+        style={{ stroke: couleur, strokeWidth: (effet.epaisseur ?? rendu.epaisseur) + (selected ? 0.9 : 0), strokeDasharray: tirets, strokeLinecap: tirets ? "round" : undefined,
+          color: couleur, opacity: effet.opacite }} />
+      {!data.estompe && (data.libelle || edition || selected || parlante) && (
         <EdgeLabelRenderer>
-          <div className={`etiquette-lien nodrag nopan${data.auteur === "jarvis" ? " par-jarvis" : ""}`}
-            title={data.auteur === "jarvis" ? "Relation tracée par Jarvis. Faux ? Sélectionne-la et retire-la." : undefined}
+          <div key={etat} className={`etiquette-lien nodrag nopan etat-${etat}${data.auteur === "jarvis" ? " par-jarvis" : ""}`}
+            title={aide || undefined} data-etat={etat} role="note" aria-label={lecture ? `${lecture.libelle} — ${lecture.detail}` : undefined}
             style={{ transform: `translate(-50%, -50%) translate(${lx}px, ${ly}px)`, color: couleur, borderColor: couleur }}
             onDoubleClick={() => {
               setValeur(data.libelle);
@@ -110,8 +140,12 @@ export const RelationEdge = memo(function RelationEdge({ id, source, target, dat
                   if (e.key === "Escape") setEdition(false);
                 }} />
             ) : <>
+              {Etat && <Etat size={12} aria-hidden />}
               {data.auteur === "jarvis" && <Sparkles size={11} aria-label="Tracé par Jarvis" />}
-              {data.libelle || <span style={{ opacity: 0.7 }}>{data.style === "defaut" ? "Nommer…" : rendu.nom}</span>}
+              {/* le libellé de l'humain d'abord ; l'effet du moment est toujours dit (jamais remplacé par lui) */}
+              {libelle && <span>{libelle}</span>}
+              {parlante ? <span className="effet-lien">{libelle ? `· ${lecture!.libelle}` : lecture!.libelle}</span>
+                : !libelle && <span style={{ opacity: 0.7 }}>{data.style === "defaut" ? "Nommer…" : lecture && etat !== "neutre" ? lecture.libelle : rendu.nom}</span>}
             </>}
             {selected && !edition && (
               <button type="button" className="retirer-lien" aria-label="Retirer cette relation"

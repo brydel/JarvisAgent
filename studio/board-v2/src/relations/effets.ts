@@ -103,16 +103,34 @@ export interface LigneRelation {
 
 const SORTES_MATIERE: Record<string, string> = { livrable: "livrable", contenu: "contenu", reference: "citations", en_attente: "rien encore", aucun: "sans effet" };
 
-/** Les lignes qu'une carte affiche : bloquée par X, alimentée par Y, citée Z, débloque W. Rien d'inventé : chaque
- *  ligne vient d'une entrée du résumé du serveur. */
-export function lignesRelations(r: RelationsCarte | undefined): LigneRelation[] {
+/** Les lignes qu'une carte affiche : bloquée par X, alimentée par Y, cite Z, débloquera W. Rien d'inventé : chaque
+ *  ligne vient d'une entrée du résumé du serveur. Seulement ce qui a un effet EN CE MOMENT : une relation qui ne
+ *  joint rien (pas encore de livrable, source sans matière) ou une dépendance déjà levée ne prend pas de place sur
+ *  la carte — sa flèche le dit (étiquette « débloquée », info-bulle). `tout` les ajoute (panneau, tests). */
+export function lignesRelations(r: RelationsCarte | undefined, tout = false): LigneRelation[] {
   if (!r) return [];
   const lignes: LigneRelation[] = [];
   for (const b of r.bloquee_par) lignes.push({ sorte: "bloquee", verbe: "Bloquée par", carte: b, precision: b.etat });
-  for (const a of r.alimentee_par) lignes.push({ sorte: "alimentee", verbe: "Alimentée par", carte: a, precision: SORTES_MATIERE[a.sorte] ?? "" });
+  for (const a of r.alimentee_par) {
+    if (tout || a.sorte === "livrable" || a.sorte === "contenu" || a.sorte === "reference") lignes.push({ sorte: "alimentee", verbe: "Alimentée par", carte: a, precision: SORTES_MATIERE[a.sorte] ?? "" });
+  }
   for (const i of r.inspiree_par) if (i.effet) lignes.push({ sorte: "citee", verbe: "Cite", carte: i, precision: "référence" });
-  for (const d of r.debloque) lignes.push({ sorte: d.attend ? "debloque" : "libere", verbe: d.attend ? "Débloquera" : "A débloqué", carte: d, precision: "" });
+  for (const d of r.debloque) {
+    if (d.attend) lignes.push({ sorte: "debloque", verbe: "Débloquera", carte: d, precision: "" });
+    else if (tout) lignes.push({ sorte: "libere", verbe: "A débloqué", carte: d, precision: "" });
+  }
   return lignes;
+}
+
+/** Une flèche garde son étiquette visible quand elle FAIT quelque chose en ce moment (bloque, a débloqué, joint). */
+export function etiquetteParlante(etat: EtatFleche): boolean {
+  return etat === "bloquante" || etat === "debloquee" || etat === "jointe";
+}
+
+/** Libellé écrit par l'humain, s'il ajoute quelque chose à ce que l'effet dit déjà (« Alimente » + « alimente · contenu » = redite). */
+export function libelleUtile(libelle: string, lecture: LectureFleche, nomDuType: string): string {
+  const l = libelle.trim().toLowerCase();
+  return !l || l === nomDuType.toLowerCase() || lecture.libelle.toLowerCase().startsWith(l) || lecture.libelle.toLowerCase().includes(`· ${l}`) ? "" : libelle.trim();
 }
 
 /** Phrase « bloquée par « A » (en cours), « B » (en échec) » pour une info-bulle ou la raison d'une commande. */

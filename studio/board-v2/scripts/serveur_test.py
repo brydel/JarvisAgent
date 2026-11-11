@@ -1,7 +1,8 @@
 """Serveur Studio ISOLÉ pour Playwright : état et configuration temporaires, port 7720, exécutant factice.
 
 Le jeton de session est écrit dans <état>/jeton-test (lu par les tests). Rien ne touche ton installation.
-Variables : JARVIS_TEST_PORT (7720), JARVIS_TEST_EXECUTANT=1 pour faire tourner un exécutant factice (missions).
+Variables : JARVIS_TEST_PORT (7720), JARVIS_TEST_EXECUTANT=1 pour faire tourner un exécutant factice (missions),
+JARVIS_TEST_PAUSE_FICHIER : tant que ce fichier existe, l'exécutant factice ne prend aucune tâche.
 JARVIS_TEST_RUNTIME=1 remplace seulement le fournisseur de modèle par un scénario explicitement factice.
 """
 import os
@@ -67,9 +68,16 @@ Path(os.environ.get("JARVIS_TEST_JETON_FICHIER", "/tmp/jarvis-board-v2-jeton")).
 if os.environ.get("JARVIS_TEST_EXECUTANT") == "1":
     rid, secret = missions.enroler_executant(org, "executant-test", capacites=["analyse"], fournisseurs=["factice"])
 
+    # Un test peut suspendre l'exécutant (fichier présent = aucune tâche prise) pour observer un état intermédiaire :
+    # une dépendance « en cours », puis terminée dès que le fichier est retiré.
+    pause = Path(os.environ.get("JARVIS_TEST_PAUSE_FICHIER") or base / "pause-executant")
+
     def boucle():
         cr = coureur.Coureur(coureur.TransportLocal(rid, secret), {"factice": adaptateurs.Factice()})
         while True:
+            if pause.exists():
+                time.sleep(0.2)
+                continue
             missions.recuperer()
             cr.tour()
             missions.traiter_outbox(limite=10)  # effets durables, dont la publication des prises de parole

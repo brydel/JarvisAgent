@@ -5,8 +5,8 @@ import type { ObjetBoard, Priorite } from "../types";
 import { CONTEXTUALISABLES, TAILLES, useActions } from "./contexte";
 import { Avatar } from "../components/Avatar";
 import { useCommandes } from "../commandes/react";
-import { EtatsCarte, PiedProvenance } from "../cartes/Provenance";
-import { useNiveauDetail } from "../board/detail";
+import { EtatsCarte, PiedProvenance, RelationsCarte } from "../cartes/Provenance";
+import { useNiveauDetail, vientDEtrePose } from "../board/detail";
 
 interface Props {
   objet: ObjetBoard;
@@ -33,6 +33,8 @@ export const CardShell = memo(function CardShell({ objet, selected, classe, chil
   // 0 = carte complète ; 1 = rectangle titré (médias et iframes démontés) ; 2 = simple bloc de couleur.
   const niveau = useNiveauDetail();
   const resume = niveau > 0;
+  // posée à l'instant (par toi, le chef ou un livrable) : elle se dépose, une fois
+  const [neuve] = useState(() => vientDEtrePose(objet.cree));
   // format choisi par le chef ou par toi : couleur d'accent, vignette compacte
   const accent = typeof objet.meta.couleur === "string" && objet.meta.couleur ? ` accent accent-${objet.meta.couleur}` : "";
   if (niveau === 2) {
@@ -74,7 +76,7 @@ export const CardShell = memo(function CardShell({ objet, selected, classe, chil
       <NodeResizer isVisible={selected && !verrou} minWidth={t.min[0]} minHeight={t.min[1]} maxWidth={2400} maxHeight={2400}
         keepAspectRatio={ratio} />
       {COTES.map((p) => <Handle key={p} id={p} type="source" position={p} />)}
-      <article className={`carte ${classe}${accent}${verrou ? " verrouillee" : ""}`} aria-label={objet.meta.titre || objet.type}>
+      <article className={`carte ${classe}${accent}${verrou ? " verrouillee" : ""}${objet.relations?.bloquee ? " bloquee-par-dependance" : ""}${neuve ? " vient-d-etre-pose" : ""}`} aria-label={objet.meta.titre || objet.type}>
         {entete && (
           <div className="entete-flottante">
             {objet.priorite ? <span className={`badge-p ${objet.priorite}`}>{objet.priorite}</span> : <span />}
@@ -90,7 +92,10 @@ export const CardShell = memo(function CardShell({ objet, selected, classe, chil
       </article>
       {/* hors de la carte (jamais rognés, ne couvrent rien) : état réel et provenance */}
       <EtatsCarte objet={objet} />
-      <PiedProvenance objet={objet} sources={sources} />
+      <div className="sous-carte">
+        <RelationsCarte objet={objet} />
+        <PiedProvenance objet={objet} sources={sources} />
+      </div>
     </>
   );
 });
@@ -134,7 +139,7 @@ export function BadgePriorite({ p }: { p: Priorite }) {
 
 /** Menu « … » d'une carte : chaque entrée exécute une commande du registre, sur CETTE carte. */
 export function MenuCarte({ objet }: { objet: ObjetBoard }) {
-  const { executer } = useCommandes();
+  const { executer, registre, contexte } = useCommandes();
   const lancer = (id: string) => executer(id, "menu", { selection: [objet] });
   const [ouvert, setOuvert] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
@@ -170,9 +175,14 @@ export function MenuCarte({ objet }: { objet: ObjetBoard }) {
             ))}
           </div>
           <button role="menuitem" onClick={faire(() => lancer("carte.ouvrir"))}><PanelRight size={16} /> Détails</button>
-          {CONTEXTUALISABLES.has(objet.type) && (
-            <button role="menuitem" onClick={faire(() => lancer("carte.analyser"))}><Sparkles size={16} /> Analyser avec Jarvis</button>
-          )}
+          {CONTEXTUALISABLES.has(objet.type) && (() => {
+            // même source que partout : le registre dit si la commande est possible, et sinon pourquoi
+            const e = registre.etat("carte.analyser", contexte({ selection: [objet] }));
+            return e.disponible
+              ? <button role="menuitem" onClick={faire(() => lancer("carte.analyser"))}><Sparkles size={16} /> Analyser avec Jarvis</button>
+              : <button role="menuitem" aria-disabled="true" className="avec-raison" title={e.raison ?? undefined}><Sparkles size={16} />
+                <span>Analyser avec Jarvis<small>{e.raison}</small></span></button>;
+          })()}
           <button role="menuitem" onClick={faire(() => lancer("edition.dupliquer"))}><Copy size={16} /> Dupliquer</button>
           <button role="menuitem" onClick={faire(() => lancer("edition.devant"))}><ArrowUpToLine size={16} /> Amener devant</button>
           <button role="menuitem" onClick={faire(() => lancer("carte.compacte"))}>

@@ -8,6 +8,8 @@ import { ouvrir } from "./outils";
 const sorties = path.resolve("../../reports/references");
 test.beforeAll(() => fs.mkdirSync(sorties, { recursive: true }));
 test.use({ reducedMotion: "reduce" });
+// le serveur de test n'est pas toujours sur le port par défaut (JARVIS_E2E_PORT) : la page capturée est la sienne
+const PORT = process.env.JARVIS_E2E_PORT || "7721";
 
 test.describe.configure({ mode: "serial" });
 
@@ -28,7 +30,7 @@ test("réel : état vide, capture d'un site, états, recherche citée, fiche, po
   await expect(formulaire.getByRole("alert")).toContainText(/http/);
 
   // capture réelle de la page d'accueil de démonstration servie par CE serveur de test
-  await formulaire.getByLabel("Adresse du site à capturer").fill("http://localhost:7721/v2/?demo=1&vue=accueil");
+  await formulaire.getByLabel("Adresse du site à capturer").fill(`http://localhost:${PORT}/v2/?demo=1&vue=accueil`);
   await formulaire.getByLabel("Collection").fill("e2e");
   await formulaire.getByLabel("Étiquettes, séparées par des virgules").fill("accueil, sombre");
   await formulaire.getByRole("button", { name: "Capturer" }).click();

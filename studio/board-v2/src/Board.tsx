@@ -22,7 +22,7 @@ import { Panneau } from "./components/Panneau";
 import { RuntimeAgents } from "./components/RuntimeAgents";
 import { useBoard } from "./donnees/useBoard";
 import type { DonneesLien } from "./edges/RelationEdge";
-import { brancherTheme, ui, useUi } from "./etat/ui";
+import { ui, useUi } from "./etat/ui";
 import { depuisTexte, depuisTransfert } from "./lib/ingestion";
 import { ContexteActions, type ActionsBoard } from "./nodes/contexte";
 import { indexDe, sousLePoint } from "./outils/espace";
@@ -51,7 +51,6 @@ export function Board({ source, charge }: Props) {
   const zen = useUi((e) => e.zen);
   const presentation = useUi((e) => e.presentation !== null);
   const paletteOuverte = useUi((e) => e.palette);
-  useEffect(() => brancherTheme(), []);
 
   // changer de projet = changer de Board : rechargement complet (flux, sélection et historique propres au Board)
   const changerEspace = useCallback((nom: string) => {

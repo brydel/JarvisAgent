@@ -41,8 +41,10 @@
   --edge-inspire: #B26BF5;
   --edge-alimente: #3FCF9A;
   --edge-utilise: #38BDF8;
-  --edge-default: #5B6CFF;
+  --edge-default: #6474FF;
   --edge-depend: #F0A04B;
+  --edge-bloquante: #F2668E;
+  --edge-debloquee: #43C690;
   --surface-chip: #161B2D;
   --border-chip: #262E48;
   --surface-field: #0E121B;
@@ -205,10 +207,12 @@
   --p3: #0F8A5B;
   --p3-bg: #DDF5EA;
   --edge-inspire: #8B3FD9;
-  --edge-alimente: #0F9D6E;
-  --edge-utilise: #0284C7;
+  --edge-alimente: #0A7A55;
+  --edge-utilise: #0369A1;
   --edge-default: #4453E6;
   --edge-depend: #B45309;
+  --edge-bloquante: #C92A54;
+  --edge-debloquee: #0B7449;
   --surface-chip: #EEF0FD;
   --border-chip: #D2D8F5;
   --surface-field: #FFFFFF;

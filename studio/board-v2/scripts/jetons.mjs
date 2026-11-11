@@ -48,6 +48,20 @@ export function lireCssThemes() {
 export function lireFeuille(nom) {
   return fs.readFileSync(path.join(path.dirname(CHEMIN_CSS), path.basename(nom)), "utf8");
 }
+/** Toutes les feuilles de style écrites à la main du produit (chemins relatifs à src/), sauf themes.css (généré). */
+export function feuillesDuProduit() {
+  const src = path.resolve(ICI, "../src");
+  const trouver = (dossier) => fs.readdirSync(dossier, { withFileTypes: true }).flatMap((e) => (e.isDirectory() ? trouver(path.join(dossier, e.name))
+    : e.name.endsWith(".css") && e.name !== "themes.css" ? [path.relative(src, path.join(dossier, e.name))] : []));
+  return trouver(src).sort().map((chemin) => ({ chemin, css: fs.readFileSync(path.join(src, chemin), "utf8") }));
+}
+/** Sources TypeScript de l'interface (hors tests et jeux de démonstration), pour y chercher des couleurs écrites en dur. */
+export function sourcesInterface() {
+  const src = path.resolve(ICI, "../src");
+  const trouver = (dossier) => fs.readdirSync(dossier, { withFileTypes: true }).flatMap((e) => (e.isDirectory() ? trouver(path.join(dossier, e.name))
+    : /\.tsx$/.test(e.name) ? [path.relative(src, path.join(dossier, e.name))] : []));
+  return trouver(src).sort().map((chemin) => ({ chemin, code: fs.readFileSync(path.join(src, chemin), "utf8") }));
+}
 
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   const css = cssDesThemes(lireJetons().themes);

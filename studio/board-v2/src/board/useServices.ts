@@ -14,7 +14,7 @@ import { ui } from "../etat/ui";
 import { boiteDe } from "../outils/espace";
 import { englobante, type Point } from "../outils/geometrie";
 import type { DonneesNoeud, ObjetBoard, StyleLien } from "../types";
-import { forcerDetail } from "./detail";
+import { MARGE_VUE, forcerDetail } from "./detail";
 import { capturer, nomDeFichier, telechargerBlob } from "./exportPng";
 
 export const MARQUEUR_PRESSE_PAPIERS = "jarvis-board/objets:";
@@ -202,7 +202,7 @@ export function useServices(e: Entrees): ServicesBoard {
         services.selectionner([id]);
         services.montrer(boiteDe(o));
       },
-      ajuster: () => void E().rf.fitView({ duration: duree(220), padding: 0.08 }),
+      ajuster: () => void E().rf.fitView({ duration: duree(220), padding: MARGE_VUE }),
       zoomer: (facteur) => void E().rf.zoomTo(E().rf.getZoom() * facteur, { duration: duree(160) }),
       zoomA: (niveau) => void E().rf.zoomTo(niveau, { duration: duree(160) }),
       cadrer: (zone, marge = 0.1) => void E().rf.fitBounds({ x: zone.x, y: zone.y, width: Math.max(1, zone.largeur), height: Math.max(1, zone.hauteur) }, { padding: marge, duration: duree(280) }),

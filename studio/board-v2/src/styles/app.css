@@ -351,6 +351,10 @@ button { font: inherit; color: inherit; }
   position: absolute; pointer-events: all; padding: 4px 11px; border-radius: 9px; font-size: 15px; font-weight: 500;
   background: var(--surface-status); border: 1.5px solid; white-space: nowrap; cursor: pointer;
 }
+.etiquette-lien { display: inline-flex; align-items: center; gap: 5px; }
+.etiquette-lien .effet-lien { font-weight: 600; display: inline-block; }
+.etiquette-lien.etat-bloquante { border-width: 2px; font-weight: 600; }
+.etiquette-lien.etat-inerte, .etiquette-lien.etat-non_suivie { border-style: dashed; color: var(--text-secondary) !important; border-color: var(--border-strong) !important; }
 .etiquette-lien input { width: 120px; border: 0; background: none; color: inherit; font: inherit; outline: none; }
 .react-flow__edge.selected .react-flow__edge-path { filter: drop-shadow(0 0 4px currentColor); }
 

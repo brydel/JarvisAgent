@@ -16,7 +16,8 @@ import { MenuContextuel } from "../commandes/MenuContextuel";
 import { BoutonCommande } from "../commandes/react";
 import type { Filtre } from "../components/Coque";
 import type { Instantane } from "../donnees/store";
-import { RelationEdge, type DonneesLien } from "../edges/RelationEdge";
+import { RelationEdge, couleurRelation, type DonneesLien } from "../edges/RelationEdge";
+import { EFFETS, lireFleche } from "../relations/effets";
 import { ui, useUi } from "../etat/ui";
 import { PlanNode, TacheNode } from "../nodes/CartesTravail";
 import { AudioNode, VideoNode } from "../nodes/CartesMedia";
@@ -29,8 +30,8 @@ import { CoucheOutils } from "../outils/CoucheOutils";
 import { EditeurTexte } from "../outils/EditeurTexte";
 import { contenuDuCadre, indexDe } from "../outils/espace";
 import { Guides } from "../outils/Guides";
-import type { DonneesNoeud, ObjetBoard, StyleLien } from "../types";
-import { ContexteDetail, ZOOM_MAX, ZOOM_MIN, useNiveauCalcule } from "./detail";
+import type { DonneesNoeud, ObjetBoard } from "../types";
+import { ContexteDetail, MARGE_VUE, ZONE_LIBRE, ZOOM_MAX, ZOOM_MIN, useNiveauCalcule } from "./detail";
 import { estVisible, versNoeud } from "./noeuds";
 import { useGlisser } from "./useGlisser";
 
@@ -44,9 +45,6 @@ const COULEUR_MINICARTE: Record<string, string> = {
   plan: "var(--accent-plan-strong)", tache: "var(--edge-utilise)", mission: "var(--brand-indigo)", agents: "var(--success)", note: "var(--note-border)",
   image: "var(--cadre-bord)", video: "var(--cadre-bord)", adhesif: "var(--adhesif-jaune)", forme: "var(--teinte-indigo)", cadre: "transparent",
   trait: "var(--teinte-neutre)", fleche: "transparent", texte_libre: "var(--teinte-neutre)",
-};
-const COULEUR_RELATION: Record<StyleLien, string> = {
-  inspire: "var(--edge-inspire)", alimente: "var(--edge-alimente)", utilise: "var(--edge-utilise)", depend: "var(--edge-depend)", defaut: "var(--edge-default)",
 };
 const OUTILS_DIRECTS = new Set(["selection", "main"]);
 /** sous 12 % de zoom, les relations ne sont plus tracées (illisibles, et les blocs n'ont plus de poignée) */
@@ -111,12 +109,21 @@ export function Canevas({ source, etat, b, filtre, priorite, recherche, selectio
   }, [etat, source.demo, sources, nets, filtre, priorite, recherche, aSelectionner]);
 
   const renommer = useCallback((id: string, libelle: string) => void b.modifierLien(id, { libelle }), [b]);
-  const aretes = useMemo<Edge<DonneesLien>[]>(() => (etat?.liens ?? []).map((l) => ({
-    id: l.id, source: l.source_id, target: l.cible_id, type: "relation",
-    data: { libelle: l.libelle, style: l.style, renommer, cotes: l.cotes, auteur: l.auteur, estompe: Boolean(nets && !(nets.has(l.source_id) && nets.has(l.cible_id))) },
-    className: nets && !(nets.has(l.source_id) && nets.has(l.cible_id)) ? "estompe" : undefined,
-    markerEnd: { type: MarkerType.ArrowClosed, color: COULEUR_RELATION[l.style] ?? COULEUR_RELATION.defaut, width: 16, height: 16 },
-  })), [etat?.liens, renommer, nets]);
+  const aretes = useMemo<Edge<DonneesLien>[]>(() => {
+    const parId = new Map((etat?.objets ?? []).map((o) => [o.id, o]));
+    return (etat?.liens ?? []).map((l) => {
+      // ce que la flèche fait en ce moment, lu dans le résumé que le serveur a calculé pour ses deux cartes
+      const lecture = lireFleche(l, parId.get(l.source_id), parId.get(l.cible_id));
+      return {
+        id: l.id, source: l.source_id, target: l.cible_id, type: "relation",
+        data: { libelle: l.libelle, style: l.style, renommer, cotes: l.cotes, auteur: l.auteur, lecture,
+          estompe: Boolean(nets && !(nets.has(l.source_id) && nets.has(l.cible_id))) },
+        className: nets && !(nets.has(l.source_id) && nets.has(l.cible_id)) ? "estompe" : undefined,
+        ariaLabel: `Relation « ${EFFETS[l.style]?.nom ?? l.style} » : ${lecture.detail}`,
+        markerEnd: { type: MarkerType.ArrowClosed, color: couleurRelation(l.style, lecture.etat), width: 16, height: 16 },
+      };
+    });
+  }, [etat?.liens, etat?.objets, renommer, nets]);
 
   /* ---------------------------------------------------------------- sélection, relations ------------------- */
   // mémoïsé (exigé par React Flow) et sans nouvelle valeur si la sélection n'a pas changé : sinon boucle de rendu
@@ -138,14 +145,14 @@ export function Canevas({ source, etat, b, filtre, priorite, recherche, selectio
     const cle = `${c.source}>${c.target}`;
     if (derniereConnexion.current.cle === cle && performance.now() - derniereConnexion.current.t < 800) return;
     derniereConnexion.current = { cle, t: performance.now() };
-    if (await b.lier(c.source, c.target)) b.toast("Relation créée — double-clique l'étiquette pour la nommer, clic droit pour son type");
+    if (await b.lier(c.source, c.target)) b.toast("Relation créée, sans effet pour l'instant — clic droit sur la flèche : « Dépend de » bloque, « Alimente » joint le livrable");
   }, [b]);
 
   const onNodeClick = useCallback((_: unknown, n: Node) => {
     const depuis = ui.lire().liaison;
     if (!depuis || depuis === n.id) return;
     ui.definir({ liaison: null });
-    void b.lier(depuis, n.id).then((id) => id && b.toast("Relation créée — clic droit sur la flèche pour choisir son type"));
+    void b.lier(depuis, n.id).then((id) => id && b.toast("Relation créée, sans effet pour l'instant — clic droit sur la flèche : « Dépend de » bloque, « Alimente » joint le livrable"));
   }, [b]);
 
   const ouvrirMenu = useCallback((e: { clientX: number; clientY: number; preventDefault(): void }, cible?: string, lien?: string) => {
@@ -165,7 +172,9 @@ export function Canevas({ source, etat, b, filtre, priorite, recherche, selectio
   }, [menu, etat, selection]);
 
   /* ---------------------------------------------------------------- rendu ---------------------------------- */
-  const vueInitiale: Viewport = source.demo ? { x: 0, y: 0, zoom: 0.8 } : { x: 40, y: 20, zoom: 0.8 };
+  // la démo ouvre sur une vue fixe (contrat visuel), décalée sous la barre d'outils ; un vrai Board est cadré dans
+  // la zone libre du canevas (fitView + MARGE_VUE) : dans les deux cas aucune carte n'est sous une barre à l'ouverture
+  const vueInitiale: Viewport = source.demo ? { x: 0, y: ZONE_LIBRE.top - 12, zoom: 0.8 } : { x: ZONE_LIBRE.left, y: ZONE_LIBRE.top, zoom: 0.8 };
   const direct = OUTILS_DIRECTS.has(outil);
   const enPresentation = presentation !== null;
   const manipulable = outil === "selection" && !enPresentation;
@@ -213,7 +222,7 @@ export function Canevas({ source, etat, b, filtre, priorite, recherche, selectio
         selectionKeyCode="Shift" panOnScroll={false} zoomOnDoubleClick={false} onlyRenderVisibleElements={noeuds.length > 80}
         nodesDraggable={manipulable} nodesConnectable={manipulable} elementsSelectable={manipulable}
         elevateNodesOnSelect={false} proOptions={{ hideAttribution: false }} fitView={!source.demo && Boolean(etat?.objets.length)}
-        fitViewOptions={{ padding: 0.08, maxZoom: 0.9 }}>
+        fitViewOptions={{ padding: MARGE_VUE, maxZoom: 0.9 }}>
         <Background variant={BackgroundVariant.Dots} gap={20} size={1.6} color="var(--grid-dot)" />
         {minicarte && !enPresentation && (
           <MiniMap pannable zoomable ariaLabel="Mini-carte du Board" nodeBorderRadius={8} maskColor="var(--minimap-mask)"

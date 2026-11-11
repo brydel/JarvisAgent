@@ -48,3 +48,16 @@ export const ContexteDetail = createContext<NiveauDetail>(0);
 export function useNiveauDetail(): NiveauDetail {
   return useContext(ContexteDetail);
 }
+
+/** Zone du canevas laissée libre à l'ouverture et par « Ajuster à la vue » (design/board-v2/tokens.json,
+ *  layout.canvas-safe-area) : la barre d'outils, en haut, et la barre d'ajout, à gauche, flottent au-dessus du
+ *  canevas — aucune carte ne doit se retrouver dessous sans que l'utilisateur l'y ait amenée. */
+export const ZONE_LIBRE = { top: 76, right: 24, bottom: 28, left: 100 } as const;
+/** La même zone, au format de React Flow (`fitView`, `fitBounds`). */
+export const MARGE_VUE = { top: `${ZONE_LIBRE.top}px`, right: `${ZONE_LIBRE.right}px`, bottom: `${ZONE_LIBRE.bottom}px`, left: `${ZONE_LIBRE.left}px` } as const;
+
+/** Vrai pendant les deux secondes qui suivent la création d'un objet : il « se dépose » (animation unique). Lu au
+ *  montage du composant seulement — un objet qui revient à l'écran plus tard (virtualisation) ne rejoue rien. */
+export function vientDEtrePose(cree: number, maintenant = Date.now() / 1000): boolean {
+  return cree > 0 && maintenant - cree >= 0 && maintenant - cree < 2;
+}

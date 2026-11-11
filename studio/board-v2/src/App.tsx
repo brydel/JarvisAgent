@@ -1,6 +1,7 @@
 import { Component, lazy, Suspense, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { MotionConfig } from "motion/react";
 import { SourceDemo, SourceReelle, sessionValide } from "./api";
+import { brancherTheme } from "./etat/ui";
 import { StudioNavigation, useStudioNavigation } from "./product/routing";
 import { ProductStudio } from "./product/ProductStudio";
 import type { Source } from "./api";
@@ -31,6 +32,8 @@ export function App() {
   const [session, setSession] = useState<"attente" | "ok" | "refus">(demo ? "ok" : "attente");
   const verificationSession = useRef<Promise<boolean> | null>(null);
   const source = useMemo(() => demo ? new SourceDemo() : new SourceReelle(espaceDeLUrl(params)), [demo, params]);
+  // un seul thème (nuit, jour, automatique) pour tout le produit, mémorisé sur ce poste
+  useEffect(() => brancherTheme(), []);
   useEffect(() => {
     let active = true;
     if (!demo) {

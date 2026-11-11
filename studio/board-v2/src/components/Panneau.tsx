@@ -41,7 +41,7 @@ export function decrireEvenement(e: Evenement | Inspection["chronologie"][number
 function IconeType({ type }: { type: string }) {
   const I = type === "mission" ? Target : type === "image" ? IconeImage : type === "lien" ? Link2 : type === "audio" ? Music
     : type === "video" ? Video : FileText;
-  return <span className="icone-mission" style={type === "mission" ? undefined : { background: "#1B2133", color: "#9DB0FF" }}><I size={22} /></span>;
+  return <span className="icone-mission" style={type === "mission" ? undefined : { background: "var(--surface-tile)", color: "var(--text-accent-soft)" }}><I size={22} /></span>;
 }
 
 interface Props {

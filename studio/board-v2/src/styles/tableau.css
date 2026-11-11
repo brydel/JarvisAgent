@@ -71,10 +71,34 @@
 .etat-carte.bloquee { color: var(--text-danger); border-color: color-mix(in srgb, var(--danger) 60%, transparent); }
 .etat-carte.attente { color: var(--text-p2); border-color: color-mix(in srgb, var(--p2) 55%, transparent); }
 .etat-carte.perimee { color: var(--text-secondary); border-color: var(--border-strong); border-style: dashed; }
+.etat-carte.pret { color: var(--text-success); border-color: color-mix(in srgb, var(--success) 55%, transparent); }
+/* une carte bloquée par une dépendance porte un liseré : l'état se lit même sans la pastille (zoom, vue d'ensemble) */
+.carte.bloquee-par-dependance { box-shadow: inset 3px 0 0 var(--edge-bloquante), var(--shadow-card); }
+
+/* --- sous la carte : effets de ses relations (toujours visibles), puis provenance (au survol) --------- */
+.sous-carte { position: absolute; left: 4px; top: calc(100% + 8px); z-index: 3; display: grid; gap: 6px; justify-items: start; max-width: calc(100% - 8px); pointer-events: none; }
+.sous-carte > * { pointer-events: auto; }
+.relations-carte { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; justify-items: start; max-width: 100%; }
+.relations-carte li { max-width: 100%; }
+.relations-carte button { display: inline-flex; align-items: center; gap: 6px; max-width: 100%; height: 26px; padding: 0 10px; border-radius: var(--radius-pill); border: 1px solid var(--border-card);
+  background: var(--surface-status); color: var(--text-secondary); font: 500 13px var(--font-sans); cursor: pointer; white-space: nowrap; transition: background var(--dur-hover), border-color var(--dur-hover), color var(--dur-hover); }
+.relations-carte button:hover { background: var(--surface-hover); color: var(--text-primary); border-color: var(--border-strong); }
+.relations-carte button:focus-visible { outline: 2px solid var(--brand-indigo-soft); outline-offset: 1px; }
+.relations-carte .verbe { font-weight: 600; flex: none; }
+.relations-carte .cible { color: var(--text-primary); overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.relations-carte .precision { color: var(--text-secondary); flex: none; }
+.relations-carte .precision::before { content: "· "; }
+.relations-carte svg { flex: none; }
+.relations-carte .bloquee button { border-color: color-mix(in srgb, var(--edge-bloquante) 60%, transparent); }
+.relations-carte .bloquee .verbe, .relations-carte .bloquee svg { color: var(--text-danger); }
+.relations-carte .alimentee .verbe, .relations-carte .alimentee svg, .relations-carte .libere .verbe, .relations-carte .libere svg { color: var(--text-success); }
+.relations-carte .citee .verbe, .relations-carte .citee svg { color: var(--tag-violet-text); }
+.relations-carte .debloque .verbe, .relations-carte .debloque svg { color: var(--text-p2); }
+.relations-carte .plus { color: var(--text-secondary); border-style: dashed; }
 /* la provenance reste discrète : SOUS la carte (elle ne couvre rien), visible au survol, à la sélection, au focus clavier */
 .react-flow__node:hover .provenance, .react-flow__node.selected .provenance, .react-flow__node:focus-visible .provenance { opacity: 1; }
-.provenance { position: absolute; left: 4px; top: calc(100% + 8px); z-index: 3; opacity: 0; transition: opacity var(--dur-hover); display: inline-flex; align-items: center; gap: 8px; height: 22px; padding: 0 8px; border-radius: var(--radius-pill);
-  font-size: 11px; color: var(--text-secondary); background: var(--surface-pill-2); border: 1px solid var(--border-card); max-width: calc(100% - 20px); overflow: hidden; white-space: nowrap; }
+.provenance { opacity: 0; transition: opacity var(--dur-hover); display: inline-flex; align-items: center; gap: 8px; height: 22px; padding: 0 8px; border-radius: var(--radius-pill);
+  font-size: 11px; color: var(--text-secondary); background: var(--surface-pill-2); border: 1px solid var(--border-card); max-width: 100%; overflow: hidden; white-space: nowrap; }
 .provenance span { display: inline-flex; align-items: center; gap: 4px; }
 .provenance .agent { color: var(--text-violet-soft); }
 .provenance .modele { color: var(--text-accent-soft); max-width: 120px; overflow: hidden; text-overflow: ellipsis; }
@@ -84,17 +108,21 @@
   border-radius: 14px; border: 1px solid var(--border-subtle); background: var(--surface-toolbar); box-shadow: var(--shadow-lift); max-width: calc(100% - 208px); }
 .barre-modes .groupe-mode { display: inline-flex; align-items: center; gap: 2px; flex: none; }
 .barre-modes .sep, .barre-flottante .sep { width: 1px; height: 22px; background: var(--border-strong); margin: 0 5px; flex: none; }
-.barre-modes .mode { position: relative; width: 38px; height: 38px; border: 0; border-radius: 10px; background: none; color: var(--text-secondary); cursor: pointer; display: grid; place-items: center; flex: none;
+.barre-modes .mode { position: relative; width: 42px; height: 42px; border: 0; border-radius: 10px; background: none; color: var(--text-secondary); cursor: pointer; display: grid; place-items: center; flex: none;
   transition: background var(--dur-hover), color var(--dur-hover); }
-.barre-modes .mode:hover:not(:disabled) { background: var(--surface-hover); color: var(--text-primary); }
-.barre-modes .mode:disabled { opacity: 0.35; cursor: default; }
-.barre-modes .mode[aria-pressed="true"] { background: var(--brand-indigo); color: var(--on-brand); box-shadow: 0 4px 12px color-mix(in srgb, var(--brand-indigo-strong) 40%, transparent); }
-.barre-modes .mode kbd { position: absolute; right: 3px; bottom: 2px; font: 600 8.5px var(--font-sans); color: currentColor; opacity: 0.55; }
+.barre-modes .mode:hover:not([aria-disabled="true"]) { background: var(--surface-hover); color: var(--text-primary); }
+.barre-modes .mode[aria-pressed="true"] { background: var(--brand-grad-a); color: var(--on-brand); box-shadow: 0 4px 12px color-mix(in srgb, var(--brand-indigo-strong) 40%, transparent); }
+/* la lettre du raccourci : assez grande pour être lue (11 px, graisse 600), dans la couleur du texte secondaire */
+.barre-modes .mode svg { transform: translate(-3px, -3px); }
+.barre-modes .mode kbd { position: absolute; right: 4px; bottom: 3px; font: 600 11px/1 var(--font-sans); letter-spacing: 0; color: var(--text-secondary); }
+.barre-modes .mode:hover kbd { color: var(--text-primary); }
+.barre-modes .mode[aria-pressed="true"] kbd { color: var(--on-brand); }
+.barre-modes .mode:not(:has(kbd)) svg, .barre-modes .palette-bouton svg { transform: none; }
 .barre-modes .palette-bouton { width: auto; padding: 0 9px; display: inline-flex; gap: 3px; align-items: center; font-size: 12px; font-weight: 600; }
 .barre-modes button:focus-visible, .barre-flottante button:focus-visible, .menu-contextuel button:focus-visible, .barre-presentation button:focus-visible, .bandeau-mode button:focus-visible {
   outline: 2px solid var(--brand-indigo-soft); outline-offset: 1px; }
 .style-trace { position: relative; flex: none; }
-.bouton-style { width: 38px; height: 38px; border: 0; border-radius: 10px; background: none; cursor: pointer; display: grid; place-items: center; }
+.bouton-style { width: 42px; height: 42px; border: 0; border-radius: 10px; background: none; cursor: pointer; display: grid; place-items: center; }
 .bouton-style:hover { background: var(--surface-hover); }
 .bouton-style .pastille { pointer-events: none; }
 .popover-style { position: absolute; top: calc(100% + 10px); left: 50%; z-index: 60; transform: translateX(-50%); padding: 12px; border-radius: 12px; border: 1px solid var(--border-strong); background: var(--surface-menu); box-shadow: var(--shadow-lift); display: grid; gap: 12px; }
@@ -147,8 +175,31 @@
 .menu-contextuel button.danger { color: var(--text-danger); }
 .menu-contextuel .menu-icone { width: 16px; display: grid; place-items: center; color: var(--text-secondary); flex: none; }
 .menu-contextuel .menu-libelle { flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* seconde ligne d'une entrée : ce que le type de relation change, ou pourquoi la commande est indisponible */
+.menu-contextuel button.avec-aide { height: auto; min-height: 32px; padding-top: 6px; padding-bottom: 6px; align-items: flex-start; max-width: 380px; }
+.menu-contextuel button.avec-aide .menu-libelle { white-space: normal; text-align: left; }
+.menu-contextuel button.avec-aide .menu-icone { margin-top: 2px; }
+.menu-aide { display: block; margin-top: 2px; font-size: 12px; line-height: 1.35; color: var(--text-secondary); font-weight: 400; }
+.menu-aide.raison { color: var(--text-p2); }
+
+/* --- commande indisponible : grisée, toujours focalisable, et sa raison est écrite ou en info-bulle -------- */
+button[aria-disabled="true"] { cursor: not-allowed; }
+.barre-modes .mode[aria-disabled="true"], .barre-flottante button[aria-disabled="true"], .bouton-carre[aria-disabled="true"], .zoom button[aria-disabled="true"],
+.barre-presentation button[aria-disabled="true"] { opacity: 0.45; }
+.barre-flottante button[aria-disabled="true"]:hover { background: none; color: inherit; }
+.menu-contextuel button[aria-disabled="true"] > .menu-icone, .menu-contextuel button[aria-disabled="true"] > kbd { opacity: 0.5; }
+.menu-contextuel button[aria-disabled="true"] { color: var(--text-secondary); }
+.menu-contextuel button[aria-disabled="true"]:hover { background: none; }
+.menu-deroulant > button.avec-raison { height: auto; padding: 7px 10px; align-items: flex-start; color: var(--text-secondary); max-width: 300px; }
+.menu-deroulant > button.avec-raison:hover { background: none; }
+.menu-deroulant > button.avec-raison svg { opacity: 0.5; flex: none; margin-top: 1px; }
+.menu-deroulant > button.avec-raison small { display: block; margin-top: 2px; font-size: 12px; line-height: 1.35; color: var(--text-p2); white-space: normal; }
+.palette-ligne.indisponible { height: auto; min-height: 38px; padding-top: 7px; padding-bottom: 7px; align-items: flex-start; cursor: not-allowed; color: var(--text-secondary); }
+.palette-ligne.indisponible .palette-icone { opacity: 0.5; }
+.palette-ligne.indisponible .palette-libelle { white-space: normal; }
+.palette-raison { display: block; margin-top: 2px; font-size: 12px; line-height: 1.35; color: var(--text-p2); }
 .menu-separateur { height: 1px; margin: 5px 6px; background: var(--border-subtle); }
-kbd { font: 500 11px var(--font-sans); color: var(--text-muted); }
+kbd { font: 500 12px var(--font-sans); color: var(--text-secondary); }
 .menu-contextuel kbd, .palette kbd { padding: 2px 6px; border-radius: 5px; border: 1px solid var(--border-card); background: var(--surface-inset); white-space: nowrap; flex: none; }
 
 /* --- palette de commandes ----------------------------------------------------------------------------- */
@@ -172,16 +223,6 @@ kbd { font: 500 11px var(--font-sans); color: var(--text-muted); }
 .palette-pied { display: flex; align-items: center; gap: 18px; height: 38px; padding: 0 16px; border-top: 1px solid var(--border-subtle); font-size: 11.5px; color: var(--text-muted); }
 .palette-pied kbd { margin-right: 4px; }
 .palette-compte { margin-left: auto; }
-
-/* --- thème jour : la barre supérieure du produit (product.css, sombre par construction) suit les jetons ------ */
-:root[data-theme="jour"] .app .product-nav.topbar { --p-ink: var(--text-primary); --p-muted: var(--text-secondary); background: var(--bg-bar); border-bottom-color: var(--border-subtle); }
-:root[data-theme="jour"] .app .product-nav .nav button { color: var(--text-secondary); }
-:root[data-theme="jour"] .app .product-nav .nav button:hover { color: var(--text-primary); background: var(--surface-hover); }
-:root[data-theme="jour"] .app .product-nav .nav button[aria-current="page"] { background: var(--surface-chip); color: var(--text-primary); border-color: var(--border-chip); }
-:root[data-theme="jour"] .app .product-nav .recherche { background: var(--surface-field); border-color: var(--border-card); }
-:root[data-theme="jour"] .app .product-nav .p-mode { color: var(--text-secondary); border-color: var(--border-strong); }
-:root[data-theme="jour"] .app .product-nav .p-mode.is-demo { color: var(--p2); border-color: color-mix(in srgb, var(--p2) 45%, transparent); }
-:root[data-theme="jour"] .app .product-nav .p-button.p-quiet { color: var(--text-secondary); border-color: var(--border-card); }
 
 /* --- modes d'affichage : zen, concentration, présentation --------------------------------------------- */
 .app.zen, .app.presentation { grid-template-rows: minmax(0, 1fr); }
@@ -213,7 +254,31 @@ kbd { font: 500 11px var(--font-sans); color: var(--text-muted); }
   .popover-style { position: fixed; top: auto; left: 16px; transform: none; margin-top: 30px; }
   .bandeau-mode { top: 60px; }
 }
+/* --- mouvement : bref, utile, sur transform et opacity seulement ; jamais perpétuel ------------------- */
+/* un outil choisi « s'enfonce » ; un objet qu'on vient de poser se dépose ; un état qui change se signale une fois */
+.barre-modes .mode { transition: background var(--dur-hover), color var(--dur-hover), transform var(--dur-lift) var(--ease-standard); }
+.barre-modes .mode:active:not([aria-disabled="true"]) { transform: scale(0.92); }
+.barre-modes .mode[aria-pressed="true"] { animation: outil-choisi var(--dur-appear) var(--ease-standard); }
+@keyframes outil-choisi { from { transform: scale(0.86); } to { transform: none; } }
+.selection.barre-flottante { animation: flottante-entree var(--dur-appear) var(--ease-standard); }
+@keyframes flottante-entree { from { opacity: 0; transform: translateX(-50%) translateY(6px); } to { opacity: 1; transform: translateX(-50%); } }
+.menu-contextuel { animation: menu-entree var(--dur-hover) var(--ease-standard); transform-origin: top left; }
+@keyframes menu-entree { from { opacity: 0; transform: scale(0.97); } to { opacity: 1; transform: none; } }
+.vient-d-etre-pose { animation: pose var(--dur-panel) var(--ease-standard); }
+@keyframes pose { from { opacity: 0; transform: scale(0.94) translateY(6px); } to { opacity: 1; transform: none; } }
+.etat-carte, .relations-carte li { animation: etat-entree var(--dur-panel) var(--ease-standard); }
+@keyframes etat-entree { from { opacity: 0; transform: translateY(4px) scale(0.96); } to { opacity: 1; transform: none; } }
+/* la flèche change d'effet (bloque → débloquée) : son étiquette se signale une fois, puis ne bouge plus */
+.etiquette-lien.etat-debloquee .effet-lien, .etiquette-lien.etat-bloquante .effet-lien, .etiquette-lien.etat-jointe .effet-lien { animation: effet-change 420ms var(--ease-standard); }
+@keyframes effet-change { 0% { opacity: 0; } 55% { opacity: 1; transform: scale(1.08); } 100% { transform: none; } }
+.react-flow__edge .relation { transition: stroke var(--dur-panel), stroke-width var(--dur-panel), opacity var(--dur-panel); }
+.toast { animation: toast-entree var(--dur-panel) var(--ease-standard); }
+@keyframes toast-entree { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+
 @media (prefers-reduced-motion: reduce) {
+  .barre-modes .mode, .barre-modes .mode[aria-pressed="true"], .menu-contextuel, .vient-d-etre-pose, .etat-carte, .relations-carte li, .etiquette-lien .effet-lien, .toast { animation: none; transition: none; }
+  .barre-modes .mode:active { transform: none; }
+  .react-flow__edge .relation { transition: none; }
   .selection.barre-flottante, .palette { animation: none; }
   .react-flow__node.estompe { transition: none; }
 }

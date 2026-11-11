@@ -5,6 +5,9 @@ import { defineConfig } from "@playwright/test";
 const PORT = process.env.JARVIS_E2E_PORT || "7721";
 const JETON = process.env.JARVIS_E2E_JETON || "/tmp/jarvis-e2e-jeton";
 process.env.JARVIS_E2E_JETON = JETON;
+// présent = l'exécutant factice du serveur de test ne prend aucune tâche (tests/e2e/intelligence.spec.ts)
+const PAUSE = `${JETON}.pause-executant`;
+process.env.JARVIS_E2E_PAUSE = PAUSE;
 export default defineConfig({
   testDir: "tests/e2e",
   outputDir: "../../reports/board-v2/playwright-sorties",
@@ -30,6 +33,6 @@ export default defineConfig({
     url: `http://localhost:${PORT}/v2/`,
     reuseExistingServer: false,
     timeout: 30_000,
-    env: { JARVIS_TEST_PORT: PORT, JARVIS_TEST_EXECUTANT: "1", JARVIS_TEST_RUNTIME: "1", JARVIS_TEST_JETON_FICHIER: JETON },
+    env: { JARVIS_TEST_PORT: PORT, JARVIS_TEST_EXECUTANT: "1", JARVIS_TEST_RUNTIME: "1", JARVIS_TEST_JETON_FICHIER: JETON, JARVIS_TEST_PAUSE_FICHIER: PAUSE },
   },
 });

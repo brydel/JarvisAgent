@@ -23,7 +23,7 @@ export function teinte(role: string, id: string): number {
 }
 
 export type StatutAgent = "actif" | "attente" | "termine" | "echec";
-const ANNEAU: Record<StatutAgent, string> = { actif: "#5B6CFF", attente: "#E2B93B", termine: "#3FB984", echec: "#E5486F" };
+const ANNEAU: Record<StatutAgent, string> = { actif: "var(--brand-indigo)", attente: "var(--warning)", termine: "var(--success)", echec: "var(--danger)" };
 
 interface Props {
   id: string;

@@ -2,9 +2,9 @@
 // cadre. Nœuds LÉGERS (pas de coque de carte) : un <div> ou un <svg>, couleurs par jetons (`teinte-…`).
 // Le texte s'édite dans une surcouche non transformée (outils/EditeurTexte.tsx) : pendant l'édition, le nœud
 // masque son texte pour ne pas le montrer deux fois.
-import { memo } from "react";
+import { memo, useState } from "react";
 import { Handle, NodeResizer, Position, type Node, type NodeProps } from "@xyflow/react";
-import { useNiveauDetail } from "../board/detail";
+import { useNiveauDetail, vientDEtrePose } from "../board/detail";
 import { ui, useUi } from "../etat/ui";
 import { aPressionReelle, cheminDuTrait } from "../outils/dessin";
 import type { DonneesNoeud, ObjetBoard } from "../types";
@@ -30,12 +30,13 @@ export function policeAdhesif(o: Pick<ObjetBoard, "contenu" | "largeur" | "haute
 export const AdhesifNode = memo(function AdhesifNode({ data, selected }: P) {
   const o = data.objet;
   const niveau = useNiveauDetail();
+  const [neuf] = useState(() => vientDEtrePose(o.cree));  // posée à l'instant : elle se dépose, une fois
   const enEdition = useUi((e) => e.edition === o.id);
   return (
     <>
       <NodeResizer isVisible={selected && !o.verrouille} minWidth={96} minHeight={72} maxWidth={2400} maxHeight={2400} />
       <Poignees niveau={niveau} />
-      <div className={`adhesif teinte-${teinte(o, "jaune")}`} onDoubleClick={() => !o.verrouille && editer(o.id)}>
+      <div className={`adhesif teinte-${teinte(o, "jaune")}${neuf ? " vient-d-etre-pose" : ""}`} onDoubleClick={() => !o.verrouille && editer(o.id)}>
         {niveau < 2 && !enEdition && (
           <div className="adhesif-texte" style={{ fontSize: policeAdhesif(o) }}>
             {o.contenu || (niveau === 0 ? <span className="indice">Double-clic pour écrire</span> : null)}

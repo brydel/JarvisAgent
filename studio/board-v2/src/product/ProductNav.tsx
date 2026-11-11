@@ -1,5 +1,6 @@
 import { memo, useEffect, useRef } from "react";
-import { ArrowUpRight, BarChart3, Bot, Library, Folder, Home, LayoutGrid, Search, Settings, Target } from "lucide-react";
+import { ArrowUpRight, BarChart3, Bot, Library, Folder, Home, LayoutGrid, Moon, Search, Settings, Sun, Target } from "lucide-react";
+import { resoudreTheme, ui, useUi } from "../etat/ui";
 import { useStudioNavigation, type Vue } from "./routing";
 import "./navigation.css";
 
@@ -24,6 +25,9 @@ export const ProductNav = memo(function ProductNav({ recherche = "", setRecherch
   const { vue, aller } = useStudioNavigation();
   const input = useRef<HTMLInputElement>(null);
   const demo = new URLSearchParams(location.search).get("demo") === "1";
+  // thème effectif (« auto » suit le système) : le bouton propose l'autre
+  const theme = useUi((e) => e.theme);
+  const jour = resoudreTheme(theme, typeof matchMedia === "function" && matchMedia("(prefers-color-scheme: light)").matches) === "jour";
 
   useEffect(() => {
     const key = (event: KeyboardEvent) => {
@@ -64,6 +68,13 @@ export const ProductNav = memo(function ProductNav({ recherche = "", setRecherch
         <button className="p-button p-quiet p-notifications" onClick={() => aller("board")}
           aria-label={`${notifications} approbations en attente sur le Board`}>
           {notifications} à valider<ArrowUpRight size={14} />
+        </button>
+      )}
+      {/* hors du Board (qui a son bouton dans sa barre et sa commande Maj+D) : le thème se change ici, pour tout le produit */}
+      {vue !== "board" && (
+        <button type="button" className="p-icon-button p-theme" aria-label={jour ? "Passer au thème nuit" : "Passer au thème jour"}
+          title={jour ? "Thème nuit" : "Thème jour"} aria-pressed={jour} onClick={() => ui.definir({ theme: jour ? "nuit" : "jour" })}>
+          {jour ? <Moon size={16} aria-hidden /> : <Sun size={16} aria-hidden />}
         </button>
       )}
       {/* le Board affiche déjà son propre bandeau « DÉMO » : un seul badge par écran */}

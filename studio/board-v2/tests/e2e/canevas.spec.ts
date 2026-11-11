@@ -45,8 +45,10 @@ test.describe("commandes", () => {
     await expect(palette).toBeVisible();
     const champ = palette.getByRole("combobox", { name: "Chercher une commande" });
     await expect(champ).toBeFocused();
-    await champ.fill("alg");  // aucune sélection : « aligner » n'est pas disponible, donc pas proposé
-    await expect(palette.getByRole("option", { name: /Aligner à gauche/ })).toHaveCount(0);
+    await champ.fill("alg");  // aucune sélection : « aligner » est trouvée mais grisée, avec la raison du registre
+    const grisee = palette.getByRole("option", { name: /Aligner à gauche/ });
+    await expect(grisee).toHaveAttribute("aria-disabled", "true");
+    await expect(grisee).toContainText("Indisponible : Sélectionne au moins deux objets à aligner");
     await champ.fill("outil rect");
     await expect(palette.getByRole("option").first()).toContainText("Outil : Rectangle");
     await expect(palette.getByRole("option").first().locator("kbd")).toHaveText("R");

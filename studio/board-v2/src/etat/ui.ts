@@ -124,7 +124,8 @@ export function resoudreTheme(theme: Theme, systemeClair: boolean): "nuit" | "jo
   return theme === "auto" ? (systemeClair ? "jour" : "nuit") : theme;
 }
 
-/** Pose `data-theme` sur la racine et suit la préférence système tant que le thème est « auto ». */
+/** Pose `data-theme` sur la racine et suit la préférence système tant que le thème est « auto ». Branché une fois
+ *  pour TOUT le produit (App.tsx) : accueil, missions, agents, références, dialogues et Board partagent le thème. */
 export function brancherTheme(store: StoreUi = ui): () => void {
   const media = typeof matchMedia === "function" ? matchMedia(CLAIR) : null;
   const appliquer = () => {
@@ -136,7 +137,5 @@ export function brancherTheme(store: StoreUi = ui): () => void {
   return () => {
     fin();
     media?.removeEventListener("change", appliquer);
-    // les autres pages du produit (accueil, missions…) n'ont que leur habillage sombre : le thème est celui du Board
-    delete document.documentElement.dataset.theme;
   };
 }

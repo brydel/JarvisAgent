@@ -55,9 +55,13 @@ export const AudioNode = memo(function AudioNode({ data, selected }: P) {
     g.clearRect(0, 0, w, h);
     const pas = w / pics.length;
     const fait = total ? t / total : 0;
+    // couleurs du thème courant (un canvas ne lit pas les variables CSS tout seul)
+    const style = getComputedStyle(c);
+    const jeton = (nom: string) => style.getPropertyValue(nom).trim();
+    const [joue, plein, vide] = [jeton("--text-accent"), jeton("--brand-indigo"), jeton("--cadre-bord")];
     pics.forEach((v, i) => {
       const bh = Math.max(3, v * h * 0.95);
-      g.fillStyle = i / pics.length <= fait ? "#8EA0FF" : i / pics.length < 0.62 ? "#5B6CFF" : "#3A4260";
+      g.fillStyle = i / pics.length <= fait ? joue : i / pics.length < 0.62 ? plein : vide;
       g.beginPath();
       g.roundRect(i * pas + pas * 0.25, (h - bh) / 2, Math.max(1.5, pas * 0.5), bh, 2);
       g.fill();
