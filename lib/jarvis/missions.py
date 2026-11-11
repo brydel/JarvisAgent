@@ -39,7 +39,7 @@ import time
 from pathlib import Path
 from typing import Callable, Iterator
 
-from . import config, outbox, protocole_executant as proto
+from . import board_tableau, config, outbox, protocole_executant as proto
 
 SCHEMA_VERSION = 4  # 4 : intentions outbox et reçus inbox durables (ajouts seulement)
 FICHIER = "missions.db"
@@ -1001,12 +1001,21 @@ def _recuperer_tenant(c, tenant: str, now: float, bilan: dict) -> None:
 # --- Board -----------------------------------------------------------------------------
 
 TYPES_BOARD = ("note", "texte", "lien", "capture", "image", "pdf", "document", "audio", "video", "mission",
-               "agents", "dossier", "plan", "tache")  # plan / tache : le travail du chef (travail_board.py)
+               "agents", "dossier", "plan", "tache",  # plan / tache : le travail du chef (travail_board.py)
+               *board_tableau.TYPES)  # tableau blanc : adhésif, texte libre, forme, trait, cadre, flèche
 ANALYSABLES = ("note", "texte", "lien")
 # Board V2 : tout élément déposé est contextualisé par le chef (mission L1, autorisée d'office par la politique)
 CONTEXTUALISABLES = ("note", "texte", "lien", "image", "capture", "pdf", "document", "audio", "video")
-SANS_CONTENU = ("mission", "agents", "dossier", "plan", "tache", "image", "audio", "video", "pdf", "document", "capture")
+SANS_CONTENU = ("mission", "agents", "dossier", "plan", "tache", "image", "audio", "video", "pdf", "document", "capture",
+                *board_tableau.TYPES)
 PRIORITES = ("", "P1", "P2", "P3")
+
+
+def valider_meta_tableau(type_: str, meta: dict | None) -> None:
+    """Apparence bornée des objets de tableau blanc (board_tableau) ; sans effet sur les autres types."""
+    erreur = board_tableau.verifier(type_, meta)
+    if erreur:
+        raise MissionError("board", erreur)
 
 
 def board_ajouter(tenant_id: str, espace: str, type_: str, contenu: str, *, auteur: str, x: float = 0, y: float = 0,
@@ -1025,6 +1034,7 @@ def board_ajouter(tenant_id: str, espace: str, type_: str, contenu: str, *, aute
     meta_txt = json.dumps(meta or {}, ensure_ascii=False)
     if len(meta_txt) > 20_000:
         raise MissionError("board", "métadonnées trop volumineuses")
+    valider_meta_tableau(type_, meta)
     now = now or time.time()
     ref = reference_travail(meta)
     oid = _id("BO")

@@ -27,7 +27,7 @@ import tempfile
 import time
 from pathlib import Path
 
-from . import config
+from . import board_tableau, config
 from .missions import MissionError, PRIORITES, _curseur, _evenement, _id, reference_travail, transaction, _connecter
 
 ESPACE_MAX = 80
@@ -294,6 +294,9 @@ def mettre_a_jour(tenant_id: str, objet_id: str, champs: dict, *, version: int |
             ancienne = json.loads(o["meta"] or "{}")
             nouvelle = json.loads(propres["meta"])
             nouvelle.update({k: ancienne[k] for k in CLES_CHEF if k in ancienne})
+            erreur = board_tableau.verifier(o["type"], nouvelle)  # formes, traits, flèches : apparence bornée
+            if erreur:
+                raise MissionError("board", erreur)
             propres["meta"] = json.dumps(nouvelle, ensure_ascii=False)
         colonnes = dict(propres)
         if "meta" in propres:  # la référence d'une carte de travail suit meta (colonne indexée, voir travail_board)
