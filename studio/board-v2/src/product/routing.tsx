@@ -1,6 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useState, useRef, type ReactNode } from "react";
 
-export const VUES = ["accueil", "board", "agents", "missions", "connaissances", "fichiers", "analytique", "configuration"] as const;
+export const VUES = ["accueil", "board", "agents", "missions", "connaissances", "references", "fichiers", "analytique", "configuration"] as const;
 export type Vue = typeof VUES[number];
 function lireVue(): Vue {
   const v = new URLSearchParams(location.search).get("vue");
@@ -29,7 +29,7 @@ export function StudioNavigation({ children }: { children: ReactNode }) {
   const aller = useCallback((next: Vue, extras: Record<string, string> = {}) => {
     const u = new URL(location.href);
     u.searchParams.set("vue", next);
-    for (const key of ["carte", "filtre", "q", "priorite", "agent"]) u.searchParams.delete(key);
+    for (const key of ["carte", "filtre", "q", "priorite", "agent", "ref", "fragment"]) u.searchParams.delete(key);
     for (const [key, value] of Object.entries(extras)) u.searchParams.set(key, value);
     history.pushState(null, "", u);
     setVue(next);

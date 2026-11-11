@@ -57,6 +57,9 @@ from jarvis import vie_sociale  # noqa: E402
 vie_sociale.regler("off")  # silence par défaut : un test anime explicitement la vie sociale
 httpd = studio_api.serveur(port)
 httpd.intervalle_flux = 0.2
+# Serveur de TEST seulement : la bibliothèque de références peut capturer les pages locales de ce serveur
+# (en service, la garde anti-SSRF refuse toute adresse locale ou privée).
+httpd.references_prives = True
 jeton = studio_api.jeton(nouveau=True)
 (base / "jeton-test").write_text(jeton)
 Path(os.environ.get("JARVIS_TEST_JETON_FICHIER", "/tmp/jarvis-board-v2-jeton")).write_text(jeton)

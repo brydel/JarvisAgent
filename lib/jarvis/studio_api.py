@@ -230,6 +230,10 @@ class Handler(BaseHTTPRequestHandler):
             if resultat_os is not None:
                 self._json(*resultat_os)
                 return
+            from . import references_api
+            if (resultat_ref := references_api.lire(route, q, org)) is not None:
+                self._json(*resultat_ref)
+                return
             if route == "/api/v2/atelier":
                 self._json(200, studio_product.catalogue(org))
             elif m := re.fullmatch(r"/api/v2/atelier/candidats/(RB-[0-9]{4,})", route):
@@ -554,6 +558,10 @@ class Handler(BaseHTTPRequestHandler):
         resultat_os = os_api.ecrire(route, corps, org, stop=self.server.arret)
         if resultat_os is not None:
             self._json(*resultat_os)
+            return
+        from . import references_api
+        if (resultat_ref := references_api.ecrire(route, corps, org, serveur=self.server)) is not None:
+            self._json(*resultat_ref)
             return
         espace = board.nom_espace(corps.get("espace"))
         if m := re.fullmatch(r"/api/v2/atelier/agents/([a-z0-9_-]{1,64})/(verifier|proposer)", route):

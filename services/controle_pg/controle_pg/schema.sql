@@ -127,6 +127,33 @@ CREATE TABLE IF NOT EXISTS effets_inbox (
     empreinte TEXT NOT NULL, resultat TEXT NOT NULL, recu DOUBLE PRECISION NOT NULL,
     PRIMARY KEY (tenant_id, consommateur, cle));
 
+-- Bibliothèque de références (lib/jarvis/references.py) : ajouts seulement, la version du schéma ne change pas.
+-- `texte_norm` est désaccentué par l'application ; `recherche` (tsvector, GIN) prépare la recherche native par mots.
+-- `vecteur` reste un BYTEA (float32) portable ; avec pgvector : ajouter une colonne vector(n) et un index HNSW,
+-- remplis depuis ce BYTEA (voir docs/jarvis-next/BOARD_REFERENCES.md).
+CREATE TABLE IF NOT EXISTS board_references (
+    id TEXT PRIMARY KEY, tenant_id TEXT NOT NULL REFERENCES organisations(id), type TEXT NOT NULL,
+    source TEXT NOT NULL, url_finale TEXT NOT NULL DEFAULT '', titre TEXT NOT NULL DEFAULT '',
+    description TEXT NOT NULL DEFAULT '', collection TEXT NOT NULL DEFAULT '', etiquettes TEXT NOT NULL DEFAULT '[]',
+    meta TEXT NOT NULL DEFAULT '{}', contenu TEXT NOT NULL DEFAULT '[]', statut TEXT NOT NULL,
+    raison TEXT NOT NULL DEFAULT '', empreinte TEXT NOT NULL DEFAULT '', supprime INTEGER NOT NULL DEFAULT 0,
+    version INTEGER NOT NULL DEFAULT 1, auteur TEXT NOT NULL, cree DOUBLE PRECISION NOT NULL,
+    maj DOUBLE PRECISION NOT NULL, capture_le DOUBLE PRECISION);
+CREATE INDEX IF NOT EXISTS board_references_tenant ON board_references (tenant_id, supprime, collection, cree);
+CREATE TABLE IF NOT EXISTS board_reference_fragments (
+    id TEXT PRIMARY KEY, tenant_id TEXT NOT NULL REFERENCES organisations(id),
+    reference_id TEXT NOT NULL REFERENCES board_references(id), position INTEGER NOT NULL,
+    section TEXT NOT NULL DEFAULT '', niveau INTEGER NOT NULL DEFAULT 0, texte TEXT NOT NULL, texte_norm TEXT NOT NULL,
+    zone TEXT, vecteur BYTEA, modele TEXT NOT NULL DEFAULT '', dimension INTEGER NOT NULL DEFAULT 0,
+    version_index INTEGER NOT NULL DEFAULT 1, cree DOUBLE PRECISION NOT NULL, actif INTEGER NOT NULL DEFAULT 1,
+    recherche tsvector GENERATED ALWAYS AS (to_tsvector('simple'::regconfig, texte_norm)) STORED);
+CREATE INDEX IF NOT EXISTS board_reference_fragments_ref ON board_reference_fragments (tenant_id, reference_id, position);
+CREATE INDEX IF NOT EXISTS board_reference_fragments_recherche ON board_reference_fragments USING GIN (recherche);
+CREATE TABLE IF NOT EXISTS board_reference_fichiers (
+    tenant_id TEXT NOT NULL REFERENCES organisations(id), reference_id TEXT NOT NULL REFERENCES board_references(id),
+    role TEXT NOT NULL, asset_id TEXT NOT NULL, sha256 TEXT NOT NULL, largeur INTEGER NOT NULL DEFAULT 0,
+    hauteur INTEGER NOT NULL DEFAULT 0, PRIMARY KEY (tenant_id, reference_id, role));
+
 INSERT INTO meta VALUES ('schema_version', '4') ON CONFLICT (cle) DO UPDATE SET valeur = excluded.valeur;
 
 -- --- RLS : une politique par table, sur le tenant du contexte ---------------------------------------------------
@@ -135,7 +162,8 @@ DECLARE t TEXT;
 BEGIN
   FOREACH t IN ARRAY ARRAY['reglages_tenant', 'executants', 'connexions', 'missions', 'taches', 'tentatives',
                            'approbations', 'artefacts', 'board_objets', 'evenements', 'adhesions',
-                           'board_liens', 'board_assets', 'board_commentaires', 'effets_outbox', 'effets_inbox'] LOOP
+                           'board_liens', 'board_assets', 'board_commentaires', 'effets_outbox', 'effets_inbox',
+                           'board_references', 'board_reference_fragments', 'board_reference_fichiers'] LOOP
     EXECUTE format('ALTER TABLE %I ENABLE ROW LEVEL SECURITY', t);
     EXECUTE format('DROP POLICY IF EXISTS par_tenant ON %I', t);
     EXECUTE format('CREATE POLICY par_tenant ON %I USING (tenant_id = current_setting(''jarvis.tenant_id'', true)) '

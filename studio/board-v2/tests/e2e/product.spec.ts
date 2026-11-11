@@ -53,7 +53,7 @@ test("brouillon conserve entre vues, controle sans inference", async ({ page }) 
 
 test("routes utiles et retour au vrai Board", async ({ page }) => {
   await page.goto("/v2/?demo=1&vue=accueil");
-  for (const route of ["Missions", "Connaissances", "Fichiers", "Configuration"]) {
+  for (const route of ["Missions", "Références", "Fichiers", "Configuration"]) {
     await page.getByRole("navigation", { name: "Sections" }).getByRole("button", { name: route, exact: true }).click();
     await expect(page.locator(".p-page h1")).toBeVisible();
     await page.screenshot({ path: path.join(output, `${route.toLowerCase()}.png`) });

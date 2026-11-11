@@ -11,6 +11,8 @@ function espaceDeLUrl(p: URLSearchParams): string {
   return Array.from(p.get("espace") ?? "").filter((c) => c >= " " && c !== "\u007f").join("").trim().slice(0, 80) || "accueil";
 }
 const Workspace = lazy(() => import("./product/BoardWorkspace"));
+// Bibliothèque de références (remplace l'ancien écran « Connaissances », dont l'adresse ?vue=connaissances reste valide).
+const References = lazy(() => import("./references/References"));
 class StudioBoundary extends Component<{ children: ReactNode }, { failed: boolean }> {
   state = { failed: false };
   static getDerivedStateFromError() { return { failed: true }; }
@@ -18,6 +20,7 @@ class StudioBoundary extends Component<{ children: ReactNode }, { failed: boolea
 }
 function Pages({ source, charge }: { source: Source; charge?: number }) {
   const { vue } = useStudioNavigation();
+  if (vue === "references" || vue === "connaissances") return <Suspense fallback={<div className="p-loading" role="status">Ouverture de la bibliothèque...</div>}><References source={source}/></Suspense>;
   return vue === "board" ? <Suspense fallback={<div className="p-loading" role="status">Ouverture du Board...</div>}><Workspace source={source} charge={charge}/></Suspense> : <ProductStudio source={source}/>;
 }
 export function App() {

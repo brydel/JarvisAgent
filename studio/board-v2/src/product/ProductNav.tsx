@@ -1,5 +1,5 @@
 import { memo, useEffect, useRef } from "react";
-import { ArrowUpRight, BarChart3, BookOpen, Bot, Folder, Home, LayoutGrid, Search, Settings, Target } from "lucide-react";
+import { ArrowUpRight, BarChart3, Bot, Library, Folder, Home, LayoutGrid, Search, Settings, Target } from "lucide-react";
 import { useStudioNavigation, type Vue } from "./routing";
 import "./navigation.css";
 
@@ -8,7 +8,7 @@ const items = [
   ["board", "Board", LayoutGrid],
   ["missions", "Missions", Target],
   ["agents", "Agents", Bot],
-  ["connaissances", "Connaissances", BookOpen],
+  ["references", "Références", Library],
   ["fichiers", "Fichiers", Folder],
   ["analytique", "Activité", BarChart3],
   ["configuration", "Configuration", Settings],
@@ -46,7 +46,7 @@ export const ProductNav = memo(function ProductNav({ recherche = "", setRecherch
       <nav className="nav" aria-label="Sections">
         {items.map(([key, label, Icon]) => (
           <button key={key} type="button" onClick={() => aller(key as Vue)}
-            aria-current={vue === key ? "page" : undefined} title={label}>
+            aria-current={vue === key || (key === "references" && vue === "connaissances") ? "page" : undefined} title={label}>
             <Icon /><span>{label}</span>
           </button>
         ))}
