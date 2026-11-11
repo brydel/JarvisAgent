@@ -1,11 +1,17 @@
 """Jarvis Next sur PostgreSQL : le même moteur, la RLS, les comptes, la migration depuis SQLite.
 
-Base jetable `jarvis_test` (créée puis supprimée). Ignoré si psycopg ou PostgreSQL manquent
+Base jetable `jarvis_<empreinte du chemin du dépôt>_test` (créée puis supprimée) : chaque copie de travail a la
+sienne, deux suites peuvent tourner en même temps sur le même poste. `JARVIS_TEST_PG_BASE` impose un autre nom
+(lettres minuscules, chiffres, `_`, terminé par `_test` : rien d'autre n'est supprimable). Ignoré si psycopg ou PostgreSQL manquent
 (services/controle_pg/installer_postgres.sh). Toutes les suites du moteur et du Studio y sont rejouées.
 """
 
 from __future__ import annotations
 
+import atexit
+import hashlib
+import os
+import re
 import sys
 import threading
 import time
@@ -33,14 +39,39 @@ try:
 except Exception as exc:  # noqa: BLE001 — toute absence (paquet, serveur, rôle) rend ces tests sans objet
     DISPONIBLE, RAISON = False, f"PostgreSQL indisponible ({type(exc).__name__}: {exc})"
 
-BASE = "jarvis_test"
+
+
+def _nom_base() -> str:
+    """Nom de la base jetable : variable d'environnement, sinon unique par copie de travail (empreinte du chemin)."""
+    impose = os.environ.get("JARVIS_TEST_PG_BASE", "").strip()
+    if impose:
+        if not re.fullmatch(r"[a-z][a-z0-9_]{0,34}_test", impose):
+            raise ValueError("JARVIS_TEST_PG_BASE : lettres minuscules, chiffres et _ (40 au plus), terminé par _test")
+        return impose
+    racine = str(Path(__file__).resolve().parents[1])
+    return f"jarvis_{hashlib.sha256(racine.encode()).hexdigest()[:10]}_test"
+
+
+BASE = _nom_base()
+BASE_MIGRATION = BASE[: -len("_test")] + "_migr_test"
 _PRECEDENT = {}
+
+
+def _nettoyer():
+    """Supprime les bases jetables, même si la suite est interrompue (appelé aussi à la sortie du processus)."""
+    for base in (BASE, BASE_MIGRATION):
+        try:
+            admin.supprimer_base(base)
+        except Exception:  # noqa: BLE001 — nettoyage au mieux : ne masque jamais l'erreur d'origine
+            pass
+
 
 
 def setUpModule():
     if not DISPONIBLE:
         return
     _PRECEDENT["cfg"] = config.CONFIG_DIR
+    atexit.register(_nettoyer)
     admin.supprimer_base(BASE)
     _PRECEDENT["dsn"] = admin.preparer(BASE)
 
@@ -48,7 +79,7 @@ def setUpModule():
 def tearDownModule():
     if DISPONIBLE:
         mi.utiliser(None)
-        admin.supprimer_base(BASE)
+        _nettoyer()
 
 
 class SurPostgres:
@@ -206,7 +237,7 @@ class ComptesTest(unittest.TestCase):
 
 @unittest.skipUnless(DISPONIBLE, RAISON)
 class MigrationTest(unittest.TestCase):
-    BASE_M = "jarvis_migr_test"
+    BASE_M = BASE_MIGRATION
 
     def tearDown(self):
         mi.utiliser(None)
