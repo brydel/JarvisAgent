@@ -1,4 +1,5 @@
-import { memo, useEffect, useRef, useState, type ReactNode } from "react";
+import { memo, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
+import { createPortal } from "react-dom";
 import { Handle, NodeResizer, Position } from "@xyflow/react";
 import { ArrowUpToLine, ClipboardList, Copy, FileText, Minimize2, Maximize2, Palette, ScanSearch, Wrench, Image as IconeImage, Link2, Lock, LockOpen, MoreHorizontal, Music, PanelRight, Target, Trash2, Users, Video, Folder, FolderOutput } from "lucide-react";
 import type { ObjetBoard, Priorite } from "../types";
@@ -140,17 +141,34 @@ export function MenuCarte({ objet }: { objet: ObjetBoard }) {
   const lancer = (id: string) => executer(id, "menu", { selection: [objet] });
   const [ouvert, setOuvert] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
+  const menu = useRef<HTMLDivElement>(null);
+  const [pos, setPos] = useState<{ x: number; y: number } | null>(null);
+  // Le menu est de l'interface, pas du contenu : il sort du calque zoomé (portail) et garde sa taille à tous les zooms.
+  // Posé sous le bouton, bord droit aligné, ramené dans la fenêtre s'il en sortirait.
+  useLayoutEffect(() => {
+    if (!ouvert) { setPos(null); return; }
+    const b = ref.current?.getBoundingClientRect(), m = menu.current?.getBoundingClientRect();
+    if (!b || !m) return;
+    const dessous = b.bottom + 4 + m.height <= innerHeight - 8;
+    setPos({ x: Math.max(8, Math.min(b.right - m.width, innerWidth - m.width - 8)), y: dessous ? b.bottom + 4 : Math.max(8, b.top - 4 - m.height) });
+  }, [ouvert]);
   useEffect(() => {
     if (!ouvert) return;
     const fermer = (e: PointerEvent) => {
-      if (!ref.current?.contains(e.target as Node)) setOuvert(false);
+      if (!ref.current?.contains(e.target as Node) && !menu.current?.contains(e.target as Node)) setOuvert(false);
     };
     const echap = (e: KeyboardEvent) => e.key === "Escape" && setOuvert(false);
+    // le canevas bouge sous le menu (molette, redimensionnement) : il se referme plutôt que de se détacher de sa carte
+    const bouge = (e: Event) => { if (!menu.current?.contains(e.target as Node)) setOuvert(false); };
     window.addEventListener("pointerdown", fermer);
     window.addEventListener("keydown", echap);
+    window.addEventListener("wheel", bouge, { passive: true });
+    window.addEventListener("resize", bouge);
     return () => {
       window.removeEventListener("pointerdown", fermer);
       window.removeEventListener("keydown", echap);
+      window.removeEventListener("wheel", bouge);
+      window.removeEventListener("resize", bouge);
     };
   }, [ouvert]);
   const faire = (f: () => void) => () => {
@@ -163,8 +181,9 @@ export function MenuCarte({ objet }: { objet: ObjetBoard }) {
         onClick={() => setOuvert((v) => !v)}>
         <MoreHorizontal size={20} />
       </button>
-      {ouvert && (
-        <div role="menu" className="menu-deroulant">
+      {ouvert && createPortal(
+        <div ref={menu} role="menu" className="menu-deroulant menu-flottant nodrag nopan nowheel" aria-label="Actions de la carte"
+          style={pos ? { left: pos.x, top: pos.y } : { left: 0, top: 0, visibility: "hidden" }}>
           <div className="menu-priorites" role="group" aria-label="Priorité">
             {(["P1", "P2", "P3", ""] as Priorite[]).map((p) => (
               <button key={p || "aucune"} role="menuitemradio" aria-checked={objet.priorite === p} className={p ? `badge-p ${p}` : "badge-p aucune"}
@@ -198,8 +217,7 @@ export function MenuCarte({ objet }: { objet: ObjetBoard }) {
           </button>
           {objet.parent_id && <button role="menuitem" onClick={faire(() => lancer("carte.sortirDuDossier"))}><FolderOutput size={16} /> Sortir du dossier</button>}
           <button role="menuitem" className="danger" onClick={faire(() => lancer("edition.supprimer"))}><Trash2 size={16} /> Supprimer</button>
-        </div>
-      )}
+        </div>, document.body)}
     </div>
   );
 }

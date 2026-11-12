@@ -47,7 +47,7 @@ test("brouillon conserve entre vues, controle sans inference", async ({ page }) 
   await expect(page.locator("#agent-brief")).toHaveValue(next);
   await page.getByRole("button", { name: /V.rifier les consignes/ }).click();
   await expect(page.locator(".p-verification")).toContainText(/structurelles/);
-  await expect(page.locator(".p-verification")).toContainText(/aucun appel IA/);
+  await expect(page.locator(".p-verification")).toContainText(/sans appel à un modèle/);
   await page.screenshot({ path: path.join(output, "atelier-comparaison.png") });
 });
 

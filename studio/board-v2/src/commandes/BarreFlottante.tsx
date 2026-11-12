@@ -35,7 +35,7 @@ export function BarreFlottante({ selection }: { selection: ObjetBoard[] }) {
   // au-dessus de la sélection ; dessous si elle touche le haut du canevas ; toujours dans le cadre (le bas est borné
   // en CSS : la hauteur du canevas change quand le panneau s'ouvre, sans nouveau rendu de cette barre)
   // sur un grand canevas, la barre ne passe ni sous la barre d'outils (en haut) ni sur la barre d'ajout (à gauche)
-  const large = lMax > 900;
+  const large = typeof innerWidth !== "number" || innerWidth > 900;
   const hautLibre = large ? ZONE_LIBRE.top : 8, gaucheLibre = large ? ZONE_LIBRE.left - 8 : 8;
   const y = haut >= hautLibre ? haut : Math.min(hMax - 52, (zone.y + zone.hauteur) * zoom + ty + 12);
   const x = Math.max(gaucheLibre + largeur / 2, Math.min(lMax - 8 - largeur / 2, cx));

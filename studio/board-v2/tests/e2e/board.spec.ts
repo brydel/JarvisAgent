@@ -278,10 +278,10 @@ test.describe("board réel", () => {
     await expect(carte).toBeVisible();
     // l'exécutant factice du serveur de test prend la tâche : la carte passe à « Réussie » sans rechargement
     await expect(carte.getByText("Réussie")).toBeVisible({ timeout: 20_000 });
-    await expect(carte.getByText("100%")).toBeVisible();
+    await expect(carte.getByText("1 / 1")).toBeVisible();
     await carte.click({ position: { x: 40, y: 40 } });
     const taches = page.getByRole("complementary", { name: "Panneau contextuel" }).locator(".tete").filter({ has: page.getByRole("heading", { name: "Tâches", exact: true }) });
-    await expect(taches.locator(".compte")).toHaveText("1/1");
+    await expect(taches.locator(".compte")).toHaveText("1 / 1");
     const agents = page.locator(".react-flow__node-agents");
     await expect(agents).toHaveCount(0); // aucune carte d'agents inventée
   });
@@ -400,7 +400,7 @@ test.describe("board réel", () => {
     await page.reload();
     await expect(page.getByRole("group", { name: "Filtrer par type" }).getByRole("button", { name: /^Notes/ })).toHaveAttribute("aria-pressed", "true");
     await expect(page.getByRole("searchbox", { name: "Rechercher dans le Board" })).toHaveValue("Nouvelle");
-    await expect(page.locator(".subbar .badge-p.P2")).toBeVisible();
+    await expect(page.locator(".subbar .filtres .badge-p.P2")).toBeVisible();
     await expect(page.getByRole("complementary", { name: "Panneau contextuel" }).getByRole("heading", { name: "Note" })).toBeVisible();
     // une valeur invalide est ignorée
     await page.goto("/v2/?filtre=inconnu&priorite=P9&carte=../../x");

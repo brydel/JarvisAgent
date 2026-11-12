@@ -3,7 +3,7 @@ import { AnimatePresence, motion } from "motion/react";
 import { Check, CircleDashed, Copy, FileText, Folder, Image as IconeImage, Link2, Loader, Music, Play, Plus, ShieldCheck, Target, Users, Video, X } from "lucide-react";
 import type { Approbation, Evenement, ObjetBoard, Priorite, ReglagesBoard } from "../types";
 import type { Inspection, Source } from "../api";
-import { ilya, libelleTache, taille } from "../lib/format";
+import { ilya, libelleTache, taille, LIBELLE_TYPE } from "../lib/format";
 import { rendreNote } from "../lib/markdown";
 import { Avatar } from "./Avatar";
 import { statutAgent } from "../nodes/CartesVivantes";
@@ -37,9 +37,26 @@ export function decrireEvenement(e: Evenement | Inspection["chronologie"][number
     case "artefact": return `Livrable reçu de ${d.fournisseur}${d.factice ? " (factice)" : ""}`;
     case "approbation": return `Approbation ${d.decision} par ${d.par}`;
     case "resultat_perime": return "Résultat périmé refusé";
-    default: return e.type.replace(/_/g, " ");
+    case "executant_enrole": return "Exécutant enrôlé";
+    case "executant_revoque": return "Exécutant révoqué";
+    case "reference_etat": return `Référence : ${ETATS_REFERENCE[String(d.statut ?? "")] ?? "état mis à jour"}`;
+    case "tache_retenue": return "Tâche retenue par un exécutant";
+    case "outbox_relance": return "Envoi relancé";
+    case "budget_inference": return "Budget d'inférence modifié";
+    case "board_relecture": return "Relecture demandée";
+    case "board_lien_maj": return "Relation modifiée";
+    case "board_deplace": return "Carte déplacée vers un autre Board";
+    case "board_dependance": return "Dépendance enregistrée";
+    case "board_debloquee": return "Carte débloquée";
+    case "arret_urgence": return "Arrêt d'urgence du moteur";
+    // un type que l'interface ne connaît pas encore : jamais la clé technique à l'écran
+    default: return "Événement";
   }
 }
+const ETATS_REFERENCE: Record<string, string> = { en_attente: "capture en attente", capture: "capture en cours", en_cours: "capture en cours",
+  prete: "prête", indexee: "indexée", echec: "capture en échec", erreur: "capture en échec" };
+/** Type d'approbation lisible : « envoi_candidature » → « Envoi de candidature ». */
+const typeApprobation = (t: string) => LIBELLE_TYPE[t] ?? "Action à valider";
 
 const NOMS_TYPES: Record<string, string> = { note: "Note", texte: "Texte", mission: "Mission", image: "Image", capture: "Capture", lien: "Lien", audio: "Audio",
   video: "Vidéo", pdf: "PDF", document: "Document", dossier: "Dossier", agents: "Équipe d'agents", plan: "Plan", tache: "Tâche" };
@@ -265,7 +282,7 @@ function Apercu({ objets, approbations, activite }: { objets: ObjetBoard[]; appr
       </div>
       <div className="section">
         <div className="tete"><h4><ShieldCheck size={16} />Approbations</h4>{approbations.length > 0 && <span className="compte-attente">{approbations.length} en attente</span>}</div>
-        {approbations.length ? approbations.map((a) => <div key={a.id} className="ligne-approbation"><span className="niveau">{a.niveau}</span>{a.type.replace(/_/g, " ")}<span className="compte">{a.tache_id}</span></div>)
+        {approbations.length ? approbations.map((a) => <div key={a.id} className="ligne-approbation"><span className="niveau">{a.niveau}</span>{typeApprobation(a.type)}<span className="compte">{a.tache_id}</span></div>)
           : <p className="vide">Rien à décider</p>}
       </div>
       <div className="section"><div className="tete"><h4>Activité récente</h4></div>
@@ -286,13 +303,33 @@ function Details({ objet, insp, approbations, demo, activite, priorite, modifier
   const tags = (objet.meta.tags ?? insp?.tags ?? []) as string[];
   const enAttente = demo
     ? (insp?.taches ?? []).flatMap((t) => t.approbations.filter((a) => a.statut === "en_attente").map((a) => ({ id: a.id, titre: libelleTache(t), cree: a.cree })))
-    : approbations.filter((a) => a.mission_id === objet.mission_id).map((a) => ({ id: a.id, titre: `${a.niveau} · ${a.type.replace(/_/g, " ")}`, cree: a.cree }));
+    : approbations.filter((a) => a.mission_id === objet.mission_id).map((a) => ({ id: a.id, titre: `${a.niveau} · ${typeApprobation(a.type)}`, cree: a.cree }));
   const encours = m?.taches.some((t) => ["LEASED", "RUNNING", "REVIEW"].includes(t.statut));
   const credit = provenance(objet);
   const description = objet.meta.description ?? insp?.description
     // un élément analysé garde sa propre description : l'objectif de la mission d'analyse n'en est pas une
     // à défaut, le début du texte de la carte, sans ses marques de mise en forme
     ?? (objet.type === "mission" ? m?.objectif : objet.contenu?.slice(0, 280).replace(/\*\*|__|^#+\s*/gm, "").replace(/\s*\n+- /g, " · ").replace(/\n+/g, " ") || objet.asset?.nom);
+  // une décision qui t'attend passe avant la liste des tâches : c'est la seule chose à faire sur cette carte
+  const approbationsBloc = (m || enAttente.length > 0) && (
+        <div className="section">
+          <div className="tete"><h4><ShieldCheck size={16} />Approbations</h4>
+            {enAttente.length > 0 && <span className="compte-attente">{enAttente.length} en attente</span>}</div>
+          {enAttente.length ? enAttente.map((a) => (
+            <div key={a.id} className="approbation">
+                            <div><div className="titre">{a.titre}</div><div className="quand">{ilya(a.cree)}</div></div>
+              <div className="actions">
+                {decides[a.id] ? <span className="meta-carte">{decides[a.id]}</span> : (
+                  <>
+                    <button type="button" className="bouton succes" onClick={async () => { await decider(a.id, true); setDecides((d) => ({ ...d, [a.id]: demo ? "Approuvée (démo)" : "Approuvée" })); }}>Approuver</button>
+                    <button type="button" className="bouton danger" onClick={async () => { await decider(a.id, false); setDecides((d) => ({ ...d, [a.id]: demo ? "Refusée (démo)" : "Refusée" })); }}>Refuser</button>
+                  </>
+                )}
+              </div>
+            </div>
+          )) : <p className="vide">Aucune décision attendue de ta part</p>}
+        </div>
+      );
   return (
     <>
       <div className="section">
@@ -318,7 +355,7 @@ function Details({ objet, insp, approbations, demo, activite, priorite, modifier
         </dl>
         {m && (
           <div className="p-progression" aria-label={`${m.faites} sur ${m.total} tâche${m.total > 1 ? "s" : ""}`}>
-            Progression<div className="barre"><span style={{ transform: `scaleX(${m.progression / 100})` }} /></div><output>{m.progression}%</output>
+            Progression<div className="barre"><span style={{ transform: `scaleX(${m.progression / 100})` }} /></div><output>{m.faites} / {m.total}</output>
           </div>
         )}
         {Boolean(description) && <div className="p-description">Description<p>{String(description)}</p></div>}
@@ -339,9 +376,10 @@ function Details({ objet, insp, approbations, demo, activite, priorite, modifier
           )}
         </div>
       </div>
+      {enAttente.length > 0 && approbationsBloc}
       {insp && (
         <div className="section">
-          <div className="tete"><h4>Tâches</h4><span className="compte">{insp.taches.filter((t) => t.statut === "SUCCEEDED").length}/{insp.taches.length}</span></div>
+          <div className="tete"><h4>Tâches</h4><span className="compte">{insp.taches.filter((t) => t.statut === "SUCCEEDED").length} / {insp.taches.length}</span></div>
           <ul className="liste-taches">
             {insp.taches.map((t) => {
               const e = t.statut === "SUCCEEDED" ? "faite" : ["LEASED", "RUNNING", "REVIEW"].includes(t.statut) ? "encours" : "";
@@ -361,25 +399,7 @@ function Details({ objet, insp, approbations, demo, activite, priorite, modifier
           </span>
         </div>
       )}
-      {(m || enAttente.length > 0) && (
-        <div className="section">
-          <div className="tete"><h4><ShieldCheck size={16} />Approbations</h4>
-            {enAttente.length > 0 && <span className="compte-attente">{enAttente.length} en attente</span>}</div>
-          {enAttente.length ? enAttente.map((a) => (
-            <div key={a.id} className="approbation">
-                            <div><div className="titre">{a.titre}</div><div className="quand">{ilya(a.cree)}</div></div>
-              <div className="actions">
-                {decides[a.id] ? <span className="meta-carte">{decides[a.id]}</span> : (
-                  <>
-                    <button type="button" className="bouton succes" onClick={async () => { await decider(a.id, true); setDecides((d) => ({ ...d, [a.id]: demo ? "Approuvée (démo)" : "Approuvée" })); }}>Approuver</button>
-                    <button type="button" className="bouton danger" onClick={async () => { await decider(a.id, false); setDecides((d) => ({ ...d, [a.id]: demo ? "Refusée (démo)" : "Refusée" })); }}>Refuser</button>
-                  </>
-                )}
-              </div>
-            </div>
-          )) : <p className="vide">Aucune décision attendue de ta part</p>}
-        </div>
-      )}
+      {!enAttente.length && approbationsBloc}
       <div className="section">
         <div className="tete"><h4>Activité récente</h4><button type="button" className="lien-texte" onClick={voirTout}>Voir tout</button></div>
         {activite.length ? <ListeActivite activite={activite} max={3} /> : <p className="vide">Pas encore d'activité</p>}

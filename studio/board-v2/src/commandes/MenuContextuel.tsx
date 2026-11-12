@@ -4,11 +4,19 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { Check } from "lucide-react";
 import type { MenuOuvert } from "../etat/ui";
 import type { ContexteBoard } from "./contexte";
-import { afficher } from "./raccourcis";
-import { useCommandes } from "./react";
+import { Touches, useCommandes } from "./react";
 import { EFFETS } from "../relations/effets";
 import type { StyleLien } from "../types";
 import { libelleDe, raccourcisDe } from "./types";
+
+/** Dans le menu d'une relation, le type se lit comme sur le canevas : un trait dans sa couleur et son pointillé. */
+const TRAITS: Record<StyleLien, { nom: string; couleur: string; tirets?: string }> = {
+  defaut: { nom: "Simple", couleur: "var(--edge-default)" },
+  inspire: { nom: EFFETS.inspire.nom, couleur: "var(--edge-inspire)", tirets: "1 3" },
+  alimente: { nom: EFFETS.alimente.nom, couleur: "var(--edge-alimente)" },
+  utilise: { nom: EFFETS.utilise.nom, couleur: "var(--edge-utilise)", tirets: "3 3" },
+  depend: { nom: EFFETS.depend.nom, couleur: "var(--edge-depend)", tirets: "6 2 1 2" },
+};
 
 export function MenuContextuel({ menu, extra, fermer }: {
   menu: MenuOuvert; extra: Partial<Pick<ContexteBoard, "selection" | "lien" | "point">>; fermer: () => void;
@@ -61,10 +69,13 @@ export function MenuContextuel({ menu, extra, fermer }: {
         const r = raccourcisDe(cmd)[0];
         const coche = cmd.actif?.(c);
         // un type de relation dit ce qu'il change ; une commande indisponible dit pourquoi (raison du registre)
-        const aide = !etat.disponible ? etat.raison : cmd.id.startsWith("relation.type.") ? EFFETS[cmd.id.slice(14) as StyleLien]?.phrase : null;
+        const trait = cmd.id.startsWith("relation.type.") ? TRAITS[cmd.id.slice(14) as StyleLien] : undefined;
+        const aide = !etat.disponible ? etat.raison : trait ? EFFETS[cmd.id.slice(14) as StyleLien]?.phrase : null;
+        const premierType = trait && !commandes[i - 1]?.id.startsWith("relation.type.");
         return (
           <div key={cmd.id} role="presentation">
             {i > 0 && commandes[i - 1]!.categorie !== cmd.categorie && <div className="menu-separateur" role="separator" />}
+            {premierType && <div className="menu-groupe" role="presentation">Type de relation</div>}
             <button type="button" role={cmd.actif ? "menuitemcheckbox" : "menuitem"} aria-checked={cmd.actif ? Boolean(coche) : undefined}
               aria-disabled={!etat.disponible || undefined} aria-describedby={aide ? `aide-${cmd.id}` : undefined} title={aide ?? undefined}
               className={[cmd.id === "edition.supprimer" || cmd.id === "relation.supprimer" ? "danger" : "", aide ? "avec-aide" : ""].join(" ").trim() || undefined}
@@ -73,10 +84,13 @@ export function MenuContextuel({ menu, extra, fermer }: {
                 fermer();
                 executer(cmd.id, "menu", extra);
               }}>
-              <span className="menu-icone">{coche ? <Check size={16} aria-hidden /> : Icone ? <Icone size={16} aria-hidden /> : null}</span>
-              <span className="menu-libelle">{libelleDe(cmd, c)}
+              <span className="menu-icone">{trait
+                ? <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden><line x1="1" y1="8" x2="15" y2="8" stroke={trait.couleur} strokeWidth="2" strokeDasharray={trait.tirets} strokeLinecap={trait.tirets ? "round" : undefined} /></svg>
+                : coche ? <Check size={16} aria-hidden /> : Icone ? <Icone size={16} aria-hidden /> : null}</span>
+              <span className="menu-libelle">{trait ? trait.nom : libelleDe(cmd, c)}
                 {aide && <small id={`aide-${cmd.id}`} className={etat.disponible ? "menu-aide" : "menu-aide raison"}>{aide}</small>}</span>
-              {r && <kbd>{afficher(r)}</kbd>}
+              {trait && coche && <Check size={16} aria-hidden className="menu-coche" />}
+              {r && <Touches raccourci={r} />}
             </button>
           </div>
         );

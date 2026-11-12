@@ -1,4 +1,4 @@
-/* Bande « Travail en direct » du Board : une ligne quand il n'y a rien à voir, ouverte dès qu'un agent travaille. */
+/* Bande « Travail en direct » du Board : une ligne de 36 px, dépliée à la demande (200 px au plus). */
 .app.avec-activite:has(> .product-nav) { grid-template-rows: var(--topbar-h) var(--subbar-h) auto minmax(0, 1fr); }
 .activite-directe { flex: 0 0 auto; border-top: 1px solid var(--border-subtle); background: var(--bg-app); color: var(--text-primary); }
 .activite-titre { display: flex; align-items: center; gap: 8px; height: 36px; padding: 0 24px; width: 100%; border: 0; color: inherit; background: transparent; text-align: left; font-size: 13px; cursor: pointer; transition: background var(--dur-hover) var(--ease-standard); }
@@ -6,7 +6,10 @@
 .activite-titre svg { color: var(--text-muted); flex: none; }
 .activite-titre strong { font-weight: 500; }
 .activite-titre span { flex: 1; font: 400 12px/16px var(--font-mono); font-variant-numeric: tabular-nums; color: var(--text-secondary); }
-.activite-contenu { display: grid; grid-template-columns: 1fr 1fr; max-height: 220px; border-top: 1px solid var(--border-subtle); }
+.activite-contenu { display: grid; grid-template-columns: minmax(0, 1fr); max-height: 200px; border-top: 1px solid var(--border-subtle); }
+.activite-contenu.avec-apercu { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+.activite-liste { max-width: 720px; }
+.avec-apercu .activite-liste { max-width: none; }
 .activite-liste, .activite-apercu { overflow: auto; padding: 12px 24px 16px; min-width: 0; font-size: 12px; line-height: 16px; }
 .activite-liste p, .activite-apercu > p { margin: 0 0 8px; }
 .activite-apercu { border-left: 1px solid var(--border-subtle); }
@@ -28,11 +31,9 @@
 .activite-apercu pre { margin: 8px 0 0; white-space: pre-wrap; overflow-wrap: anywhere; font: 400 12px/16px var(--font-mono); color: var(--text-secondary); }
 @media (max-width: 900px) {
   .app.avec-activite:has(> .product-nav) { grid-template-rows: auto auto auto minmax(0, 1fr); }
-  .app.avec-activite .travail { grid-template-rows: minmax(160px, 1fr) minmax(0, 0.7fr); }
-  .app.avec-activite .panneau { max-height: none; overflow: hidden; }
-  .activite-titre { padding: 0 16px; height: auto; min-height: 36px; flex-wrap: wrap; gap: 4px 8px; }
-  .activite-titre span { flex-basis: 60%; }
-  .activite-contenu { grid-template-columns: 1fr; max-height: min(200px, 23vh); overflow: auto; }
+  .activite-titre { padding: 0 16px; }
+  .activite-titre span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+  .activite-contenu, .activite-contenu.avec-apercu { grid-template-columns: minmax(0, 1fr); max-height: min(200px, 23vh); overflow: auto; }
   .activite-liste, .activite-apercu { overflow: visible; padding: 8px 16px; }
   .activite-apercu { border-left: 0; border-top: 1px solid var(--border-subtle); }
 }

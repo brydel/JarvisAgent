@@ -11,9 +11,7 @@ crop() { ffmpeg -loglevel error -y -i "$ref" -vf "crop=$2:$3:$4:$5${7:+,$7},scal
 crop montagne.jpg 386 186 139 166 960 "delogo=x=5:y=3:w=40:h=24,delogo=x=350:y=11:w=28:h=22"   # badge P2 et menu effacés
 crop claude-apercu.jpg 280 129 624 165 700 "delogo=x=232:y=1:w=46:h=40"   # menu « … » effacé
 crop video-maquette.jpg 298 138 638 791 1192 "delogo=x=4:y=5:w=40:h=24,delogo=x=262:y=8:w=28:h=22,delogo=x=8:y=90:w=270:h=44"   # vignette vidéo : badge, menu et titre effacés
-crop ressource-1.jpg 62 46 979 870 160
-crop ressource-2.jpg 62 46 1048 870 160
-crop ressource-3.jpg 62 46 1118 870 160
+# les vignettes du dossier « Ressources design » et les captures de Références viennent de scripts/references-demo.mjs
 
 # Audio réel (12 s) : accord doux modulé, MP3 — sa forme d'onde est calculée du fichier par le navigateur.
 ffmpeg -loglevel error -y -f lavfi -i "sine=f=220:d=12" -f lavfi -i "sine=f=330:d=12" -f lavfi -i "anoisesrc=d=12:a=0.04" \

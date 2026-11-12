@@ -1,3 +1,4 @@
+import { dateHeure } from "../lib/format";
 import { useEffect, useId, useRef, useState } from "react";
 import { ArrowLeft, ArrowUpRight, Brain, Hash, Lightbulb, LoaderCircle, MessageCircle, Plus, RefreshCw, Wrench, X } from "lucide-react";
 import { Avatar } from "./Avatar";
@@ -35,7 +36,7 @@ async function requete<T>(url: string, init?: RequestInit): Promise<T> {
 }
 
 function date(ts: number) {
-  return new Date(ts * 1000).toLocaleString("fr-FR", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
+  return dateHeure(ts);
 }
 
 function fusionner(avant: Message[], apres: Message[]) {

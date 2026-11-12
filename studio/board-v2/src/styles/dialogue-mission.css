@@ -10,7 +10,7 @@
 .dialogue-corps { display: grid; gap: 16px; padding: 20px 24px 0; }
 .champ-groupe { display: grid; gap: 8px; }
 .champ-libelle { font-size: 13px; font-weight: 500; color: var(--text-secondary); padding: 0; }
-.requis { color: var(--danger); }
+.requis { color: var(--text-secondary); }
 .facultatif { margin-left: 8px; font-weight: 400; color: var(--text-muted); }
 .champ-pied { display: flex; justify-content: space-between; align-items: baseline; gap: 16px; }
 .champ-aide { justify-self: end; font-size: 12px; line-height: 16px; color: var(--text-muted); }
@@ -31,9 +31,8 @@
 .segments label:focus-within { outline: 2px solid var(--focus); outline-offset: 2px; }
 .dialogue-politique { display: flex; gap: 12px; align-items: flex-start; margin: 0; padding: 12px; border-radius: var(--radius-sm);
   background: var(--surface-inset); border: 1px solid var(--border-subtle); color: var(--text-secondary); font-size: 13px; line-height: 20px; }
-.dialogue-politique svg { color: var(--success); flex: none; margin-top: 2px; }
+.dialogue-politique svg { color: var(--text-secondary); flex: none; margin-top: 2px; }
 .dialogue-politique b { color: var(--text-primary); font-weight: 500; }
-.dialogue-demo { margin: 0; font: 400 12px/16px var(--font-mono); color: var(--text-muted); }
 .dialogue-erreur { margin: 0; padding: 8px 12px; border-radius: var(--radius-sm); background: var(--danger-bg); color: var(--text-danger-soft); font-size: 13px; line-height: 20px; }
 .dialogue-pied { display: flex; align-items: center; justify-content: flex-end; gap: 8px; padding: 20px 24px; }
 .dialogue-pied .raccourci { display: inline-flex; align-items: center; gap: 4px; margin-right: auto; font-size: 12px; color: var(--text-muted); }

@@ -19,6 +19,8 @@ svg.lucide.trait-fort { stroke-width: 2.5; }
 /* un état : un point qui porte le sens, puis le mot. Même dessin dans les pages, les dialogues et Références ; chaque zone ne règle que la couleur du point. */
 .p-status, .integration-etat, .runtime-etat { display: inline-flex; align-items: center; gap: var(--status-gap); min-height: 20px; font: 400 13px/20px var(--font-sans); color: var(--text-secondary); white-space: nowrap; }
 .p-status::before, .integration-etat::before, .runtime-etat::before { content: ""; width: var(--status-dot); height: var(--status-dot); border-radius: 50%; background: var(--statut-neutre); flex: none; }
+/* mention de démonstration : la même partout, discrète, sans filet (ce n'est pas un crédit) */
+.mention-demo { margin: 0; font: 400 12px/16px var(--font-sans); color: var(--text-muted); }
 /* touche de clavier */
 kbd { font: 400 12px/16px var(--font-mono); }
 .touche { display: inline-grid; place-items: center; min-width: 20px; padding: 0 4px; border-radius: 4px; border: 1px solid var(--border-card); background: var(--surface-inset); color: var(--text-secondary); font: 400 12px/18px var(--font-mono); }
@@ -44,13 +46,17 @@ kbd { font: 400 12px/16px var(--font-mono); }
 .nav button[aria-current="page"] { color: var(--text-primary); background: var(--surface-hover); border-color: var(--border-card); }
 
 .nav svg { width: 16px; height: 16px; stroke-width: 1.5; color: var(--text-muted); }
+.recherche-reservee { visibility: hidden; }
 .recherche { 
   margin-left: auto; display: flex; align-items: center; gap: 8px; width: 272px; height: 36px; padding: 0 8px 0 12px;
   border: 1px solid var(--border-card); border-radius: var(--radius-sm); background: var(--surface-inset); color: var(--text-muted);
  }
 .recherche input { flex: 1; min-width: 0; border: 0; outline: 0; background: none; color: var(--text-primary); font: inherit; font-size: 13px; }
+.recherche input:focus-visible { outline: none; }
+.recherche:focus-within { outline: 2px solid var(--focus); outline-offset: 2px; }
 .recherche input::placeholder { color: var(--text-muted); }
-.recherche kbd { padding: 0 4px; border-radius: 4px; border: 1px solid var(--border-card); background: var(--surface-card); font: 400 12px/18px var(--font-mono); color: var(--text-secondary); white-space: nowrap; }
+.recherche .touches-raccourci { display: inline-flex; gap: 4px; flex: none; }
+.recherche kbd { min-width: 20px; text-align: center; padding: 0 4px; border-radius: 4px; border: 1px solid var(--border-card); background: var(--surface-card); font: 400 12px/18px var(--font-mono); color: var(--text-secondary); white-space: nowrap; }
 .icone-bouton { 
   display: inline-grid; place-items: center; width: 36px; height: 36px; border: 0; border-radius: var(--radius-sm);
   background: none; color: var(--text-secondary); cursor: pointer; position: relative;
@@ -64,14 +70,22 @@ kbd { font: 400 12px/16px var(--font-mono); }
 .subbar { display: flex; align-items: center; gap: 12px; padding: 0 24px; background: var(--bg-app); position: relative; z-index: 40; }  /* ses menus passent au-dessus du canevas et de ses barres */
 .projet { display: flex; align-items: center; gap: 8px; font-size: 14px; font-weight: 500; min-width: 0; white-space: nowrap; flex: none; }
 .projet > svg { color: var(--text-muted); }
+/* filtres : une rangée de segments (36 de haut, segments de 32) ; sous 1500 px ils se replient derrière « Filtrer » */
+.zone-filtres { position: relative; margin-left: 12px; display: flex; flex: none; }
 .filtres {
-  margin-left: 12px; display: flex; align-items: center; gap: 2px; height: 36px; padding: 2px;
-  border: 1px solid var(--border-subtle); border-radius: 10px; background: var(--surface-field);
-  /* la sous-barre tient toujours dans la fenêtre : les filtres défilent plutôt que de pousser « Lancer une mission » dehors */
-  min-width: 0; overflow-x: auto; scrollbar-width: none;
+  display: flex; align-items: center; gap: 2px; height: 36px; padding: 1px;
+  border: 1px solid var(--border-subtle); border-radius: 10px; background: var(--surface-field); flex: none;
 }
+.filtres .nom-priorite { display: none; }
+.filtres-replies {
+  display: none; align-items: center; gap: 8px; height: 36px; padding: 0 8px 0 12px; border: 1px solid var(--border-card); border-radius: var(--radius-sm);
+  background: var(--surface-inset); color: var(--text-primary); font-size: 13px; cursor: pointer; white-space: nowrap;
+  transition: background var(--dur-hover) var(--ease-standard);
+}
+.filtres-replies:hover { background: var(--surface-hover); }
+.filtres-replies svg { color: var(--text-secondary); }
 .filtres button {
-  height: 30px; padding: 0 12px; border: 0; border-radius: var(--radius-sm); background: none; color: var(--text-secondary);
+  height: 32px; padding: 0 12px; border: 0; border-radius: var(--radius-sm); background: none; color: var(--text-secondary);
   font-size: 13px; cursor: pointer; display: flex; align-items: center; gap: 8px; white-space: nowrap;
   transition: color var(--dur-hover) var(--ease-standard), background var(--dur-hover) var(--ease-standard);
 }
@@ -96,7 +110,7 @@ kbd { font: 400 12px/16px var(--font-mono); }
 }
 .bouton-principal:hover { background: var(--encre-survol); }
 .bouton-principal:active { transform: scale(0.98); }
-.bandeau-demo { display: inline-flex; align-items: center; margin-left: 4px; color: var(--text-muted); font: 400 12px/16px var(--font-mono); }
+.bandeau-demo { display: inline-flex; align-items: center; margin-left: 4px; color: var(--text-muted); font: 400 12px/16px var(--font-sans); }
 
 /* --- zone de travail -------------------------------------------------------------------------------- */
 .travail { display: grid; grid-template-columns: 1fr var(--panel-w); min-height: 0; border-top: 1px solid var(--border-subtle); }
@@ -126,7 +140,7 @@ kbd { font: 400 12px/16px var(--font-mono); }
 .outils button svg { width: 16px; height: 16px; }
 .outils .ajouter { height: 56px; color: var(--text-primary); }
 .outils .ajouter > span:first-child {
-  width: 36px; height: 28px; border-radius: 6px; display: grid; place-items: center; color: var(--sur-encre);
+  width: 36px; height: 28px; border-radius: var(--radius-2xs); display: grid; place-items: center; color: var(--sur-encre);
   background: var(--encre); box-shadow: inset 0 1px 0 var(--brand-highlight);
   transition: background var(--dur-hover) var(--ease-standard);
 }
@@ -162,8 +176,8 @@ kbd { font: 400 12px/16px var(--font-mono); }
 .bouton.succes:hover:not(:disabled) { background: var(--encre-survol); border-color: var(--encre-survol); }
 .bouton.danger { color: var(--text-danger); font-weight: 500; }
 .bouton:disabled { opacity: 0.5; cursor: not-allowed; }
-/* action principale indisponible : surface neutre, pas une encre délavée */
-.bouton.primaire:disabled, .bouton.succes:disabled { background: var(--surface-hover); border-color: var(--border-card); color: var(--text-muted); opacity: 1; }
+/* action principale indisponible : elle reste reconnaissable comme l'action principale, en encre atténuée */
+.bouton.primaire:disabled, .bouton.succes:disabled { opacity: 0.4; }
 
 /* barre de sélection */
 .selection {
@@ -196,7 +210,7 @@ kbd { font: 400 12px/16px var(--font-mono); }
   left: 96px; bottom: 12px; right: auto; margin: 0; border-radius: var(--radius-sm); overflow: hidden; background: var(--surface-card);
   border: 1px solid var(--border-subtle);
 }
-.canevas .react-flow__attribution { background: transparent; color: var(--text-muted); font-size: 12px; }
+.canevas .react-flow__attribution { background: var(--bg-canvas); color: var(--text-muted); font-size: 12px; line-height: 16px; padding: 2px 8px; border-radius: var(--radius-2xs) 0 0 0; }
 .canevas .react-flow__attribution a { color: var(--text-muted); }
 .canevas .react-flow__selection { background: color-mix(in srgb, var(--encre) 8%, transparent); border: 1px solid var(--encre); }
 
@@ -214,9 +228,10 @@ kbd { font: 400 12px/16px var(--font-mono); }
 .carte.verrouillee::after { content: ""; position: absolute; inset: 0; border-radius: inherit; box-shadow: inset 0 0 0 1.5px var(--lock-ring); pointer-events: none; }
 .carte .entete-flottante { position: absolute; top: 12px; left: 12px; right: 12px; display: flex; justify-content: space-between; align-items: flex-start; z-index: 2; pointer-events: none; }
 .carte .entete-flottante > * { pointer-events: auto; }
-/* priorité : une petite étiquette mono ; seul P1 porte une teinte */
+/* priorité : une petite étiquette mono ; P1 se lit par l'encre, sans teinte (le vermillon reste à la ligne de crédit) */
 .badge-p { display: inline-grid; place-items: center; height: 24px; min-width: 32px; padding: 0 8px; border-radius: 6px; font: 500 15px/1 var(--font-mono); background: var(--surface-card-raised); color: var(--text-secondary); box-shadow: inset 0 0 0 1px var(--border-card); }
-.badge-p.P1 { color: var(--accent-texte); }
+.badge-p.P1 { color: var(--text-primary); }
+.badge-p.P2, .badge-p.P3 { font-weight: 400; }
 .badge-p.aucune { font-family: var(--font-sans); font-weight: 400; }
 .badge-p.doux, .badge-p.mini { height: 20px; min-width: 28px; padding: 0 4px; border-radius: 4px; font-size: 12px; }
 .ancre-menu { position: relative; }
@@ -224,6 +239,8 @@ kbd { font: 400 12px/16px var(--font-mono); }
 .menu-carte:hover { background: var(--surface-more); color: var(--text-primary); }
 .titre-carte { font-size: 20px; font-weight: 500; line-height: 28px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .meta-carte { font-size: 15px; line-height: 20px; color: var(--text-secondary); }
+/* chiffres, durées, tailles : toujours en mono */
+.meta-carte.tab-num { font-family: var(--font-mono); }
 p.meta-carte { margin: 0; }
 .tags { display: flex; flex-wrap: wrap; gap: 8px; }
 .tag { height: 28px; padding: 0 8px; border-radius: 6px; display: inline-flex; align-items: center; font-size: 15px; font-weight: 400; background: var(--surface-hover); color: var(--text-secondary); }
@@ -265,6 +282,7 @@ p.meta-carte { margin: 0; }
 .c-note .barre-format button:hover { background: var(--hover-veil); color: var(--text-primary); }
 .c-note .texte { padding: 8px 20px 0; font-size: 17px; line-height: 24px; color: var(--text-primary); flex: 1; min-height: 0; overflow: hidden; }
 .c-note .texte p { margin: 0 0 8px; }
+.carte .texte strong, .carte .texte b, .livrable-texte strong, .livrable-texte b { font-weight: var(--fw-strong); }
 .c-note .texte ul { margin: 0; padding-left: 20px; }
 .c-note .texte li { margin: 4px 0; }
 .c-note textarea { margin: 12px 20px 0; flex: 1; min-height: 0; resize: none; border: 1px solid var(--border-strong); border-radius: var(--radius-sm); background: var(--surface-field); color: var(--text-primary); font: inherit; padding: 8px 12px; outline: none; }
@@ -276,17 +294,19 @@ p.meta-carte { margin: 0; }
 .c-mission .contenu { padding: 24px; display: flex; flex-direction: column; height: 100%; min-height: 0; }
 .c-mission .ligne1 { display: flex; align-items: center; gap: 12px; padding-bottom: 12px; border-bottom: 1px solid var(--border-subtle); }
 .etiquette-type { display: inline-flex; align-items: center; gap: 8px; color: var(--text-secondary); font-size: 15px; line-height: 20px; }
-.statut-pill { margin-left: auto; display: inline-flex; align-items: center; gap: 8px; font-size: 15px; line-height: 20px; font-weight: 500; color: var(--text-secondary); white-space: nowrap; }
-.statut-pill.en-cours { color: var(--text-primary); }
-.statut-pill.reussie { color: var(--text-success); }
-.statut-pill.echouee, .statut-pill.echec { color: var(--text-danger); }
-.statut-pill.attente { color: var(--text-warning); }
+/* un état : un point de couleur de sens, puis le mot dans la couleur du texte (même système que les pages) */
+.statut-pill { margin-left: auto; display: inline-flex; align-items: center; gap: 10px; font-size: 15px; line-height: 20px; font-weight: 400; color: var(--text-secondary); white-space: nowrap; }
+.statut-pill.en-cours { color: var(--text-primary); font-weight: 500; }
+.point-statut { width: 10px; height: 10px; border-radius: 50%; background: var(--statut-neutre); flex: none; }
+.statut-pill.reussie .point-statut { background: var(--success); }
+.statut-pill.echouee .point-statut, .statut-pill.echec .point-statut { background: var(--danger); }
+.statut-pill.attente .point-statut { background: var(--warning); }
 .statut-pill .depuis { color: var(--text-secondary); margin-left: -8px; white-space: pre; font: 400 15px/20px var(--font-mono); font-variant-numeric: tabular-nums; }
 .c-mission h3 { margin: 16px 0 12px; font: 500 30px/36px var(--font-serif); font-optical-sizing: auto; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
 .progression { display: flex; align-items: center; gap: 16px; }
 .progression .barre { flex: 1; height: 4px; border-radius: 2px; background: var(--surface-more); overflow: hidden; }
 .progression .barre > span { display: block; height: 100%; border-radius: inherit; background: var(--encre); transform-origin: left; transition: transform var(--dur-panel) var(--ease-standard); }
-.progression output { font: 400 15px/20px var(--font-mono); font-variant-numeric: tabular-nums; min-width: 44px; text-align: right; color: var(--text-secondary); }
+.progression output { font: 400 15px/20px var(--font-mono); font-variant-numeric: tabular-nums; min-width: 44px; white-space: nowrap; text-align: right; color: var(--text-secondary); }
 .etapes { list-style: none; margin: 16px 0 0; padding: 0; display: grid; gap: 8px; }
 .etapes li { display: flex; align-items: center; gap: 12px; min-height: 28px; font-size: 17px; color: var(--text-secondary); }
 .etapes li.encours { color: var(--text-primary); font-weight: 500; }
@@ -294,12 +314,11 @@ p.meta-carte { margin: 0; }
 .etapes .niveau { font: 400 15px/20px var(--font-mono); color: var(--text-muted); }
 .coche { width: 24px; height: 24px; border-radius: 50%; display: grid; place-items: center; flex: none; }
 .coche.faite { background: var(--encre); color: var(--sur-encre); }
-.coche.encours { border: 2px solid var(--accent); }
+.coche.encours { border: 2px solid var(--encre); background: linear-gradient(90deg, var(--encre) 50%, transparent 50%); }
 .coche.attente { border: 2px solid var(--border-check); }
 .coche.echec { background: var(--danger); color: var(--sur-encre); }
-/* la ligne de crédit de la une, à l'échelle du canevas */
+/* pied de la une : l'échéance en mono discret (sans filet : ce n'est pas un crédit) et l'équipe */
 .c-mission .bas { margin-top: auto; display: flex; align-items: center; gap: 8px; min-height: 40px; color: var(--text-muted); font: 400 15px/20px var(--font-mono); font-variant-numeric: tabular-nums; }
-.c-mission .bas::before { content: ""; width: 16px; height: 2.5px; background: var(--accent); flex: none; }
 .c-mission .bas .date { color: var(--text-secondary); }
 .pile-avatars { margin-left: auto; display: flex; align-items: center; }
 .pile-avatars > * { margin-left: -8px; box-shadow: 0 0 0 2px var(--surface-card); }
@@ -354,7 +373,7 @@ p.meta-carte { margin: 0; }
 .c-video .bas { position: absolute; left: 16px; right: 16px; bottom: 12px; display: flex; align-items: center; gap: 12px; }
 .c-video .bas .petit-lecture { width: 40px; height: 40px; border-radius: 50%; border: 1.5px solid var(--on-media-border); background: var(--media-veil-2); color: var(--on-media); display: grid; place-items: center; cursor: pointer; flex: none; }
 .c-video .bas .titre-carte { color: var(--on-media); }
-.c-video .bas .meta-carte { color: var(--on-media-2); font-family: var(--font-mono); }
+.c-video .bas .meta-carte { color: var(--on-media-2); }
 .c-video .controles { position: absolute; left: 12px; right: 12px; bottom: 12px; display: flex; align-items: center; gap: 8px; }
 .c-video .controles input[type="range"] { flex: 1; accent-color: var(--on-media); }
 .c-video .controles button { width: 32px; height: 32px; border-radius: var(--radius-sm); border: 0; background: color-mix(in srgb, var(--media-bg) 60%, transparent); color: var(--on-media); display: grid; place-items: center; cursor: pointer; }
@@ -395,7 +414,7 @@ p.meta-carte { margin: 0; }
 
 /* --- panneau droit ---------------------------------------------------------------------------------- */
 .panneau { background: var(--surface-panel); border-left: 1px solid var(--border-subtle); display: flex; flex-direction: column; min-height: 0; }
-.onglets { display: flex; gap: 20px; padding: 0 20px; border-bottom: 1px solid var(--border-subtle); height: 44px; flex: none; }
+.onglets { display: flex; gap: 20px; padding: 0 20px; border-bottom: 1px solid var(--border-subtle); height: 44px; box-sizing: content-box; flex: none; }
 .onglets button { position: relative; display: inline-flex; align-items: center; gap: 8px; border: 0; background: none; color: var(--text-secondary); font-size: 14px; padding: 0; cursor: pointer; transition: color var(--dur-hover) var(--ease-standard); }
 .onglets button:hover { color: var(--text-primary); }
 .onglets button[aria-selected="true"] { color: var(--text-primary); font-weight: 500; }
@@ -424,7 +443,7 @@ p.meta-carte { margin: 0; }
 .p-progression { display: flex; align-items: center; gap: 12px; margin-top: 12px; font-size: 13px; color: var(--text-secondary); }
 .p-progression .barre { flex: 1; height: 4px; border-radius: 2px; background: var(--surface-more); overflow: hidden; }
 .p-progression .barre > span { display: block; height: 100%; background: var(--encre); border-radius: inherit; transform-origin: left; transition: transform var(--dur-panel) var(--ease-standard); }
-.p-progression output { color: var(--text-primary); font: 400 12px/16px var(--font-mono); font-variant-numeric: tabular-nums; min-width: 36px; text-align: right; }
+.p-progression output { color: var(--text-primary); font: 400 12px/16px var(--font-mono); font-variant-numeric: tabular-nums; min-width: 36px; text-align: right; white-space: nowrap; }
 .p-description { margin-top: 16px; font-size: 13px; color: var(--text-secondary); }
 .p-description p { margin: 4px 0 0; color: var(--text-primary); line-height: 20px; }
 .panneau .tags { gap: 8px; margin-top: 16px; }
@@ -436,9 +455,9 @@ p.meta-carte { margin: 0; }
 .liste-taches li { display: flex; align-items: center; gap: 12px; min-height: 28px; font-size: 13px; color: var(--text-secondary); }
 .liste-taches li.faite { color: var(--text-primary); }
 .liste-taches .niveau, .ligne-approbation .niveau, .prop-texte .niveau { margin-left: auto; padding: 0 4px; border-radius: 4px; border: 1px solid var(--border-card); background: var(--surface-card); color: var(--text-secondary); font: 400 12px/18px var(--font-mono); }
-.case { width: 16px; height: 16px; border-radius: 4px; display: grid; place-items: center; flex: none; border: 1.5px solid var(--border-check); }
+.case { width: 16px; height: 16px; border-radius: 50%; display: grid; place-items: center; flex: none; border: 1.5px solid var(--border-check); }
 .case.faite { background: var(--encre); border-color: var(--encre); color: var(--sur-encre); }
-.case.encours { border-radius: 50%; border: 2px solid var(--accent); }
+.case.encours { border: 2px solid var(--encre); background: linear-gradient(90deg, var(--encre) 50%, transparent 50%); }
 .ligne-agents { display: flex; align-items: center; justify-content: space-between; gap: 16px; font-size: 13px; color: var(--text-secondary); }
 .ligne-agents .pile { display: flex; gap: 8px; align-items: center; }
 .compte-attente { display: inline-flex; align-items: center; color: var(--accent-texte); font: 400 12px/16px var(--font-mono); font-variant-numeric: tabular-nums; }
@@ -482,6 +501,10 @@ p.meta-carte { margin: 0; }
 .menu-deroulant > button svg { color: var(--text-secondary); }
 .menu-deroulant > button:hover { background: var(--surface-hover); }
 .menu-deroulant > button.danger, .menu-deroulant > button.danger svg { color: var(--text-danger); }
+/* menu d'une carte : rendu hors du canevas (portail), en pixels écran quel que soit le zoom. Rangées de 36, texte 14/20, icônes 16. */
+.menu-deroulant.menu-flottant { position: fixed; right: auto; top: auto; z-index: 95; font-size: 14px; line-height: 20px; max-height: calc(100vh - 16px); overflow-y: auto; scrollbar-width: thin; }
+.menu-flottant .badge-p { height: 24px; min-width: 32px; border-radius: 6px; font-size: 12px; }
+.menu-flottant > button.avec-raison small { font-size: 12px; line-height: 16px; }
 .menu-priorites { display: flex; gap: 8px; padding: 4px 4px 8px; border-bottom: 1px solid var(--border-subtle); margin-bottom: 4px; }
 .menu-priorites button { border: 0; cursor: pointer; }
 .menu-priorites button[aria-checked="true"] { outline: 2px solid var(--encre); outline-offset: 1px; }
@@ -491,7 +514,7 @@ p.meta-carte { margin: 0; }
 .tourne { animation: tourne 1.6s linear infinite; }
 @keyframes tourne { to { transform: rotate(360deg); } }
 @media (prefers-reduced-motion: reduce) { .tourne { animation: none; } }
-.porte, .porte-v2 { max-width: 560px; margin: 18vh auto; padding: 28px; border-radius: var(--radius-panel); border: 1px solid var(--border-card); background: var(--surface-card); }
+.porte, .porte-v2 { width: min(560px, calc(100% - 32px)); margin: 18vh auto; padding: 28px; border-radius: var(--radius-panel); border: 1px solid var(--border-card); background: var(--surface-card); }
 .porte-v2 h1 { margin-top: 0; font-size: 20px; font-weight: 500; }
 .porte-v2 a { color: var(--encre-survol); }
 .porte-v2 code { font: 400 13px var(--font-mono); color: var(--text-secondary); }
@@ -501,9 +524,12 @@ p.meta-carte { margin: 0; }
 .choix-priorite:focus-within { outline: 2px solid var(--focus); outline-offset: 2px; border-radius: 6px; }
 
 /* niveau de détail : sous 35 % de zoom, la carte devient un rectangle titré (pas d'ombre, pas de média, pas de lecteur) */
-.carte.carte-resume { box-shadow: none; align-items: center; justify-content: center; gap: 16px; padding: 24px; color: var(--text-secondary); text-align: center; }
+.carte.carte-resume { box-shadow: none; align-items: center; justify-content: center; gap: 16px; padding: 24px; color: var(--text-secondary); text-align: center; overflow: hidden; background: var(--surface-card); container-type: size; }
+.carte-resume > svg { flex: none; }
+@container (max-height: 260px) { .carte-resume > svg { display: none; } .carte-resume .titre-resume { -webkit-line-clamp: 2; } }
+@container (max-height: 160px) { .carte-resume .titre-resume { -webkit-line-clamp: 1; } }
 .carte-resume .badge-p { position: absolute; top: 16px; left: 16px; height: 40px; min-width: 56px; border-radius: var(--radius-sm); font-size: 24px; }
-.carte-resume .titre-resume { font-size: 40px; font-weight: 500; color: var(--text-primary); line-height: 48px; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+.carte-resume .titre-resume { font-size: 40px; font-weight: 500; color: var(--text-primary); line-height: 48px; min-height: 0; max-width: 100%; overflow-wrap: anywhere; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
 .react-flow__node-mission .carte-resume { border: 2px solid var(--encre); }
 .react-flow__node-mission .carte-resume .titre-resume { font-family: var(--font-serif); }
 
@@ -624,12 +650,21 @@ p.meta-carte { margin: 0; }
 
 /* --- petits écrans (en dernier : ces règles l'emportent sur celles du bureau) --------------------------------- */
 @media (max-width: 1500px) {
-  .filtres { margin-left: 0; }
+  .zone-filtres { margin-left: 0; }
   .bouton-principal { margin-left: 0; }
+  .filtres-replies { display: inline-flex; }
+  .filtres { display: none; }
+  .zone-filtres.ouverte .filtres {
+    display: grid; position: absolute; top: calc(100% + 4px); left: 0; z-index: 50; height: auto; min-width: 208px; padding: 4px; gap: 2px;
+    border: 1px solid var(--border-strong); border-radius: var(--radius-card); background: var(--surface-card-raised); box-shadow: var(--shadow-lift);
+    animation: menu-entree var(--dur-appear) var(--ease-standard);
+  }
+  .zone-filtres.ouverte .filtres button { height: 36px; padding: 0 8px 0 12px; justify-content: space-between; font-size: 14px; }
+  .zone-filtres.ouverte .filtres .filtre-priorite { flex-direction: row-reverse; border-top: 1px solid var(--border-subtle); border-radius: 0 0 var(--radius-sm) var(--radius-sm); color: var(--text-secondary); }
+  .zone-filtres.ouverte .filtres .nom-priorite { display: inline; }
 }
 @media (max-width: 1360px) {
   :root { --panel-w: 320px; }
-  .filtres .compte { display: none; }
   .nav button span { display: none; }
   .recherche { width: 200px; }
 }
@@ -637,16 +672,25 @@ p.meta-carte { margin: 0; }
   .app { grid-template-rows: var(--topbar-h) auto 1fr; }
   .nav, .profil .chevron { display: none; }
   .recherche { width: auto; flex: 1; }
+  /* deux rangées nettes : le projet et l'action principale, puis le filtre et les dialogues du projet */
   .subbar { flex-wrap: wrap; padding: 8px 16px; gap: 8px; }
-  .filtres { order: 3; margin: 0; width: 100%; overflow-x: auto; }
-  .filtres button { height: 30px; }
+  .subbar::before { content: ""; order: 2; flex-basis: 100%; height: 0; margin: -4px 0; }
+  .subbar > .projet { order: 0; flex: 1 1 0; min-width: 0; overflow: hidden; }
+  .subbar > .bouton-principal { order: 1; margin-left: auto; padding: 0 12px; }
+  .subbar > * { order: 3; }
+  .subbar > .zone-filtres { margin-right: auto; }
   .zoom, .bouton-carre { display: none; }
-  .bouton-principal { margin-left: auto; padding: 0 12px; }
-  .travail { grid-template-columns: 1fr; grid-template-rows: 1fr auto; }
-  .panneau { margin: 0; max-height: 42vh; border-radius: 0; border-left: 0; border-top: 1px solid var(--border-subtle); }
+  /* le canevas prend toute la hauteur ; le panneau n'apparaît qu'avec une sélection, en tiroir bas (60 % au plus) */
+  .travail { grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(0, 1fr); position: relative; }
+  .panneau { display: none; }
+  .app.a-selection .panneau { display: flex; position: absolute; left: 0; right: 0; bottom: 0; z-index: 45; max-height: 60%; border-left: 0;
+    border-top: 1px solid var(--border-strong); border-radius: var(--radius-panel) var(--radius-panel) 0 0; box-shadow: var(--shadow-lift); }
+  /* une seule barre contextuelle à la fois : pendant une sélection, la barre flottante remplace les outils et la barre d'ajout */
+  .app.a-selection .barre-modes, .app.a-selection .outils { display: none; }
   .section { padding: 16px; }
   .onglets { padding: 0 16px; }
   .outils { top: auto; bottom: 12px; left: 50%; transform: translateX(-50%); width: auto; flex-direction: row; align-items: center; padding: 4px; }
+  .canevas .react-flow__attribution { left: 0; right: auto; border-radius: 0 var(--radius-2xs) 0 0; }
   .outils button { width: 44px; height: 44px; font-size: 0; gap: 0; }
   .outils .ajouter { height: 44px; margin: 0; }
   .outils .ajouter > span:first-child { width: 36px; height: 32px; }

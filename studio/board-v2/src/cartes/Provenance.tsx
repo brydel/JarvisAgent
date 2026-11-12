@@ -4,6 +4,7 @@
 //
 // Ces lignes ne recouvrent jamais une carte voisine : la place libre est mesurée (board/degagement.ts). Ce qui
 // ne tient pas dehors se replie dans le cadre de la carte elle-même (un onglet), et s'ouvre à la demande.
+import { dateCourte, dateHeure } from "../lib/format";
 import { memo, useEffect, useRef, useState } from "react";
 import { ArrowRightToLine, BookMarked, ChevronDown, Hourglass, Lock, LockOpen } from "lucide-react";
 import { DEBORD_HAUT, creditTient, lignesQuiTiennent, useDegagement } from "../board/degagement";
@@ -25,12 +26,12 @@ export const EtatsCarte = memo(function EtatsCarte({ objet }: { objet: ObjetBoar
 });
 
 /** Date absolue (stable, lisible hors contexte) plutôt que « il y a 3 min ». */
-const jour = (ts: number) => new Date(ts * 1000).toLocaleDateString("fr-FR", { day: "numeric", month: "short", year: "numeric" });
+const jour = dateCourte;
 
 /** La provenance en clair, pour l'info-bulle et les lecteurs d'écran. */
 export function detailProvenance(p: Provenance): string {
   return [p.auteur && `Posée par ${p.auteur}`, p.modele && `modèle ou fournisseur : ${p.modele}`,
-    p.date && `${p.modifiee ? "modifiée" : "créée"} le ${new Date(p.date * 1000).toLocaleString("fr-FR")}`, `version ${p.version}`,
+    p.date && `${p.modifiee ? "modifiée" : "créée"} le ${dateHeure(p.date)}`, `version ${p.version}`,
     p.sources ? `${p.sources} source${p.sources > 1 ? "s" : ""} liée${p.sources > 1 ? "s" : ""}` : ""].filter(Boolean).join(" · ");
 }
 

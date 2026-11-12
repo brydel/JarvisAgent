@@ -1,8 +1,9 @@
 /* Intégrations — même gabarit de dialogue que Réseau des agents et Missions outillées.
    Surfaces neutres, encre pour l'onglet actif ; la couleur ne sert qu'à l'état vérifié / à vérifier / échoué (pastille). */
-.integrations-ouvrir { flex: none; height: 36px; padding: 0 12px; display: inline-flex; align-items: center; gap: 8px; border: 1px solid var(--border-card); border-radius: var(--radius-sm); background: var(--surface-inset); color: var(--text-primary); font-size: 13px; cursor: pointer; white-space: nowrap; transition: background var(--dur-hover) var(--ease-standard); }
+.integrations-ouvrir { flex: none; width: 36px; height: 36px; padding: 0; display: inline-flex; align-items: center; justify-content: center; border: 1px solid var(--border-card); border-radius: var(--radius-sm); background: var(--surface-inset); color: var(--text-primary); font-size: 13px; cursor: pointer; white-space: nowrap; transition: background var(--dur-hover) var(--ease-standard); }
 .integrations-ouvrir:hover { background: var(--surface-hover); }
-.integrations-ouvrir svg { color: var(--text-muted); stroke-width: 1.5; }
+.integrations-ouvrir svg { color: var(--text-secondary); stroke-width: 1.5; }
+.integrations-ouvrir > span { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
 
 .integrations-dialog { width: min(1120px, calc(100vw - 40px)); max-height: min(800px, calc(100dvh - 96px)); margin-top: 48px; padding: 0; border: 1px solid var(--border-card); border-radius: var(--radius-panel); background: var(--surface-card); color: var(--text-primary); overflow: hidden; box-shadow: var(--shadow-lift); }
 .integrations-dialog[open] { display: flex; flex-direction: column; }
@@ -91,7 +92,6 @@
 .integrations-vide p { margin: 0; font-size: 13px; line-height: 20px; color: var(--text-secondary); }
 .integrations-vide h3 + p { margin-top: 4px; }
 
-@media (max-width: 1500px) { .integrations-ouvrir { width: 36px; padding: 0; justify-content: center; } .integrations-ouvrir > span { display: none; } }
 @media (max-width: 600px) {
   .integrations-dialog { width: calc(100vw - 16px); max-height: calc(100dvh - 24px); margin-top: 12px; border-radius: var(--radius-card); }
   .integrations-entete { padding: 8px 8px 8px 16px; }

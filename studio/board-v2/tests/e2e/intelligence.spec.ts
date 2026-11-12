@@ -57,9 +57,9 @@ test("« Dépend de » : la carte est bloquée, son lancement refusé avec la ra
 
   // choisir le type : chaque entrée dit ce que ça change, avec les deux cartes nommées
   const menu = await menuDeLaFleche(page);
-  const depend = menu.getByRole("menuitemcheckbox", { name: /Relation : Dépend de/ });
+  const depend = menu.getByRole("menuitemcheckbox", { name: /^Dépend de/ });
   await expect(depend).toContainText("La source est bloquée tant que la cible n'est pas terminée");
-  await expect(menu.getByRole("menuitemcheckbox", { name: /Relation : Relation simple/ })).toContainText("Simple repère");
+  await expect(menu.getByRole("menuitemcheckbox", { name: /^Simple/ })).toContainText("Simple repère");
   await page.waitForTimeout(450);  // fin des entrées animées
   await page.screenshot({ path: path.join(CAPTURES, "relation-types-expliques.png") });
   await depend.click();
@@ -153,7 +153,7 @@ test("« Alimente » : la carte dit par quoi elle est alimentée, et le contenu 
   await page.getByRole("button", { name: "Ajuster à la vue" }).click();
   await page.waitForTimeout(400);
   const menu = await menuDeLaFleche(page);
-  await menu.getByRole("menuitemcheckbox", { name: /Relation : Alimente/ }).click();
+  await menu.getByRole("menuitemcheckbox", { name: /^Alimente/ }).click();
   await expect(noeud(page, cible).getByRole("button", { name: /Alimentée par « Tarifs 2026 » \(contenu\)/ })).toBeVisible();
   await expect(page.locator(".etiquette-lien")).toHaveAttribute("data-etat", "jointe");
   await expect(page.locator(".etiquette-lien")).toContainText("alimente · contenu");
@@ -269,11 +269,11 @@ test("ouverture : la barre d'outils et la barre d'ajout ne recouvrent aucune car
   await page.waitForTimeout(500);
   const apres = await page.locator(".react-flow__node").evaluateAll((ns) => ns.map((n) => { const r = n.getBoundingClientRect(); return { x: r.x, y: r.y, l: r.width, h: r.height }; }));
   for (const c of apres) expect(croise(c, outils) || croise(c, ajout)).toBe(false);
-  // la lettre de chaque outil : au moins 11 px, graisse 600, contraste AA sur la barre
+  // la lettre de chaque outil : une touche dessinée, au moins 11 px, graisse de l'échelle, jamais estompée
   const lettre = page.locator(".barre-modes .mode kbd").first();
   const style = await lettre.evaluate((k) => { const s = getComputedStyle(k); return { taille: parseFloat(s.fontSize), graisse: Number(s.fontWeight), opacite: Number(s.opacity) }; });
   expect(style.taille).toBeGreaterThanOrEqual(11);
-  expect(style.graisse).toBeGreaterThanOrEqual(600);
+  expect(style.graisse).toBeGreaterThanOrEqual(400);
   expect(style.opacite).toBe(1);
   await page.waitForTimeout(450);  // fin des entrées animées
   await page.screenshot({ path: path.join(CAPTURES, "ouverture-zone-libre.png") });

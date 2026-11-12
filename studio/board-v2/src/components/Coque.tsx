@@ -78,6 +78,18 @@ export const SousBarre = memo(function SousBarre({ projet, espaces = [], changer
   const { executer } = useCommandes();
   const zoom = useStore((s) => s.transform[2]);
   const jour = useUi((e) => e.theme) === "jour";
+  // fenêtre étroite : les filtres se replient derrière un bouton « Filtrer » qui ouvre la même liste (jamais de libellé rogné)
+  const [filtresOuverts, setFiltresOuverts] = useState(false);
+  const zoneFiltres = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!filtresOuverts) return;
+    const dehors = (e: PointerEvent) => { if (!zoneFiltres.current?.contains(e.target as Node)) setFiltresOuverts(false); };
+    const echap = (e: KeyboardEvent) => { if (e.key === "Escape") setFiltresOuverts(false); };
+    window.addEventListener("pointerdown", dehors);
+    window.addEventListener("keydown", echap);
+    return () => { window.removeEventListener("pointerdown", dehors); window.removeEventListener("keydown", echap); };
+  }, [filtresOuverts]);
+  const filtreActif = FILTRES.find((f) => f.cle === filtre);
   return (
     <div className="subbar">
       <div className="projet">
@@ -86,16 +98,23 @@ export const SousBarre = memo(function SousBarre({ projet, espaces = [], changer
         )}
         {demo && <span className="bandeau-demo" role="note" title="Données fictives, rien n'est enregistré">Démo</span>}
       </div>
-      <div className="filtres" role="group" aria-label="Filtrer par type">
-        {FILTRES.map((f) => (
-          <button key={f.cle} type="button" aria-pressed={filtre === f.cle} onClick={() => setFiltre(f.cle)}>
-            {f.nom}<span className="compte">{compteurs[f.cle]}</span>
-          </button>
-        ))}
-        <button type="button" aria-label="Filtrer par priorité" title="Filtrer par priorité"
-          onClick={() => setPriorite(priorite === "" ? "P1" : priorite === "P1" ? "P2" : priorite === "P2" ? "P3" : "")}>
-          {priorite ? <span className={`badge-p ${priorite} doux`}>{priorite}</span> : <ListFilter size={16} />}
+      <div ref={zoneFiltres} className={`zone-filtres${filtresOuverts ? " ouverte" : ""}`}>
+        <button type="button" className="filtres-replies" aria-expanded={filtresOuverts} aria-controls="liste-filtres"
+          aria-label={`Filtrer : ${filtreActif?.nom ?? "Tous"}${priorite ? `, priorité ${priorite}` : ""}`} onClick={() => setFiltresOuverts((v) => !v)}>
+          <ListFilter size={16} aria-hidden /><span>{filtre === "tous" ? "Filtrer" : filtreActif?.nom}</span>
+          {priorite && <span className={`badge-p ${priorite} doux`}>{priorite}</span>}<ChevronDown size={16} aria-hidden />
         </button>
+        <div id="liste-filtres" className="filtres" role="group" aria-label="Filtrer par type">
+          {FILTRES.map((f) => (
+            <button key={f.cle} type="button" aria-pressed={filtre === f.cle} onClick={() => { setFiltre(f.cle); setFiltresOuverts(false); }}>
+              {f.nom}<span className="compte">{compteurs[f.cle]}</span>
+            </button>
+          ))}
+          <button type="button" className="filtre-priorite" aria-label="Filtrer par priorité" title="Filtrer par priorité"
+            onClick={() => setPriorite(priorite === "" ? "P1" : priorite === "P1" ? "P2" : priorite === "P2" ? "P3" : "")}>
+            {priorite ? <span className={`badge-p ${priorite} doux`}>{priorite}</span> : <ListFilter size={16} />}<span className="nom-priorite">Priorité</span>
+          </button>
+        </div>
       </div>
       <div className="zoom" role="group" aria-label="Zoom">
         <BoutonCommande id="vue.zoomArriere"><Minus size={16} /></BoutonCommande>

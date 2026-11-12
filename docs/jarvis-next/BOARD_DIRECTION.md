@@ -120,7 +120,7 @@ Les cartes du Board sont dessinées en unités du canevas (0,8 px écran au zoom
 Règles :
 
 - Rien sous 12 px à l'écran (11 px au plus petit en mobile) ; sur le canevas, rien sous 15 unités.
-- Deux graisses : `--fw-regular` (400) et `--fw-medium` (500). `--fw-strong` (600) pour le mot-symbole et la lettre de raccourci de la barre d'outils, rien d'autre. La hiérarchie vient de la taille et du rôle de texte.
+- Deux graisses : `--fw-regular` (400) et `--fw-medium` (500). `--fw-strong` (600) pour le mot-symbole et le gras d'un texte saisi (note, livrable), rien d'autre. La hiérarchie vient de la taille et du rôle de texte.
 - Casse de phrase partout, pas de capitales espacées, pas d'italique d'emphase.
 - Interlettrage 0 ; seul le titre d'accueil prend `--tracking-display`.
 - Chiffres : `font-variant-numeric: tabular-nums`, un seul format par écran.

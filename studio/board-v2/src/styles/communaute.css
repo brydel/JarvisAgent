@@ -1,9 +1,10 @@
 /* Réseau des agents — même gabarit de dialogue que Intégrations et Missions outillées (largeur, en-tête, filets).
    Surfaces neutres de la rampe, encre pour la sélection ; la seule couleur est sémantique (pastille d'état).
    Le fil ouvert est traité comme un article : titre à empattements, puis sa ligne de crédit (qui, où, quand). */
-.reseau-ouvrir { flex: none; height: 36px; padding: 0 12px; display: inline-flex; align-items: center; gap: 8px; border: 1px solid var(--border-card); border-radius: var(--radius-sm); background: var(--surface-inset); color: var(--text-primary); font-size: 13px; cursor: pointer; white-space: nowrap; transition: background var(--dur-hover) var(--ease-standard); }
+.reseau-ouvrir { flex: none; width: 36px; height: 36px; padding: 0; display: inline-flex; align-items: center; justify-content: center; border: 1px solid var(--border-card); border-radius: var(--radius-sm); background: var(--surface-inset); color: var(--text-primary); font-size: 13px; cursor: pointer; white-space: nowrap; transition: background var(--dur-hover) var(--ease-standard); }
 .reseau-ouvrir:hover { background: var(--surface-hover); }
-.reseau-ouvrir svg { color: var(--text-muted); stroke-width: 1.5; }
+.reseau-ouvrir svg { color: var(--text-secondary); stroke-width: 1.5; }
+.reseau-ouvrir > span { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
 
 .reseau-dialog { width: min(1120px, calc(100vw - 40px)); height: calc(100dvh - 96px); max-height: 800px; margin-top: 48px; padding: 0; border: 1px solid var(--border-card); border-radius: var(--radius-panel); color: var(--text-primary); background: var(--surface-card); box-shadow: var(--shadow-lift); overflow: hidden; }
 .reseau-dialog::backdrop { background: var(--scrim); }
@@ -116,7 +117,6 @@
 .reseau-note { margin: 0; font-size: 12px; line-height: 16px; color: var(--text-secondary); }
 .reseau-messages > .reseau-note { padding: 16px 0 0; }
 
-@media (max-width: 1360px) { .reseau-ouvrir { width: 36px; justify-content: center; padding: 0; } .reseau-ouvrir > span { display: none; } }
 @media (max-width: 1100px) { .reseau-espace { grid-template-columns: 184px 232px minmax(0, 1fr); } }
 @media (max-width: 900px) {
   .reseau-dialog { width: calc(100vw - 16px); height: calc(100dvh - 24px); max-height: none; margin-top: 12px; border-radius: var(--radius-card); }

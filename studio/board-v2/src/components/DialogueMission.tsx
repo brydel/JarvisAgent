@@ -1,7 +1,7 @@
+import { MENTION_DEMO } from "../lib/format";
 import { useEffect, useId, useRef, useState } from "react";
 import { motion } from "motion/react";
 import { Loader, ShieldCheck, X } from "lucide-react";
-import { siClaude } from "simple-icons";
 import type { Priorite } from "../types";
 import "../styles/dialogue-mission.css";
 
@@ -97,7 +97,7 @@ export function DialogueMission({ ouvert, initialObjectif, demo, fermer, lancer 
             <label className="champ-groupe">
               <span className="champ-libelle">Objectif <span className="requis" aria-hidden="true">*</span></span>
               <input ref={champObjectif} className="champ" name="objectif" required autoComplete="off" maxLength={OBJECTIF_MAX}
-                placeholder="Refondre l'accueil du Studio" value={objectif} onChange={(e) => setObjectif(e.target.value)}
+                placeholder="Ex. : refondre l'accueil du Studio" value={objectif} onChange={(e) => setObjectif(e.target.value)}
                 aria-invalid={objectif.length > OBJECTIF_MAX} />
               <span className="champ-aide compte">{objectif.length} / {OBJECTIF_MAX}</span>
             </label>
@@ -116,7 +116,6 @@ export function DialogueMission({ ouvert, initialObjectif, demo, fermer, lancer 
                 {FOURNISSEURS.map((f) => (
                   <label key={f.cle} title={f.aide} className={fournisseur === f.cle ? "actif" : undefined}>
                     <input type="radio" name="fournisseur" value={f.cle} checked={fournisseur === f.cle} onChange={() => setFournisseur(f.cle)} />
-                    {f.cle === "claude" && <svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true"><path d={siClaude.path} fill={`#${siClaude.hex}`} /></svg>}
                     {f.nom}
                   </label>
                 ))}
@@ -137,7 +136,7 @@ export function DialogueMission({ ouvert, initialObjectif, demo, fermer, lancer 
               <span>Mission de cadrage <b>L1</b> : analyse sans outils, aucun envoi, aucune publication, aucune dépense.
                 Toute action externe (L3/L4) demandera ton accord dans le panneau d'approbations.</span>
             </p>
-            {demo && <p className="dialogue-demo" role="note">Mode démo : la carte est ajoutée localement, aucune mission réelle n'est lancée</p>}
+            {demo && <p className="mention-demo" role="note">{MENTION_DEMO}</p>}
             {erreur && <p className="dialogue-erreur" role="alert">{erreur}</p>}
           </div>
 

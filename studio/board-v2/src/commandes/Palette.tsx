@@ -3,8 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Check, Search } from "lucide-react";
 import type { ContexteBoard } from "./contexte";
-import { afficher } from "./raccourcis";
-import { useCommandes } from "./react";
+import { Touches, useCommandes } from "./react";
 import { chercher } from "./recherche";
 import { libelleDe, raccourcisDe, type Commande } from "./types";
 
@@ -89,7 +88,7 @@ export function Palette({ fermer }: { fermer: () => void }) {
                   <span className="palette-libelle">{l.libelle}{l.raison !== null && <small className="palette-raison">Indisponible : {l.raison}</small>}</span>
                   {l.cmd.actif?.(c) && <Check size={16} className="palette-coche" aria-label="actif" />}
                   {!l.groupe && <span className="palette-categorie">{l.cmd.categorie}</span>}
-                  {r && <kbd>{afficher(r)}</kbd>}
+                  {r && <Touches raccourci={r} />}
                 </div>
               </div>
             );

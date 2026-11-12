@@ -1,3 +1,4 @@
+import { dateHeure } from "../lib/format";
 import { useEffect, useId, useRef, useState } from "react";
 import { ArrowUpRight, Bot, Check, CircleHelp, Clock3, KeyRound, LoaderCircle, Mail, Pause, Play, Plus, RefreshCw, ShieldCheck, Square, X } from "lucide-react";
 import type { Source } from "../api";
@@ -43,7 +44,7 @@ const SCOPES = [
 ];
 const MODELE_VIDE: ConfigurationModele = { provider: "openai_responses", model: "", api_key_env: "JARVIS_OPENAI_API_KEY", max_output_tokens: 4096, timeout_s: 90, max_turns: 12 };
 const lignes = (texte: string) => texte.split("\n").map(s => s.trim()).filter(Boolean);
-const date = (ts: number) => new Date(ts * 1000).toLocaleString("fr-FR", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
+const date = dateHeure;
 const actif = (m: Mandat) => m.revoked_at === null && m.expires_at > Date.now() / 1000 && m.used_actions < m.max_actions;
 
 async function api<T>(url: string, init?: RequestInit, timeoutMs = 25000): Promise<T> {
@@ -287,8 +288,9 @@ export function RuntimeAgents({ source }: { source: Source }) {
             verifier={async () => { await agir("verifier-modele", () => post<VerificationModele>("/api/v2/modeles-runtime/verifier", {}, 125000), setVerification, "Vérification terminée, sans inférence"); }}/>} 
           {onglet === "missions" && <>
             <div className="runtime-intro avec-action"><div><h3>Missions</h3><p>Chaque mission utilise un modèle configuré, les outils choisis et un mandat. La réponse finale attend ta relecture.</p></div>
-              <button type="button" className="bouton primaire" disabled={!!action} onClick={() => { setNouvelleMission(!nouvelleMission); setErreur(""); setConfirmation(""); }}><Plus size={16}/>{nouvelleMission ? "Fermer le formulaire" : "Nouvelle mission outillée"}</button></div>
-            {!configuration?.model && !chargement && <div className="runtime-prealable"><KeyRound size={16}/><div><strong>Configure d'abord un modèle</strong><p>Son identifiant et une clé disponible sur le serveur sont nécessaires pour exécuter une mission</p></div><button type="button" className="bouton" onClick={() => changerOnglet("modele")}>Configurer le modèle</button></div>}
+              <button type="button" className={nouvelleMission ? "bouton" : "bouton primaire"} disabled={!!action || (!nouvelleMission && !chargement && !configuration?.model)} title={!nouvelleMission && !chargement && !configuration?.model ? "Configure d'abord un modèle" : undefined}
+                onClick={() => { setNouvelleMission(!nouvelleMission); setErreur(""); setConfirmation(""); }}>{nouvelleMission ? <X size={16}/> : <Plus size={16}/>}{nouvelleMission ? "Fermer le formulaire" : "Nouvelle mission outillée"}</button></div>
+            {!configuration?.model && !chargement && <div className="runtime-prealable"><KeyRound size={16}/><div><strong>Configure d'abord un modèle</strong><p>Son identifiant et une clé disponible sur le serveur sont nécessaires pour exécuter une mission</p></div><button type="button" className="bouton primaire" onClick={() => changerOnglet("modele")}>Configurer le modèle</button></div>}
             {nouvelleMission && <form className="runtime-form" aria-label="Nouvelle mission outillée" onSubmit={e => { e.preventDefault(); void creerMission(); }}>
               <label>Objectif de la mission<textarea required rows={3} value={objectif} maxLength={8000} onChange={e => setObjectif(e.target.value)} placeholder="Résultat concret attendu"/></label>
               <div className="runtime-grille"><label>Projet<input required value={projet} maxLength={200} onChange={e => { setProjet(e.target.value); setMandatId(""); setSelectionOutils([]); }}/></label>
@@ -319,7 +321,7 @@ export function RuntimeAgents({ source }: { source: Source }) {
             </div>}
           </>}
           {onglet === "mandats" && <>
-            <div className="runtime-intro avec-action"><div><h3>Mandats</h3><p>Définis le projet, les outils, les destinations et une durée. Les agents utilisent ce périmètre sans te redemander chaque action.</p></div><button type="button" className="bouton primaire" disabled={!!action} onClick={() => setNouveauMandat(!nouveauMandat)}><Plus size={16}/>{nouveauMandat ? "Fermer le formulaire" : "Nouveau mandat"}</button></div>
+            <div className="runtime-intro avec-action"><div><h3>Mandats</h3><p>Définis le projet, les outils, les destinations et une durée. Les agents utilisent ce périmètre sans te redemander chaque action.</p></div><button type="button" className={nouveauMandat ? "bouton" : "bouton primaire"} disabled={!!action} onClick={() => setNouveauMandat(!nouveauMandat)}>{nouveauMandat ? <X size={16}/> : <Plus size={16}/>}{nouveauMandat ? "Fermer le formulaire" : "Nouveau mandat"}</button></div>
             {nouveauMandat && <form className="runtime-form" aria-label="Nouveau mandat" onSubmit={e => { e.preventDefault(); creerMandat(); }}><label>Projet du mandat<input required value={mandatProjet} maxLength={200} onChange={e => setMandatProjet(e.target.value)}/></label>
               <fieldset className="runtime-outils"><legend>Outils autorisés</legend>{[{ id: "model.openai_responses.inference", nom: "Appeler le modèle OpenAI", disponible: true }, ...outils].map(o => <label key={o.id}><input type="checkbox" checked={mandatOutils.includes(o.id)} onChange={e => setMandatOutils(avant => e.target.checked ? [...avant, o.id] : avant.filter(x => x !== o.id))}/><span>{o.nom}<small>{o.id}</small></span></label>)}</fieldset>
               <label>Destinations exactes, une par ligne<textarea rows={3} maxLength={5000} value={destinations} onChange={e => setDestinations(e.target.value)} placeholder="api.openai.com"/></label>

@@ -115,14 +115,14 @@ export const MissionNode = memo(function MissionNode({ data, selected }: P) {
         <div className="ligne1">
           <span className="etiquette-type"><Target size={20} aria-hidden />Mission</span>
           <span className={`statut-pill ${s.classe}`}>
-            {s.classe === "en-cours" ? <Loader size={20} className="tourne" /> : s.classe === "reussie" ? <Check size={20} /> : null}
+            {s.classe === "en-cours" ? <Loader size={20} className="tourne" /> : <i className="point-statut" aria-hidden />}
             {s.libelle}{s.classe === "en-cours" && <DepuisTravail agents={agents} />}
           </span>
         </div>
         <h3>{o.meta.titre || m.objectif}</h3>
         <div className="progression" aria-label={`Progression : ${m.faites} sur ${m.total} tâche${m.total > 1 ? "s" : ""}`}>
           <div className="barre"><span style={{ transform: `scaleX(${m.progression / 100})` }} /></div>
-          <output className="tab-num">{m.progression}%</output>
+          <output className="tab-num">{m.faites} / {m.total}</output>
         </div>
         <ul className="etapes">
           {m.taches.slice(0, 4).map((t) => {
@@ -140,7 +140,7 @@ export const MissionNode = memo(function MissionNode({ data, selected }: P) {
         </ul>
         <OutilsAgents agents={agents} />
         <div className="bas">
-          {o.meta.echeance ? <>Échéance <span className="date">{String(o.meta.echeance)}</span></> : <span>Sans échéance</span>}
+          {o.meta.echeance ? <span>Échéance <span className="date">{String(o.meta.echeance)}</span></span> : null}
           <span className="pile-avatars">
             {agents.slice(0, 2).map((ag) => (
               <Avatar key={ag.id} id={ag.id} role={ag.nom ?? (NOMS_ROLES[ag.role]?.[0] ?? ag.role)} taille={40} titre={`${ag.nom ?? NOMS_ROLES[ag.role]?.[0] ?? ag.executant ?? "agent"} — ${ag.fournisseur}`} />

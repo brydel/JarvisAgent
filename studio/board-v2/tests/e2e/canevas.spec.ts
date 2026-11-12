@@ -86,7 +86,7 @@ test.describe("commandes", () => {
     await noeud(page, lien).click({ button: "right", position: { x: 60, y: 300 } });
     const menu = page.getByRole("menu", { name: "Actions de la sélection" });
     await expect(menu).toBeVisible();
-    await expect(menu.getByRole("menuitem", { name: /Dupliquer/ })).toContainText("Ctrl+D");
+    await expect(menu.getByRole("menuitem", { name: /Dupliquer/ }).locator("kbd")).toHaveText(["Ctrl", "D"]);  // une touche par élément
     await page.keyboard.press("ArrowDown");  // navigation au clavier dans le menu
     await page.keyboard.press("Escape");
     await expect(menu).toBeHidden();
@@ -116,8 +116,8 @@ test.describe("commandes", () => {
     const ba = (await noeud(page, a).boundingBox())!, bb = (await noeud(page, b).boundingBox())!;
     await page.mouse.click((ba.x + ba.width + bb.x) / 2, ba.y + ba.height / 2, { button: "right" });
     const menu = page.getByRole("menu", { name: "Actions de la relation" });
-    await expect(menu.getByRole("menuitemcheckbox", { name: "Relation : Relation simple" })).toHaveAttribute("aria-checked", "true");
-    await menu.getByRole("menuitemcheckbox", { name: "Relation : Dépend de" }).click();
+    await expect(menu.getByRole("menuitemcheckbox", { name: /^Simple/ })).toHaveAttribute("aria-checked", "true");
+    await menu.getByRole("menuitemcheckbox", { name: /^Dépend de/ }).click();
     await expect.poll(async () => (await board(page)).liens[0]?.style).toBe("depend");
     await expect.poll(() => arete.locator(".react-flow__edge-path").evaluate((p) => getComputedStyle(p).strokeDasharray)).not.toBe(avant);
     await page.keyboard.press("Control+z");
@@ -210,7 +210,7 @@ test.describe("outils de tableau blanc", () => {
     expect(points.length % 3).toBe(0);
     expect(points.length / 3).toBeGreaterThan(8);
     expect(points.length / 3).toBeLessThanOrEqual(700);
-    expect(trait.meta).toMatchObject({ outil: "crayon", couleur: "indigo" });
+    expect(trait.meta).toMatchObject({ outil: "crayon", couleur: "neutre" });
     const chemin = noeud(page, trait.id).locator("svg.trait path");
     await expect(chemin).toHaveAttribute("d", /^M[\d.,-]+ Q/);
     // le crayon reste actif : un second trait au surligneur, puis la gomme efface le premier seulement

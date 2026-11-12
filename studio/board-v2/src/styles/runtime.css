@@ -1,9 +1,10 @@
 /* Missions outillées — même gabarit de dialogue que Réseau des agents et Intégrations.
    Surfaces neutres, encre pour l'onglet et la mission choisis ; l'ambre, le vert et le rouge ne disent que l'état (pastille).
    La mission ouverte porte sa ligne de crédit : modèle, projet, date. */
-.runtime-ouvrir { flex: none; height: 36px; padding: 0 12px; display: inline-flex; align-items: center; gap: 8px; border: 1px solid var(--border-card); border-radius: var(--radius-sm); background: var(--surface-inset); color: var(--text-primary); font-size: 13px; cursor: pointer; white-space: nowrap; transition: background var(--dur-hover) var(--ease-standard); }
+.runtime-ouvrir { flex: none; width: 36px; height: 36px; padding: 0; display: inline-flex; align-items: center; justify-content: center; border: 1px solid var(--border-card); border-radius: var(--radius-sm); background: var(--surface-inset); color: var(--text-primary); font-size: 13px; cursor: pointer; white-space: nowrap; transition: background var(--dur-hover) var(--ease-standard); }
 .runtime-ouvrir:hover { background: var(--surface-hover); }
-.runtime-ouvrir svg { color: var(--text-muted); stroke-width: 1.5; }
+.runtime-ouvrir svg { color: var(--text-secondary); stroke-width: 1.5; }
+.runtime-ouvrir > span { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
 
 .runtime-dialog { width: min(1120px, calc(100vw - 40px)); max-height: min(800px, calc(100dvh - 96px)); margin-top: 48px; padding: 0; border: 1px solid var(--border-card); border-radius: var(--radius-panel); background: var(--surface-card); color: var(--text-primary); box-shadow: var(--shadow-lift); overflow: hidden; }
 .runtime-dialog[open] { display: flex; flex-direction: column; }
@@ -45,7 +46,7 @@
 
 /* préalable et autorisation en attente : surface neutre, l'ambre reste sur l'icône */
 .runtime-prealable, .runtime-autorisation { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; padding: 16px 20px; margin-bottom: 24px; border: 1px solid var(--border-card); border-radius: var(--radius-card); background: var(--surface-card-raised); }
-.runtime-prealable > svg, .runtime-autorisation > svg { color: var(--warning); }
+.runtime-prealable > svg, .runtime-autorisation > svg { color: var(--text-secondary); }
 .runtime-prealable > div, .runtime-autorisation > div { flex: 1; min-width: 192px; }
 .runtime-prealable strong, .runtime-autorisation strong { display: block; font-size: 14px; line-height: 20px; font-weight: 500; color: var(--text-primary); }
 .runtime-prealable p, .runtime-autorisation p { margin: 4px 0 0; font-size: 13px; line-height: 20px; color: var(--text-secondary); }
@@ -134,7 +135,6 @@
 .runtime-confirmation { display: flex; align-items: center; gap: 8px; margin: 0 0 16px; font-size: 13px; line-height: 20px; color: var(--text-success); }
 .runtime-attente { display: flex; align-items: center; gap: 8px; margin: 0 0 16px; font-size: 13px; color: var(--text-secondary); }
 
-@media (max-width: 1500px) { .runtime-ouvrir { width: 36px; padding: 0; justify-content: center; } .runtime-ouvrir > span { display: none; } }
 @media (max-width: 900px) {
   .runtime-travail { grid-template-columns: minmax(0, 1fr); }
   .runtime-liste { display: flex; gap: 4px; overflow: auto; padding-bottom: 4px; }

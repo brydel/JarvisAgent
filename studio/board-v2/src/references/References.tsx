@@ -1,3 +1,4 @@
+import { MENTION_DEMO } from "../lib/format";
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent, type KeyboardEvent, type ReactNode } from "react";
 import { AlertTriangle, ArrowUpRight, CheckCircle2, Copy, FileText, Globe, Plus, RefreshCw, Search, Trash2, X } from "lucide-react";
 import type { Source } from "../api";
@@ -35,7 +36,17 @@ export function Surligne({ texte, plages }: { texte: string; plages: [number, nu
   return <>{morceaux}</>;
 }
 
-export type Avis = { texte: string; action?: { libelle: string; faire: () => void } } | null;
+export type Avis = { texte: string; action?: { libelle: string; faire: () => void }; /** en cours, pas encore abouti : pas de coche */ neutre?: boolean } | null;
+/** Raison d'un échec de capture, dite simplement ; le détail technique reste dans l'infobulle. */
+function raisonLisible(raison: string): string {
+  const r = raison.toLowerCase();
+  if (/unsafe_port|connection_refused|err_address|invalid_url|port/.test(r)) return "Adresse refusée ou injoignable";
+  if (/name_not_resolved|dns|internet_disconnected|unreachable|refus/.test(r)) return "Adresse injoignable";
+  if (/timeout|timed out|délai|delai/.test(r)) return "Délai dépassé";
+  if (/chromium|navigateur|browser/.test(r)) return "Navigateur de capture indisponible";
+  if (/cert|ssl/.test(r)) return "Certificat du site refusé";
+  return raison && !/[a-z]+\.[a-z]+:|::|ERR_/.test(raison) ? raison : "Le site n'a pas pu être chargé";
+}
 
 export default function ReferencesWorkspace({ source }: { source: Source }) {
   const demo = source.demo;
@@ -182,7 +193,7 @@ export default function ReferencesWorkspace({ source }: { source: Source }) {
             ) : (
               <>
                 <FormulaireAjout demo={demo} collections={liste?.collections.map((c) => c.nom).filter(Boolean) ?? []} captureDisponible={liste?.moteur.capture ?? true}
-                  apres={(r, deja) => { rafraichir(); setAvis({ texte: deja ? "Ce site est déjà dans cette collection" : r.type === "site" ? `Capture de ${hote(r.source)} lancée : bureau et mobile` : `« ${r.titre} » indexé` }); }} />
+                  apres={(r, deja) => { rafraichir(); setAvis({ texte: deja ? "Ce site est déjà dans cette collection" : r.type === "site" ? `Capture de ${hote(r.source)} en cours : bureau, puis mobile` : `« ${r.titre} » indexé`, neutre: !deja && r.type === "site" }); }} />
                 {!liste && !erreur && <SqueletteGrille />}
                 {vide && (
                   <div className="p-empty rf-empty"><h3>Aucune référence dans la bibliothèque</h3>
@@ -203,7 +214,7 @@ export default function ReferencesWorkspace({ source }: { source: Source }) {
         )}
       </main>
       {avis && (
-        <div className="p-feedback rf-feedback" role="status"><CheckCircle2 size={16} /><span>{avis.texte}</span>
+        <div className="p-feedback rf-feedback" role="status">{!avis.neutre && <CheckCircle2 size={16} />}<span>{avis.texte}</span>
           {avis.action && <button className="rf-feedback-action" onClick={avis.action.faire}>{avis.action.libelle}</button>}</div>
       )}
     </div>
@@ -285,7 +296,7 @@ function FormulaireAjout({ demo, collections, captureDisponible, apres }: { demo
       <input name="etiquettes" placeholder="Étiquettes, séparées par des virgules" aria-label="Étiquettes, séparées par des virgules" value={etiquettes} onChange={(e) => setEtiquettes(e.target.value)} disabled={demo} />
       <button className="p-button p-primary" type="submit" disabled={demo || envoi || !pret}><Plus size={16} />{envoi ? "Envoi…" : mode === "site" ? "Capturer" : "Indexer"}</button>
       {mode === "texte" && <p className="rf-add-note">Les titres #, ## et ### deviennent des sections</p>}
-      {demo && <p className="rf-add-note">Démonstration : sites fictifs, la capture est désactivée</p>}
+      {demo && <p className="mention-demo rf-mention">{MENTION_DEMO}</p>}
       {!demo && mode === "site" && !captureDisponible && <p className="rf-add-note is-warning"><AlertTriangle size={16} />Chromium n'est pas installé sur ce poste : <code>./install.sh --studio</code>. Les textes restent indexables.</p>}
       {erreur && <p className="rf-add-note is-error" role="alert">{erreur}</p>}
     </form>
@@ -301,13 +312,13 @@ function Carte({ r, ouvrir, relancer, retirer, demo }: { r: Reference; ouvrir: (
         <div className="rf-card-preview">
           {r.vignette_url && !enCours ? <img src={r.vignette_url} alt="" loading="lazy" decoding="async" />
             : enCours ? <div className="rf-card-wait"><span className="rf-spinner" /><strong>{LIBELLES[r.statut]}</strong><small>{r.statut === "indexation" ? "Découpage et index des passages" : "Bureau 1440 px, puis mobile 390 px"}</small></div>
-            : r.statut === "echec" ? <div className="rf-card-wait is-error"><AlertTriangle size={16} /><strong>Capture impossible</strong><small>{r.raison}</small></div>
+            : r.statut === "echec" ? <div className="rf-card-wait is-error" title={r.raison || undefined}><AlertTriangle size={16} /><strong>Capture impossible</strong><small>{raisonLisible(r.raison)}</small></div>
             : <div className="rf-card-wait"><FileText size={16} /></div>}
           {r.palette.length > 0 && !enCours && <div className="rf-strip" aria-hidden>{r.palette.slice(0, 6).map((c) => <i key={c.hex} style={{ background: c.hex, flexGrow: Math.max(c.part, 0.04) }} />)}</div>}
         </div>
         <div className="rf-card-body">
           <h3>{r.titre}</h3>
-          <p className="rf-card-source">{r.type === "site" ? hote(r.url || r.source) : r.type === "carte" ? "Carte du Board" : "Texte déposé"}<span>{dateCapture(r.capture_le ?? r.cree)}</span></p>
+          <p className="rf-card-source credit">{r.type === "site" ? hote(r.url || r.source) : r.type === "carte" ? "Carte du Board" : "Texte déposé"}<span>{dateCapture(r.capture_le ?? r.cree)}</span></p>
           {polices.length > 0 && <p className="rf-card-fonts"><span aria-hidden>Aa</span>{polices.join(" · ")}</p>}
           <div className="rf-card-meta">
             {r.collection && <span className="rf-collection">{r.collection}</span>}
@@ -338,7 +349,7 @@ function ResultatPassage({ p, hybride, ouvrir, copier }: { p: Passage; hybride: 
           <strong>{c.titre}</strong>{c.section && <span className="rf-section"><Surligne texte={c.section} plages={p.section_surlignages ?? []} /></span>}
         </button>
         <blockquote><Surligne texte={p.extrait.texte} plages={p.extrait.surlignages} /></blockquote>
-        <footer>
+        <footer className="credit">
           {c.url ? <a href={c.url} target="_blank" rel="noopener noreferrer">{hote(c.url)}<ArrowUpRight size={16} /></a> : <span>{c.type === "carte" ? "Carte du Board" : "Texte déposé"}</span>}
           <span>capturé le {dateCapture(c.capture_le)}</span>
           {c.collection && <span className="rf-collection">{c.collection}</span>}

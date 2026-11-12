@@ -32,8 +32,8 @@ async function lire<T>(url: string, signal: AbortSignal): Promise<T> {
 
 /** Lecture périodique indépendante du SSE : les sessions tmux ne publient pas d'événements de mission. */
 export function ActiviteDirecte({ source, inspecter }: { source: Source; inspecter: (id: string) => void }) {
-  // repliée sur une ligne tant qu'il n'y a rien à voir ; elle s'ouvre dès qu'un agent travaille, qu'une tâche attend
-  // ou qu'une erreur est à lire. Ton choix (ouvrir, replier) l'emporte ensuite.
+  // repliée sur une ligne de 36 px, qui dit combien de sessions et de tâches sont en cours : le canevas garde sa place.
+  // Elle ne s'ouvre seule que pour une erreur à lire ; sinon c'est toi qui la déplies.
   const [choix, setChoix] = useState<boolean | null>(null);
   const [etat, setEtat] = useState<Activite | null>(null);
   const [erreur, setErreur] = useState("");
@@ -41,8 +41,7 @@ export function ActiviteDirecte({ source, inspecter }: { source: Source; inspect
   const [apercu, setApercu] = useState("");
   const [erreurApercu, setErreurApercu] = useState("");
   const espace = encodeURIComponent(source.espace);
-  const aVoir = Boolean(erreur || etat?.sessions_erreur || etat?.sessions?.length || etat?.taches.length);
-  const ouvert = choix ?? aVoir;
+  const ouvert = choix ?? Boolean(erreur || etat?.sessions_erreur);
   useEffect(() => {
     if (source.demo) return;
     const c = new AbortController();
@@ -87,10 +86,10 @@ export function ActiviteDirecte({ source, inspecter }: { source: Source; inspect
   return <section className="activite-directe" aria-label="Travail en direct">
     <button type="button" className="activite-titre" aria-expanded={ouvert} aria-controls="travail-observe" onClick={() => setChoix(!ouvert)}>
       <Activity size={16} aria-hidden/><strong>Travail en direct</strong>
-      <span>{etat ? `${etat.sessions === null ? "Sessions indisponibles" : `${actifs} session${actifs > 1 ? "s actives" : " active"}`} · ${etat.taches.length} tâche${etat.taches.length > 1 ? "s" : ""} en cours ou en attente` : "Observation en cours"}</span>
+      <span>{etat ? `${etat.sessions === null ? "Sessions indisponibles" : `${actifs} session${actifs > 1 ? "s" : ""}`} · ${etat.taches.length} tâche${etat.taches.length > 1 ? "s" : ""}` : "Observation en cours"}</span>
       {ouvert ? <ChevronUp size={16} aria-hidden/> : <ChevronDown size={16} aria-hidden/>}
     </button>
-    {ouvert && <div id="travail-observe" className="activite-contenu">
+    {ouvert && <div id="travail-observe" className={`activite-contenu${selection ? " avec-apercu" : ""}`}>
       <div className="activite-liste">
         <p className="activite-meta">{source.espace === "accueil" ? "Tous les projets du poste" : `Projet : ${source.espace}`} · actualisation toutes les 5 s
           {etat && <> · démon {etat.demon ? "actif" : "sans battement récent"}</>}</p>
@@ -108,13 +107,13 @@ export function ActiviteDirecte({ source, inspecter }: { source: Source; inspect
           {t.objet_id && <button type="button" className="lien-texte" onClick={() => inspecter(t.objet_id!)}>Voir la carte liée</button>}
         </div>)}
         {etat && etat.sessions !== null && !etat.sessions.length && !etat.taches.length && <p>Aucun travail observé dans cet espace</p>}
+        {!selection && Boolean(etat?.sessions?.length) && <p className="activite-meta">Choisis une session pour lire sa sortie de terminal</p>}
       </div>
-      <div className="activite-apercu" aria-label="Sortie de la session">
-        {selection ? <><strong>{selection.project} / {selection.worktree}</strong>
-          {erreurApercu && <p role="alert">{erreurApercu} — l'ancienne sortie peut être périmée.</p>}
-          <pre>{apercu || (erreurApercu ? "" : "Capture en cours")}</pre></>
-          : <p>Sélectionne une session pour voir sa sortie terminal. Pour les missions, le statut vient du moteur ; le contenu du modèle est disponible à la remise du résultat.</p>}
-      </div>
+      {selection && <div className="activite-apercu" aria-label="Sortie de la session">
+        <strong>{selection.project} / {selection.worktree}</strong>
+        {erreurApercu && <p role="alert">{erreurApercu} — l'ancienne sortie peut être périmée.</p>}
+        <pre>{apercu || (erreurApercu ? "" : "Capture en cours")}</pre>
+      </div>}
     </div>}
   </section>;
 }

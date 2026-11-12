@@ -200,7 +200,7 @@ export function Board({ source, charge }: Props) {
   return (
     <ContexteCommandes.Provider value={acces}>
       <ContexteActions.Provider value={actions}>
-        <div className={`app${source.demo ? "" : " avec-activite"}${zen ? " zen" : ""}${presentation ? " presentation" : ""}`}>
+        <div className={`app${source.demo ? "" : " avec-activite"}${zen ? " zen" : ""}${presentation ? " presentation" : ""}${objetsSelectionnes.length ? " a-selection" : ""}`}>
           {!immersif && <BarreHaut recherche={recherche} setRecherche={setRecherche} notifications={approbations.length} />}
           {!immersif && (
             <SousBarre projet={source.espace === "accueil" ? "Accueil" : source.espace} espaces={espaces} changerEspace={changerEspace}

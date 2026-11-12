@@ -16,6 +16,9 @@
 /* --- objets ------------------------------------------------------------------------------------------- */
 .react-flow__node-adhesif, .react-flow__node-texte_libre, .react-flow__node-forme { border-radius: 4px; }
 .react-flow__node:focus-visible { outline: 2px solid var(--focus); outline-offset: 3px; }
+/* une relation au clavier : le tracé passe à l'encre, plus épais, plein */
+.react-flow__edge:focus, .react-flow__edge:focus-visible { outline: none; }
+.react-flow__edge:focus-visible .react-flow__edge-path { stroke: var(--focus) !important; stroke-width: 4px !important; stroke-dasharray: none !important; opacity: 1 !important; }
 .react-flow__node-adhesif.selected, .react-flow__node-forme.selected, .react-flow__node-texte_libre.selected, .react-flow__node-trait.selected, .react-flow__node-cadre.selected {
   outline: 1.5px solid var(--encre); outline-offset: 2px;
 }
@@ -130,9 +133,10 @@
 .barre-modes .mode:hover:not([aria-disabled="true"]) { background: var(--surface-hover); color: var(--text-primary); }
 .barre-modes .mode:active:not([aria-disabled="true"]) { transform: scale(0.97); }
 .barre-modes .mode[aria-pressed="true"] { background: var(--surface-more); color: var(--text-primary); box-shadow: inset 0 1px 0 var(--brand-highlight); }
-/* la lettre du raccourci reste en 600 : seule graisse forte hors mot-symbole, exigée pour sa lisibilité à 12 px (tests/e2e/intelligence.spec.ts) */
-.barre-modes .mode kbd { font: var(--fw-strong) 12px/12px var(--font-mono); color: var(--text-muted); }
-.barre-modes .mode:hover kbd, .barre-modes .mode[aria-pressed="true"] kbd { color: var(--text-secondary); }
+/* le raccourci est une touche dessinée, comme dans la palette et la recherche : 16 × 16, rayon 4, filet, mono 12 */
+.barre-modes .mode kbd { display: grid; place-items: center; width: 16px; height: 16px; border-radius: var(--radius-2xs); border: 1px solid var(--border-card); background: var(--surface-inset);
+  font: 400 12px/1 var(--font-mono); color: var(--text-muted); }
+.barre-modes .mode:hover kbd, .barre-modes .mode[aria-pressed="true"] kbd { color: var(--text-secondary); border-color: var(--border-strong); }
 .barre-modes button:focus-visible, .barre-flottante button:focus-visible, .menu-contextuel button:focus-visible, .barre-presentation button:focus-visible, .bandeau-mode button:focus-visible {
   outline: 2px solid var(--focus); outline-offset: 1px; }
 .style-trace { position: relative; flex: none; }
@@ -213,6 +217,8 @@ button[aria-disabled="true"] { cursor: not-allowed; }
 .palette-ligne.indisponible .palette-icone { opacity: 0.5; }
 .palette-ligne.indisponible .palette-libelle { white-space: normal; }
 .palette-raison { display: block; margin-top: 2px; font-size: 12px; line-height: 16px; color: var(--text-warning); }
+.menu-groupe { padding: 8px 8px 4px; font-size: 12px; line-height: 16px; color: var(--text-muted); }
+.menu-contextuel .menu-coche { color: var(--text-primary); flex: none; margin-top: 2px; }
 .menu-separateur { height: 1px; margin: 4px 8px; background: var(--border-subtle); }
 /* touches de clavier : même dessin partout (mono 12, rayon 4, filet) */
 kbd { font: 400 12px/16px var(--font-mono); color: var(--text-secondary); }
@@ -239,6 +245,7 @@ kbd { font: 400 12px/16px var(--font-mono); color: var(--text-secondary); }
 .palette-vide { padding: 32px 16px; text-align: center; color: var(--text-secondary); font-size: 14px; }
 .palette-pied { display: flex; align-items: center; gap: 16px; height: 40px; padding: 0 20px; border-top: 1px solid var(--border-subtle); font-size: 12px; color: var(--text-muted); }
 .palette-pied kbd { margin-right: 4px; }
+.touches-raccourci { display: inline-flex; align-items: center; gap: 4px; flex: none; }
 .palette-compte { margin-left: auto; font: 400 12px/16px var(--font-mono); font-variant-numeric: tabular-nums; }
 
 /* --- modes d'affichage : zen, concentration, présentation --------------------------------------------- */
@@ -265,13 +272,25 @@ kbd { font: 400 12px/16px var(--font-mono); color: var(--text-secondary); }
 /* --- export PNG : substituts statiques des iframes et vidéos ------------------------------------------ */
 .substitut-export { display: grid; place-items: center; background: var(--media-bg) center / cover no-repeat; color: var(--on-media-2); font-size: 15px; border-radius: inherit; }
 
+@media (max-width: 1240px) {
+  /* canevas étroit (tablette, panneau ouvert) : annuler, rétablir et la palette restent au clavier et dans la barre d'ajout ;
+     les touches se lisent dans l'infobulle. Si un outil de dessin ajoute son style, la rangée défile sans déborder sur le panneau. */
+  .barre-modes > .mode, .barre-modes > .sep:last-of-type { display: none; }
+  .barre-modes { overflow-x: auto; scrollbar-width: none; }
+  .popover-style { position: fixed; top: auto; left: 50%; margin-top: 36px; }
+}
+@media (max-width: 1100px) {
+  .barre-modes .mode { width: 32px; height: 36px; }
+  .barre-modes .mode kbd { display: none; }
+  .bouton-style { height: 36px; }
+}
 @media (max-width: 900px) {
   /* petit écran : une seule rangée, qui défile ; le sélecteur de style sort du défilement (position fixe) */
   .barre-modes { top: 8px; left: 8px; right: 8px; width: auto; max-width: none; overflow-x: auto; scrollbar-width: none; }
   .barre-modes .mode kbd { display: none; }
   .popover-style { position: fixed; top: auto; left: 16px; transform: none; margin-top: 32px; }
   .bandeau-mode { top: 64px; }
-  .barre-modes .mode, .bouton-style { height: 40px; }
+  .barre-modes .mode, .bouton-style { height: 40px; width: 36px; }
 }
 /* --- mouvement : bref, utile, sur transform et opacity seulement ; jamais perpétuel ; une seule courbe --------- */
 /* un menu se déplie d'où il s'ouvre ; un objet qu'on vient de poser se dépose ; un état qui change se signale une fois */

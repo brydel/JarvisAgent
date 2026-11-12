@@ -74,10 +74,10 @@ export function FicheReference({ id, demo, espace, sectionInitiale, retour, noti
       <header className="rf-fiche-head">
         <div>
           <h1 id="rf-fiche-titre" ref={titre} tabIndex={-1}>{fiche.titre}</h1>
-          <p className="rf-fiche-source credit">
+          <p className="rf-fiche-source credit points">
             {fiche.url ? <a href={fiche.url} target="_blank" rel="noopener noreferrer">{fiche.url}<ArrowUpRight size={16} /></a> : <span>{fiche.type === "carte" ? "Carte du Board" : "Texte déposé"}</span>}
-            <span aria-hidden="true">·</span><span>capturé le {dateCapture(fiche.capture_le ?? fiche.cree)}</span>
-            <span aria-hidden="true">·</span><span className={`p-status rf-statut is-${fiche.statut}`}>{LIBELLES[fiche.statut]}</span>
+            <span>capturé le {dateCapture(fiche.capture_le ?? fiche.cree)}</span>
+            <span className={`p-status rf-statut is-${fiche.statut}`}>{LIBELLES[fiche.statut]}</span>
           </p>
           {fiche.description && <p className="rf-fiche-description">{fiche.description}</p>}
           <div className="rf-card-meta">
@@ -93,8 +93,8 @@ export function FicheReference({ id, demo, espace, sectionInitiale, retour, noti
           {fiche.type === "site" && <button className="p-button p-quiet" disabled={demo || enCours || Boolean(occupe)}
             onClick={() => void agir("capture", async () => { setFiche(await recapturer(fiche.id)); apresChangement(); })}><RefreshCw size={16} />Recapturer</button>}
           <button className="p-button p-quiet" disabled={demo || enCours || Boolean(occupe)}
-            onClick={() => void agir("index", async () => { const b = await reindexer(fiche.id); notifier(`${b.fragments} passages ré-indexés${b.vecteurs ? `, ${b.vecteurs} vecteurs` : ""}`); await charger(); })}>
-            {occupe === "index" ? "Indexation…" : "Ré-indexer"}</button>
+            onClick={() => void agir("index", async () => { const b = await reindexer(fiche.id); notifier(`${b.fragments} passages réindexés${b.vecteurs ? `, ${b.vecteurs} vecteurs` : ""}`); await charger(); })}>
+            {occupe === "index" ? "Indexation…" : "Réindexer"}</button>
           <button className="p-button p-quiet rf-danger" disabled={demo || Boolean(occupe)} aria-label={`Retirer ${fiche.titre} de la bibliothèque`}
             onClick={() => void agir("retrait", async () => { await supprimer(fiche.id); apresSuppression(fiche.titre, fiche.id); })}><Trash2 size={16} />Retirer</button>
         </div>

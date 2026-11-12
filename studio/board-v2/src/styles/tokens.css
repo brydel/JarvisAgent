@@ -9,7 +9,7 @@
   --fw-medium: 500;
   --fw-strong: 600;
 
-  /* taille — Échelle de l'interface (pixels écran) : taille et interligne vont par paire. Rien sous 12 px (11 px au plus petit en mobile). Deux graisses, 400 et 500 ; 600 pour le mot-symbole et la lettre de raccourci de la barre d'outils, rien d'autre. La hiérarchie vient de la taille et du rôle de texte. Interlettrage 0 sous 40 px. Chiffres : font-variant-numeric: tabular-nums. */
+  /* taille — Échelle de l'interface (pixels écran) : taille et interligne vont par paire. Rien sous 12 px (11 px au plus petit en mobile). Deux graisses, 400 et 500 ; 600 pour le mot-symbole et le gras d'un texte saisi (note, livrable), rien d'autre. La hiérarchie vient de la taille et du rôle de texte. Interlettrage 0 sous 40 px. Chiffres : font-variant-numeric: tabular-nums. */
   --fs-meta: 12px;
   --lh-meta: 16px;
   --fs-sm: 13px;

@@ -78,7 +78,7 @@ export function fixtureDemo(): EtatBoard {
     objet({ id: "BO-demo-video", type: "video", x: 795, y: 852.25, largeur: 378, hauteur: 178, priorite: "P2", asset: video,
       asset_id: video.id, meta: { titre: "Présentation produit.mp4" } }),
     objet({ id: "BO-demo-dossier", type: "dossier", x: 1205, y: 876, largeur: 378, hauteur: 152,
-      meta: { titre: "Ressources design", demo_vignettes: [D + "ressource-1.jpg", D + "ressource-2.jpg", D + "ressource-3.jpg"],
+      meta: { titre: "Ressources design", demo_vignettes: [D + "ref-atelier-bureau.jpg", D + "ref-nordkit-bureau.jpg", D + "ref-verdier-bureau.jpg"],
         demo_elements: 4 } }),
   ];
   // Points d'attache mesurés sur la maquette (côté, position relative le long du côté) : démo seulement.

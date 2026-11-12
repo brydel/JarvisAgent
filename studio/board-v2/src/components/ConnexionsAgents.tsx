@@ -1,3 +1,4 @@
+import { dateHeure } from "../lib/format";
 import { useEffect, useId, useRef, useState } from "react";
 import { Activity, Check, CircleHelp, Link2, LoaderCircle, PlugZap, Plus, RefreshCw, ShieldCheck, Unplug, X } from "lucide-react";
 import type { Source } from "../api";
@@ -30,7 +31,7 @@ const post = <T,>(url: string, corps: unknown) => api<T>(url, {
   method: "POST", headers: { "Content-Type": "application/json", "X-Jarvis-Studio": "1" }, body: JSON.stringify(corps),
 });
 function date(ts: number | null) {
-  return ts === null ? "Pas encore vérifiée" : new Date(ts * 1000).toLocaleString("fr-FR", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
+  return ts === null ? "Pas encore vérifiée" : dateHeure(ts);
 }
 function adresseValide(url: string) {
   try {
@@ -154,7 +155,7 @@ export function ConnexionsAgents({ source }: { source: Source }) {
           {chargement && <p className="integrations-attente" role="status"><LoaderCircle size={16} className="tourne"/>Lecture de l'installation</p>}
           {onglet === "connexions" && <>
             <div className="integrations-intro"><div><h3>Connexions de l'usine</h3><p>Ajoute un serveur MCP, découvre ses outils, puis choisis ceux que tes agents pourront demander.</p></div>
-              <button type="button" className="bouton primaire" disabled={!!action} onClick={() => setAjout(!ajout)}><Plus size={16}/>{ajout ? "Fermer le formulaire" : "Connecter un serveur MCP"}</button></div>
+              <button type="button" className={ajout ? "bouton" : "bouton primaire"} disabled={!!action} onClick={() => setAjout(!ajout)}>{ajout ? <X size={16}/> : <Plus size={16}/>}{ajout ? "Fermer le formulaire" : "Connecter un serveur MCP"}</button></div>
             {ajout && <form className="integrations-formulaire" aria-label="Connecter un serveur MCP" onSubmit={e => { e.preventDefault(); void connecter(); }}>
               <label>Transport du serveur MCP<select value={transport} onChange={e => setTransport(e.target.value as "mcp_http" | "mcp_stdio")}><option value="mcp_http">Serveur HTTPS distant</option><option value="mcp_stdio">Processus local, stdio</option></select></label>
               <div className="integrations-champs"><label>Nom de la connexion<input required value={nom} maxLength={120} onChange={e => setNom(e.target.value)} placeholder="Mon espace de recherche"/></label>

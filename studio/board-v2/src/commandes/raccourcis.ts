@@ -51,7 +51,7 @@ export function estMac(plateforme = typeof navigator === "undefined" ? "" : navi
 export function afficher(raccourci: string, mac = estMac()): string {
   const parties = normaliser(raccourci).split("+");
   const touche = parties.pop() ?? "";
-  const nom = AFFICHAGE[touche] ?? (touche.length === 1 ? touche.toUpperCase() : touche);
+  const nom = AFFICHAGE[touche] ?? (touche.length === 1 || /^f\d{1,2}$/.test(touche) ? touche.toUpperCase() : touche);
   if (mac) return parties.map((m) => (m === "mod" ? "⌘" : m === "alt" ? "⌥" : "⇧")).join("") + nom;
   return [...parties.map((m) => (m === "mod" ? "Ctrl" : m === "alt" ? "Alt" : "Maj")), nom].join("+");
 }
