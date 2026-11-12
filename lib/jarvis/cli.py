@@ -1220,6 +1220,14 @@ def cmd_chef_moteur(a) -> int:
     return 0
 
 
+def cmd_aide(a) -> int:
+    """« jarvis aide chef [mots…] » : la table des commandes du chef (lecture seule, source : chef_aide.py)."""
+    from . import chef_aide
+    moteur = a.moteur or chef_aide.moteur_appelant()
+    print(chef_aide.texte(moteur, a.mots))
+    return 0
+
+
 def cmd_chef_garde(a) -> int:
     """Pour bin/jarvis-chef : 0 si l'appelant est le chef et que la commande fait partie de ses outils."""
     from . import chef_moteur, journal
@@ -2484,6 +2492,12 @@ def build_parser() -> argparse.ArgumentParser:
     c = sub.add_parser("chef-garde", help=argparse.SUPPRESS)
     c.add_argument("commande", nargs=argparse.REMAINDER)
     c.set_defaults(fn=cmd_chef_garde)
+    s = sub.add_parser("aide", help="aide du chef : la table de ses commandes (lecture seule)")
+    s.add_argument("sujet", nargs="?", default="chef", choices=("chef",))
+    s.add_argument("mots", nargs="*", help="n'afficher que les sections ou commandes qui contiennent ces mots")
+    s.add_argument("--moteur", choices=("claude", "codex"), default="",
+                   help="écriture des commandes (défaut : celle du chef qui appelle)")
+    s.set_defaults(fn=cmd_aide)
     sub.add_parser("chef-moteur", help="moteur du chef (Claude ou Codex) : ordre, jetons, prochain lancement"
                    ).set_defaults(fn=cmd_chef_moteur)
 

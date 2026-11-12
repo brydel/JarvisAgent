@@ -30,6 +30,7 @@ ${C_CYAN}Pilotage${C_OFF}
                                         (après un redémarrage : reprend les agents et le chef)
   jarvis chef                           Lance (ou rejoint) le chef d'orchestre
   jarvis chef-moteur                    Qui dirige : Claude ou Codex, jetons, relève automatique
+  jarvis aide chef [mots…]              Les commandes du chef, par sujet (lecture seule ; il l'appelle lui-même)
   jarvis cockpit                        Interface plein écran (ateliers, plans, livrables, fil)
   jarvis web                            Tableau de bord dans le navigateur (lecture seule)
   jarvis etat · jarvis usine            État complet · les ateliers : qui travaille sur quoi
@@ -490,7 +491,7 @@ cmd_task() {
 cmd_board() {
   case "${1:-}" in
     # le Board partagé (Studio) : lu et alimenté par le chef
-    voir|espaces|deposer|modifier|ranger|reduire|grouper|commenter|lier|decider|retirer|restaurer) py board "$@" ;;
+    voir|espaces|deposer|modifier|ranger|reduire|grouper|commenter|lier|decider|retirer|restaurer|relectures|relire) py board "$@" ;;
     *) has workmux || die "workmux n'est pas installé."; exec workmux dashboard "$@" ;;
   esac
 }
@@ -656,7 +657,7 @@ main() {
     fermer|reprendre|sante|reparer-git|role|modele|tache|verdict|bilan|usine|studio|livrer|livrables|web|\
     admission|pause|profil|lourd|audit|diagnostic|politique|budget|fournisseurs|proposition|\
     budget-jetons|cout|memoire|secrets|eval|rejouer|traces|proxy|rollback|execution|skill|stockage|executant|chef-moteur|\
-    mission|reference)
+    mission|reference|aide)
                   py "$cmd" "$@" ;;
     chef-lancer)  cmd_chef_lancer "$@" ;;
     relancer)     cmd_relancer "$@" ;;

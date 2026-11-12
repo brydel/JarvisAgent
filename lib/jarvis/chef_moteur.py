@@ -43,6 +43,10 @@ AUTORISE = (
     "Bash(jarvis reference voir *)",
     # File des relectures demandées sur le Board : lecture seule (le verdict est rendu par l'humain).
     "Bash(jarvis board relectures)", "Bash(jarvis board relectures *)",
+    # Board : lectures seulement (cartes d'un Board, liste des Boards). Les écritures ne sont pas ouvertes ici.
+    "Bash(jarvis board voir)", "Bash(jarvis board voir *)", "Bash(jarvis board espaces)",
+    # Aide du chef : la table de ses commandes (lecture seule, lib/jarvis/chef_aide.py).
+    "Bash(jarvis aide)", "Bash(jarvis aide *)",
     "Bash(jarvis cout)", "Bash(jarvis cout *)", "Bash(jarvis budget-jetons *)",
     "Bash(jarvis secrets verifier *)", "Bash(jarvis rejouer *)", "Bash(jarvis traces)", "Bash(jarvis traces *)",
     "Bash(jarvis rollback proposer *)", "Bash(jarvis rollback demander *)", "Bash(jarvis eval liste*)",
@@ -259,27 +263,117 @@ def appelant_est_chef(pid: int | None = None) -> bool:
 
 PREAMBULE_CODEX = """# Moteur : Codex — à lire avant tout
 
-Tu diriges l'usine avec **Codex**. Ton bac à sable ne peut écrire que dans ce dossier et n'a pas de réseau.
+Tu diriges l'usine avec **Codex**. Le rôle ci-dessous est celui du chef, écrit pour tes outils : ses règles
+absolues s'appliquent à toi sans exception.
+
+## Tes commandes passent par `jarvis-chef`
+
+Ton bac à sable ne peut écrire que dans ce dossier et n'a pas de réseau.
 Toute commande `jarvis`, `workmux` ou `gh` s'écrit donc **précédée de `jarvis-chef`**, seule, sur sa ligne :
 
     jarvis-chef jarvis etat
     jarvis-chef workmux status --all
     jarvis-chef gh pr view 12
 
-Pas de `;`, `&&`, `|` ni de variable devant : `jarvis-chef` applique tes permissions de chef et refuse le
-reste. Un refus est une information, jamais un obstacle à contourner. Les exemples ci-dessous sont déjà
-écrits ainsi. La recherche web est ton outil natif ; Linear passe par ses outils MCP.
+Pas de `;`, `&&`, `|`, de redirection ni de variable devant : `jarvis-chef` applique tes permissions de chef et
+refuse le reste. Un refus est une information, jamais un obstacle à contourner. Les exemples ci-dessous sont déjà
+écrits ainsi.
+
+## Ce que tu as, ce que tu n'as pas
+
+- **La table de tes commandes** : `jarvis-chef jarvis aide chef` (ou `jarvis-chef jarvis aide chef board` pour un
+  seul sujet). Elle marque « hors porte » les commandes décrites dans ce rôle que `jarvis-chef` te refuse
+  aujourd'hui (écrire sur le Board, noeud GPU). Pour celles-là, n'essaie pas autrement : dis à ton humain ce que
+  tu voulais faire, dans ton bilan (`jarvis-chef jarvis note "…" --envoyer`).
+- **Recherche web** : ton outil natif. **Linear** : ses outils MCP. **Fichiers de ton dossier** (`./boite/`,
+  `./consignes/`) : tes outils habituels de lecture et d'écriture.
+- **Personne à qui déléguer dans ta conversation.** La contre-expertise d'un plan (étape 3) est une deuxième passe
+  que tu mènes toi-même, par écrit, selon la procédure donnée. Ce que tu ne peux pas faire seul devient une tâche
+  d'agent dans un plan.
+- **Tu ne fermes pas un agent en tapant une commande dans sa fenêtre.** Tu lui demandes de s'arrêter
+  (`jarvis-chef workmux send`), puis `jarvis-chef jarvis fermer` quand il est terminé.
 
 ---
 
 """
 
+# Ce que le rôle écrit pour Claude Code ne peut pas demander à Codex : outils nommés autrement, pas de
+# délégation dans la conversation, pas de commande à barre oblique à faire taper par un agent. Chaque couple
+# (texte du rôle, texte pour Codex) est appliqué par `role_codex` ; `traductions_manquantes` dit lesquels ne
+# trouvent plus leur texte source (un test échoue alors : le rôle a été reformulé sans mettre à jour ce tableau).
+CONTRE_EXPERTISE_CODEX = """Puis mène toi-même la **contre-expertise en deuxième passe**. Tu n'as personne à qui la confier : c'est une relecture séparée de la pré-mortem, faite par écrit, dans cet ordre.
+
+1. **Écris le plan tel que tu comptes le proposer** dans `./consignes/contre-expertise.md` : titre, éléments (`projet:ISSUE:agent@rôle+taille:desc`), fichiers ou dossiers de chacun, critères d'acceptation de chacun.
+2. **Change de rôle.** Relis ce fichier comme s'il venait d'un autre chef, avec ce mandat : « Attaque ce plan. Trouve les dépendances cachées, les conflits de fichiers, les critères d'acceptation invérifiables, ce qui devrait revenir à l'humain, et une meilleure répartition. »
+3. **Réponds par écrit, dans le même fichier, aux cinq questions**, élément par élément. « Rien » est une réponse permise, seulement après avoir regardé :
+   - *Dépendances cachées* : de quel autre élément, de quelle PR non fusionnée ou de quel agent en cours celui-ci a-t-il besoin pour démarrer ? Vérifie avec `jarvis etat` et `jarvis plan liste`, pas de mémoire.
+   - *Conflits de fichiers* : deux éléments (ou un élément et un agent en cours) citent-ils le même fichier ou le même dossier ? Si oui, redécoupe ou mets en séquence.
+   - *Critères invérifiables* : pour chaque critère, quelle commande, quel test ou quelle capture le prouve ? Aucun : réécris le critère ou retire-le.
+   - *Ce qui revient à l'humain* : issue `human-review-required`, décision de produit, de budget ou de recrutement, action de niveau 2 ou 3 (`jarvis politique verifier`), secret, production.
+   - *Meilleure répartition* : rôle, taille et ordre de chaque élément ; un élément trop gros à découper ; une contre-relecture qui manque ; une leçon de `jarvis memoire chercher` que le plan ignore.
+4. **Tranche.** Corrige le plan avec ce que tu retiens, et rejette explicitement le reste, une ligne par objection : « retenu : … » ou « rejeté : … parce que … ».
+5. **Dis-le dans `--pourquoi`** : une phrase sur ce que la deuxième passe a changé, ou « contre-expertise : rien retenu ». Si elle ne trouve rien sur un plan de trois éléments ou plus, refais-la sur l'élément le plus risqué avant de proposer : une passe qui ne trouve jamais rien n'a pas été faite."""
+
+TRADUCTIONS_CODEX: tuple[tuple[str, str], ...] = (
+    ("Puis lance un **sous-agent avocat du diable** (outil Task) avec ce mandat : « Attaque ce plan. Trouve les "
+     "dépendances cachées, les conflits de fichiers, les critères d'acceptation invérifiables, ce qui devrait "
+     "revenir à l'humain, et une meilleure répartition. » Corrige le plan avec ce que tu retiens, et rejette "
+     "explicitement le reste.",
+     CONTRE_EXPERTISE_CODEX),
+    ("| WebSearch, WebFetch | Recherche web pour la veille concurrentielle |",
+     "| Ta recherche web native | Recherche web pour la veille concurrentielle |"),
+    ("**Toi aussi, tu consommes des jetons Claude** : sois bref, évite de relire inutilement de gros fichiers, "
+     "délègue la lecture lourde à un sous-agent seulement si elle est nécessaire.",
+     "**Toi aussi, tu consommes des jetons Codex** : sois bref, évite de relire inutilement de gros fichiers, ne "
+     "fais une lecture lourde que si elle est nécessaire, et seulement la partie utile."),
+    ("\"Arrête-toi : commente l'état dans Linear puis /exit\"",
+     "\"Arrête-toi : commente l'état dans Linear, puis termine ton tour sans rien entreprendre d'autre\""),
+    ("La veille est donc une **vraie tâche**, jamais un sous-agent rapide.",
+     "La veille est donc une **vraie tâche**, jamais une recherche rapide que tu ferais toi-même."),
+    ("Fais-la seulement si la marge Claude est confortable.",
+     "Fais-la seulement si la marge de ton moteur (Codex) est confortable."),
+    ("Ouvre-le avec l'outil Read.",
+     "Ouvre-le avec ton outil de lecture de fichier (ou d'affichage d'image, pour une image)."),
+)
+
+# Termes qu'un chef Codex ne peut pas suivre : s'il en reste un dans le rôle généré, c'est un défaut (test).
+TERMES_CLAUDE = (r"\bWebSearch\b", r"\bWebFetch\b", r"\bRead\b", r"\bTask\b", r"/exit\b", r"\bsous-agents?\b",
+                 r"\bTodoWrite\b", r"\bGrep\b", r"\bGlob\b", r"/clear\b", r"/compact\b")
+
+_OUTILS_CHEF = ("jarvis ", "workmux ", "gh pr ")
+_BLOC_BASH = re.compile(r"(?ms)^```(?:bash|sh)\n(.*?)^```")
+
+
+def prefixer_codex(texte: str) -> str:
+    """Écrit les commandes du chef pour la porte : `jarvis …` → `jarvis-chef jarvis …`.
+
+    Deux formes : la commande entre accents graves, et la ligne de commande d'un bloc ```bash.
+    """
+    for outil in _OUTILS_CHEF:
+        texte = texte.replace("`" + outil, "`jarvis-chef " + outil)
+
+    def bloc(m: re.Match) -> str:
+        lignes = [("jarvis-chef " + ligne if ligne.startswith(_OUTILS_CHEF) else ligne)
+                  for ligne in m.group(1).split("\n")]
+        return m.group(0).replace(m.group(1), "\n".join(lignes))
+    return _BLOC_BASH.sub(bloc, texte)
+
+
+def traductions_manquantes(texte: str) -> list[str]:
+    """Textes sources de TRADUCTIONS_CODEX absents du rôle : la traduction correspondante ne s'applique plus."""
+    return [source for source, _cible in TRADUCTIONS_CODEX if source not in texte]
+
+
+def termes_claude(texte: str) -> list[str]:
+    """Termes propres à Claude Code encore présents dans un rôle destiné à Codex."""
+    return sorted({m.group(0) for motif in TERMES_CLAUDE for m in re.finditer(motif, texte)})
+
 
 def role_codex(texte: str) -> str:
-    """Le rôle du chef, avec ses commandes écrites pour passer par `jarvis-chef`."""
-    for outil in ("jarvis ", "workmux ", "gh pr "):
-        texte = texte.replace("`" + outil, "`jarvis-chef " + outil)
-    return PREAMBULE_CODEX + texte
+    """Le rôle du chef pour Codex : consignes traduites pour ses outils, commandes écrites pour `jarvis-chef`."""
+    for source, cible in TRADUCTIONS_CODEX:
+        texte = texte.replace(source, cible)
+    return PREAMBULE_CODEX + prefixer_codex(texte)
 
 
 def commande(moteur: str, message: str) -> str:
