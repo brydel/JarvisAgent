@@ -23,7 +23,7 @@ export async function requete<T>(path: string, body?: unknown, signal?: AbortSig
   const r = await fetch(path, { credentials: "same-origin", signal,
     ...(body === undefined ? {} : { method: "POST", headers: { "Content-Type": "application/json", "X-Jarvis-Studio": "1" }, body: JSON.stringify(body) }) });
   const data = await r.json().catch(() => ({}));
-  if (!r.ok) throw new Error(data.erreur || `Le serveur a repondu ${r.status}.`);
+  if (!r.ok) throw new Error(data.erreur || `Le serveur a répondu ${r.status}`);
   return data as T;
 }
 // Exemples explicitement fictifs : aucune session, mesure ou inference simulee n'est declaree reelle.
@@ -39,7 +39,7 @@ export function catalogueDemo(): Catalogue {
   return {
     agents: roles.map(([nom, titre, court, equipe, sigle, fournisseur, resume]) => ({
       nom: nom!, titre: titre!, court: court!, equipe: equipe!, sigle: sigle!, fournisseur: fournisseur!, resume: resume!, niveau: 2,
-      corps: `Tu es ${titre}. ${resume}\n\nTravaille dans le perimetre autorise. Explique tes choix, conserve les sources et verifie tes resultats. Ne modifie jamais les permissions ni les secrets. Demande une validation pour les actions sensibles.`,
+      corps: `Tu es ${titre}. ${resume}\n\nTravaille dans le périmètre autorisé. Explique tes choix, conserve les sources et vérifie tes résultats. Ne modifie jamais les permissions ni les secrets. Demande une validation pour les actions sensibles.`,
       empreinte: `demo-${nom}`, candidats: [],
     })),
     execution: { executants: [], connexions: [], taches: {}, arret_urgence: false, budget_inference_centimes: 0 },
@@ -58,7 +58,7 @@ export function dateCourte(ts: number) {
 }
 export function verifierAgent(agent: Agent, corps: string, demo: boolean): Promise<Verification> {
   if (demo) return Promise.resolve({ valide: corps.trim().length >= 80 && corps !== agent.corps,
-    raisons: corps.trim().length < 80 ? ["Ajoute des consignes plus précises (80 caractères minimum)."] : corps === agent.corps ? ["Les consignes n'ont pas change."] : [],
+    raisons: corps.trim().length < 80 ? ["Ajoute des consignes plus précises (80 caractères minimum)."] : corps === agent.corps ? ["Les consignes n'ont pas changé"] : [],
     diff: `--- Version de démonstration\n+++ Ton brouillon\n\n${corps}`, empreinte: "demo-preview", base: agent.empreinte, qualite_modele: null });
   return requete(`/api/v2/atelier/agents/${encodeURIComponent(agent.nom)}/verifier`, { corps, base: agent.empreinte });
 }

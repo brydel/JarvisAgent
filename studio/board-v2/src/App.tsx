@@ -17,12 +17,12 @@ const References = lazy(() => import("./references/References"));
 class StudioBoundary extends Component<{ children: ReactNode }, { failed: boolean }> {
   state = { failed: false };
   static getDerivedStateFromError() { return { failed: true }; }
-  render() { return this.state.failed ? <main className="porte-v2" role="alert"><h1>L'espace n'a pas pu s'afficher.</h1><p>Tes données enregistrées restent sur le serveur.</p><button onClick={() => location.reload()}>Recharger</button></main> : this.props.children; }
+  render() { return this.state.failed ? <main className="porte-v2" role="alert"><h1>L'espace n'a pas pu s'afficher</h1><p>Tes données enregistrées restent sur le serveur</p><button className="p-button p-primary" onClick={() => location.reload()}>Recharger</button></main> : this.props.children; }
 }
 function Pages({ source, charge }: { source: Source; charge?: number }) {
   const { vue } = useStudioNavigation();
-  if (vue === "references" || vue === "connaissances") return <Suspense fallback={<div className="p-loading" role="status">Ouverture de la bibliothèque...</div>}><References source={source}/></Suspense>;
-  return vue === "board" ? <Suspense fallback={<div className="p-loading" role="status">Ouverture du Board...</div>}><Workspace source={source} charge={charge}/></Suspense> : <ProductStudio source={source}/>;
+  if (vue === "references" || vue === "connaissances") return <Suspense fallback={<div className="p-loading" role="status">Ouverture de la bibliothèque</div>}><References source={source}/></Suspense>;
+  return vue === "board" ? <Suspense fallback={<div className="p-loading" role="status">Ouverture du Board</div>}><Workspace source={source} charge={charge}/></Suspense> : <ProductStudio source={source}/>;
 }
 export function App() {
   const params = useMemo(() => new URLSearchParams(location.search), []);
@@ -44,7 +44,7 @@ export function App() {
     }
     return () => { active = false; };
   }, [demo]);
-  if (session === "attente") return <div className="p-loading" role="status">Connexion à ton espace...</div>;
-  if (session === "refus") return <main className="porte-v2"><h1>Ton équipe t'attend.</h1><p>Ouvre le lien V2 fourni par <code>jarvis mission studio</code>.</p><a className="p-button p-primary" href="/v2/?demo=1&vue=accueil">Découvrir Jarvis sans connexion</a><p>Démonstration uniquement. Aucun agent réel n'est lancé.</p></main>;
+  if (session === "attente") return <div className="p-loading" role="status">Connexion</div>;
+  if (session === "refus") return <main className="porte-v2"><h1>Ouvre Jarvis Studio depuis ton terminal</h1><p>Le lien de session est fourni par <code>jarvis mission studio</code></p><a className="p-button p-primary" href="/v2/?demo=1&vue=accueil">Découvrir Jarvis sans connexion</a><p className="p-caption">Démonstration uniquement. Aucun agent réel n'est lancé.</p></main>;
   return <StudioBoundary><MotionConfig reducedMotion="user"><StudioNavigation><Pages source={source} charge={charge || undefined}/></StudioNavigation></MotionConfig></StudioBoundary>;
 }

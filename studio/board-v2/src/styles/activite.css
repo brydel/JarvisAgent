@@ -5,26 +5,27 @@
 .activite-titre:hover { background: var(--surface-hover); }
 .activite-titre svg { color: var(--text-muted); flex: none; }
 .activite-titre strong { font-weight: 500; }
-.activite-titre span { flex: 1; font-size: 12px; line-height: 16px; font-variant-numeric: tabular-nums; color: var(--text-secondary); }
+.activite-titre span { flex: 1; font: 400 12px/16px var(--font-mono); font-variant-numeric: tabular-nums; color: var(--text-secondary); }
 .activite-contenu { display: grid; grid-template-columns: 1fr 1fr; max-height: 220px; border-top: 1px solid var(--border-subtle); }
 .activite-liste, .activite-apercu { overflow: auto; padding: 12px 24px 16px; min-width: 0; font-size: 12px; line-height: 16px; }
 .activite-liste p, .activite-apercu > p { margin: 0 0 8px; }
 .activite-apercu { border-left: 1px solid var(--border-subtle); }
 .activite-meta, .activite-apercu > p { color: var(--text-secondary); }
+.activite-liste > .activite-meta { font: 400 12px/16px var(--font-mono); font-variant-numeric: tabular-nums; }
 .activite-session { width: 100%; display: flex; gap: 8px; padding: 8px; border: 1px solid var(--border-card); border-radius: var(--radius-sm); background: transparent; color: inherit; text-align: left; margin: 4px 0; cursor: pointer; transition: background var(--dur-hover) var(--ease-standard), border-color var(--dur-hover) var(--ease-standard); }
 .activite-session svg { color: var(--text-muted); flex: none; }
 .activite-session:hover { border-color: var(--border-strong); }
-.activite-session[aria-pressed=true] { border-color: var(--border-strong); background: var(--surface-pressed); }
+.activite-session[aria-pressed=true] { border-color: var(--border-strong); background: var(--surface-pressed); box-shadow: inset 2px 0 0 var(--text-primary); }
 .activite-session span, .activite-tache { display: flex; flex-direction: column; gap: 4px; overflow-wrap: anywhere; }
 .activite-session b, .activite-tache b { font-size: 13px; font-weight: 500; }
-.activite-session small, .activite-tache small { font-size: 12px; color: var(--text-secondary); }
+.activite-session small, .activite-tache small { font: 400 12px/16px var(--font-mono); font-variant-numeric: tabular-nums; color: var(--text-secondary); }
 .activite-tache { padding: 8px 0; border-bottom: 1px solid var(--border-subtle); }
 .activite-tache:last-child { border-bottom: 0; }
 .activite-tache > span { color: var(--text-secondary); }
 .activite-tache button { align-self: start; font-size: 12px; }
 .activite-directe [role=alert], .activite-tache > strong { color: var(--text-p2); font-weight: 500; }
 .activite-apercu > strong { font-size: 13px; font-weight: 500; }
-.activite-apercu pre { margin: 8px 0 0; white-space: pre-wrap; overflow-wrap: anywhere; font: 400 12px/16px var(--font-mono); }
+.activite-apercu pre { margin: 8px 0 0; white-space: pre-wrap; overflow-wrap: anywhere; font: 400 12px/16px var(--font-mono); color: var(--text-secondary); }
 @media (max-width: 900px) {
   .app.avec-activite:has(> .product-nav) { grid-template-rows: auto auto auto minmax(0, 1fr); }
   .app.avec-activite .travail { grid-template-rows: minmax(160px, 1fr) minmax(0, 0.7fr); }
@@ -33,4 +34,5 @@
   .activite-titre span { flex-basis: 60%; }
   .activite-contenu { grid-template-columns: 1fr; max-height: min(200px, 23vh); overflow: auto; }
   .activite-liste, .activite-apercu { overflow: visible; padding: 8px 16px; }
+  .activite-apercu { border-left: 0; border-top: 1px solid var(--border-subtle); }
 }
