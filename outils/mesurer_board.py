@@ -28,6 +28,7 @@ RACINE = Path(__file__).resolve().parents[1]
 def _isoler() -> Path:
     base = Path(tempfile.mkdtemp(prefix="jarvis-mesure-board-"))
     os.environ["JARVIS_STATE_DIR"] = str(base / "etat")
+    os.environ["JARVIS_SESSION"] = f"jarvis-test-{os.getpid()}"  # jamais la vraie session tmux : un dépôt de test réveillerait le vrai chef
     os.environ["JARVIS_CONFIG_DIR"] = str(base / "config")
     os.environ["JARVIS_DATA_DIR"] = str(base / "data")
     os.environ.pop("JARVIS_MISSIONS_PG", None)

@@ -29,6 +29,7 @@ def main() -> int:
     ap.add_argument("--fournisseur", default="claude", choices=("claude", "codex"))
     a = ap.parse_args()
     os.environ["JARVIS_STATE_DIR"] = tempfile.mkdtemp(prefix="jarvis-verif-")
+    os.environ["JARVIS_SESSION"] = f"jarvis-test-{os.getpid()}"  # jamais la vraie session tmux : un dépôt de test réveillerait le vrai chef
     sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "lib"))
     from jarvis import adaptateurs as ad, coureur, missions as mi
 
