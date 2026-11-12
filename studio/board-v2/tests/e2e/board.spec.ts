@@ -111,7 +111,7 @@ test.describe("board réel", () => {
     await expect.poll(() => carte.locator("audio").evaluate((a: HTMLAudioElement) => a.currentTime)).toBeGreaterThan(0.3);
     await carte.getByRole("button", { name: "Pause", exact: true }).click();
     await carte.getByRole("button", { name: "Vitesse de lecture" }).click();
-    await expect(carte.getByRole("button", { name: "Vitesse de lecture" })).toHaveText(/1.25x/);
+    await expect(carte.getByRole("button", { name: "Vitesse de lecture" })).toHaveText("1,25×");
   });
 
   test("vidéo importée : vignette extraite par le serveur, lecture réelle (WebM), contrôles", async ({ page }) => {
@@ -280,7 +280,8 @@ test.describe("board réel", () => {
     await expect(carte.getByText("Réussie")).toBeVisible({ timeout: 20_000 });
     await expect(carte.getByText("100%")).toBeVisible();
     await carte.click({ position: { x: 40, y: 40 } });
-    await expect(page.getByRole("complementary", { name: "Panneau contextuel" }).getByText("Tâches (1/1)")).toBeVisible();
+    const taches = page.getByRole("complementary", { name: "Panneau contextuel" }).locator(".tete").filter({ has: page.getByRole("heading", { name: "Tâches", exact: true }) });
+    await expect(taches.locator(".compte")).toHaveText("1/1");
     const agents = page.locator(".react-flow__node-agents");
     await expect(agents).toHaveCount(0); // aucune carte d'agents inventée
   });

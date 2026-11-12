@@ -25,7 +25,7 @@ test("connexion MCP, découverte, sélection des outils et révocation", async (
   await ouvrir(page);
   await page.getByRole("button", { name: "Intégrations", exact: true }).click();
   const panneau = page.getByRole("dialog", { name: "Intégrations", exact: true });
-  await expect(panneau.getByText("Aucun serveur MCP n'est encore connecté à cette installation.")).toBeVisible();
+  await expect(panneau.getByText("Aucun serveur MCP n'est encore connecté à cette installation", { exact: true })).toBeVisible();
   await panneau.getByRole("button", { name: "Connecter un serveur MCP", exact: true }).click();
   const formulaire = panneau.getByRole("form", { name: "Connecter un serveur MCP", exact: true });
   await formulaire.getByRole("textbox", { name: "Nom de la connexion", exact: true }).fill("Espace de recherche");

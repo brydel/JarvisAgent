@@ -69,6 +69,7 @@ interface Props {
 
 export function Canevas({ source, etat, b, filtre, priorite, recherche, selection, setSelection, aSelectionner, deposer, children }: Props) {
   const rf = useReactFlow<Noeud, Edge<DonneesLien>>();
+  const cadrage = useRef<{ espace: string; vide: boolean; cadrer: boolean } | null>(null);
   const [noeuds, setNoeuds] = useState<Noeud[]>([]);
   const [depot, setDepot] = useState(false);
   const outil = useUi((e) => e.outil);
@@ -194,6 +195,13 @@ export function Canevas({ source, etat, b, filtre, priorite, recherche, selectio
   /* ---------------------------------------------------------------- rendu ---------------------------------- */
   // la démo ouvre sur une vue fixe (contrat visuel), décalée sous la barre d'outils ; un vrai Board est cadré dans
   // la zone libre du canevas (fitView + MARGE_VUE) : dans les deux cas aucune carte n'est sous une barre à l'ouverture
+  // un vrai Board est cadré dans la zone libre dès qu'il a un objet (à l'ouverture, ou quand le premier arrive), sauf si ce
+  // premier objet est tracé à la main : la vue ne bouge pas sous un trait qu'on vient de dessiner
+  if (etat) {
+    const c = cadrage.current, vide = etat.objets.length === 0;
+    if (!c || c.espace !== source.espace) cadrage.current = { espace: source.espace, vide, cadrer: !source.demo && !vide };
+    else if (c.vide !== vide) { c.vide = vide; c.cadrer = !source.demo && !vide && OUTILS_DIRECTS.has(outil); }
+  }
   const vueInitiale: Viewport = source.demo ? { x: 0, y: ZONE_LIBRE.top - 12, zoom: 0.8 } : { x: ZONE_LIBRE.left, y: ZONE_LIBRE.top, zoom: 0.8 };
   const direct = OUTILS_DIRECTS.has(outil);
   const enPresentation = presentation !== null;
@@ -241,7 +249,7 @@ export function Canevas({ source, etat, b, filtre, priorite, recherche, selectio
         snapToGrid={grille} snapGrid={[20, 20]} deleteKeyCode={null} multiSelectionKeyCode={["Shift", "Meta", "Control"]}
         selectionKeyCode="Shift" panOnScroll={false} zoomOnDoubleClick={false} onlyRenderVisibleElements={noeuds.length > 80}
         nodesDraggable={manipulable} nodesConnectable={manipulable} elementsSelectable={manipulable}
-        elevateNodesOnSelect={false} proOptions={{ hideAttribution: false }} fitView={!source.demo && Boolean(etat?.objets.length)}
+        elevateNodesOnSelect={false} proOptions={{ hideAttribution: false }} fitView={cadrage.current?.cadrer ?? false}
         fitViewOptions={{ padding: MARGE_VUE, maxZoom: 0.9 }}>
         <Background variant={BackgroundVariant.Dots} gap={20} size={1.6} color="var(--grid-dot)" />
         {minicarte && !enPresentation && (
