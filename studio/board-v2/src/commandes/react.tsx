@@ -70,3 +70,11 @@ export function BoutonCommande({ id, origine = "bouton", texte = false, classe, 
     </button>
   );
 }
+
+/** Un raccourci dessiné : une touche par élément, sans « + », 4 px d'écart. Même dessin dans la palette, les menus et la recherche. */
+export function Touches({ raccourci }: { raccourci: string }) {
+  const texte = afficher(raccourci);
+  // « Ctrl+Maj+Z » → trois touches ; sur Mac (« ⌘⇧Z ») les symboles restent dans une seule touche
+  const touches = texte.includes("+") && texte.length > 1 ? texte.replace(/\+\+$/, "+plus").split("+").map((t) => (t === "plus" ? "+" : t)) : [texte];
+  return <span className="touches-raccourci" aria-label={texte}>{touches.map((t, i) => <kbd key={i}>{t}</kbd>)}</span>;
+}

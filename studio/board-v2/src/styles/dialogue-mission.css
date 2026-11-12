@@ -1,0 +1,45 @@
+/* Dialogue « Lancer une mission » : une seule définition, chargée par DialogueMission.tsx. */
+.dialogue { padding: 0; border: 0; background: transparent; color: var(--text-primary); max-width: min(624px, calc(100vw - 32px)); width: 100%; overflow: visible; }
+.dialogue::backdrop { background: var(--scrim); }
+@media (prefers-reduced-motion: no-preference) { .dialogue[open]::backdrop { animation: voile var(--dur-panel) var(--ease-standard); } }
+@keyframes voile { from { opacity: 0; } }
+.dialogue-carte { border-radius: var(--radius-panel); border: 1px solid var(--border-card); background: var(--surface-card); box-shadow: var(--shadow-lift); overflow: hidden; }
+.dialogue-tete { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 12px; align-items: start; padding: 20px 16px 0 24px; }
+.dialogue-tete h2 { margin: 0; font-size: 18px; line-height: 24px; font-weight: 500; }
+.dialogue-tete p { margin: 4px 0 0; color: var(--text-secondary); font-size: 13px; line-height: 20px; }
+.dialogue-corps { display: grid; gap: 16px; padding: 20px 24px 0; }
+.champ-groupe { display: grid; gap: 8px; }
+.champ-libelle { font-size: 13px; font-weight: 500; color: var(--text-secondary); padding: 0; }
+.requis { color: var(--text-secondary); }
+.facultatif { margin-left: 8px; font-weight: 400; color: var(--text-muted); }
+.champ-pied { display: flex; justify-content: space-between; align-items: baseline; gap: 16px; }
+.champ-aide { justify-self: end; font-size: 12px; line-height: 16px; color: var(--text-muted); }
+.champ-aide.compte { flex: none; font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
+.dialogue .champ { padding: 0 12px; border-radius: var(--radius-sm); background: var(--surface-field); font-size: 14px; transition: border-color var(--dur-hover) var(--ease-standard); }
+.dialogue .champ:focus { border-color: var(--text-secondary); }
+.dialogue .champ::placeholder { color: var(--text-muted); }
+.dialogue .champ.zone { min-height: 112px; padding: 8px 12px; line-height: 20px; }
+.dialogue-ligne { display: flex; flex-wrap: wrap; gap: 16px 32px; }
+.segments { border: 0; margin: 0; padding: 0; display: flex; gap: 4px; flex-wrap: wrap; }
+.segments legend { margin-bottom: 8px; }
+.segments label { position: relative; display: inline-flex; align-items: center; gap: 8px; height: 36px; padding: 0 12px; border-radius: var(--radius-sm);
+  border: 1px solid var(--border-card); background: var(--surface-inset); color: var(--text-secondary); font-size: 13px; cursor: pointer;
+  transition: border-color var(--dur-hover) var(--ease-standard), color var(--dur-hover) var(--ease-standard), background var(--dur-hover) var(--ease-standard); }
+.segments label:hover { color: var(--text-primary); }
+.segments label.actif { color: var(--text-primary); border-color: var(--border-strong); background: var(--surface-hover); box-shadow: inset 0 1px 0 var(--hover-veil); }
+.segments input { position: absolute; opacity: 0; inset: 0; margin: 0; cursor: pointer; }
+.segments label:focus-within { outline: 2px solid var(--focus); outline-offset: 2px; }
+.dialogue-politique { display: flex; gap: 12px; align-items: flex-start; margin: 0; padding: 12px; border-radius: var(--radius-sm);
+  background: var(--surface-inset); border: 1px solid var(--border-subtle); color: var(--text-secondary); font-size: 13px; line-height: 20px; }
+.dialogue-politique svg { color: var(--text-secondary); flex: none; margin-top: 2px; }
+.dialogue-politique b { color: var(--text-primary); font-weight: 500; }
+.dialogue-erreur { margin: 0; padding: 8px 12px; border-radius: var(--radius-sm); background: var(--danger-bg); color: var(--text-danger-soft); font-size: 13px; line-height: 20px; }
+.dialogue-pied { display: flex; align-items: center; justify-content: flex-end; gap: 8px; padding: 20px 24px; }
+.dialogue-pied .raccourci { display: inline-flex; align-items: center; gap: 4px; margin-right: auto; font-size: 12px; color: var(--text-muted); }
+.dialogue-pied .bouton { height: 36px; padding: 0 16px; gap: 8px; }
+@media (max-width: 600px) {
+  .dialogue-tete { padding: 16px 8px 0 16px; }
+  .dialogue-corps { padding: 16px 16px 0; }
+  .dialogue-pied { padding: 16px; }
+  .dialogue-pied .raccourci { display: none; }
+}

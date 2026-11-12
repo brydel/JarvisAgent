@@ -19,7 +19,7 @@ test.describe("visuel", () => {
         await page.mouse.move(5, 5);
         await attendreStable(page, 500);
       }
-      await expect(page.getByText("DÉMO", { exact: true })).toBeVisible();
+      await expect(page.getByText("Démo", { exact: true })).toBeVisible();
       fs.mkdirSync(RAPPORTS, { recursive: true });
       await page.screenshot({ path: path.join(RAPPORTS, `after-${nom}.png`) });
       await expect(page).toHaveScreenshot(`board-demo-${nom}.png`);
@@ -111,7 +111,7 @@ test.describe("board réel", () => {
     await expect.poll(() => carte.locator("audio").evaluate((a: HTMLAudioElement) => a.currentTime)).toBeGreaterThan(0.3);
     await carte.getByRole("button", { name: "Pause", exact: true }).click();
     await carte.getByRole("button", { name: "Vitesse de lecture" }).click();
-    await expect(carte.getByRole("button", { name: "Vitesse de lecture" })).toHaveText(/1.25x/);
+    await expect(carte.getByRole("button", { name: "Vitesse de lecture" })).toHaveText("1,25×");
   });
 
   test("vidéo importée : vignette extraite par le serveur, lecture réelle (WebM), contrôles", async ({ page }) => {
@@ -278,9 +278,10 @@ test.describe("board réel", () => {
     await expect(carte).toBeVisible();
     // l'exécutant factice du serveur de test prend la tâche : la carte passe à « Réussie » sans rechargement
     await expect(carte.getByText("Réussie")).toBeVisible({ timeout: 20_000 });
-    await expect(carte.getByText("100%")).toBeVisible();
+    await expect(carte.getByText("1 / 1")).toBeVisible();
     await carte.click({ position: { x: 40, y: 40 } });
-    await expect(page.getByRole("complementary", { name: "Panneau contextuel" }).getByText("Tâches (1/1)")).toBeVisible();
+    const taches = page.getByRole("complementary", { name: "Panneau contextuel" }).locator(".tete").filter({ has: page.getByRole("heading", { name: "Tâches", exact: true }) });
+    await expect(taches.locator(".compte")).toHaveText("1 / 1");
     const agents = page.locator(".react-flow__node-agents");
     await expect(agents).toHaveCount(0); // aucune carte d'agents inventée
   });
@@ -399,7 +400,7 @@ test.describe("board réel", () => {
     await page.reload();
     await expect(page.getByRole("group", { name: "Filtrer par type" }).getByRole("button", { name: /^Notes/ })).toHaveAttribute("aria-pressed", "true");
     await expect(page.getByRole("searchbox", { name: "Rechercher dans le Board" })).toHaveValue("Nouvelle");
-    await expect(page.locator(".subbar .badge-p.P2")).toBeVisible();
+    await expect(page.locator(".subbar .filtres .badge-p.P2")).toBeVisible();
     await expect(page.getByRole("complementary", { name: "Panneau contextuel" }).getByRole("heading", { name: "Note" })).toBeVisible();
     // une valeur invalide est ignorée
     await page.goto("/v2/?filtre=inconnu&priorite=P9&carte=../../x");

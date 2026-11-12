@@ -3,8 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Check, Search } from "lucide-react";
 import type { ContexteBoard } from "./contexte";
-import { afficher } from "./raccourcis";
-import { useCommandes } from "./react";
+import { Touches, useCommandes } from "./react";
 import { chercher } from "./recherche";
 import { libelleDe, raccourcisDe, type Commande } from "./types";
 
@@ -61,8 +60,8 @@ export function Palette({ fermer }: { fermer: () => void }) {
     <div className="palette-fond" onPointerDown={(e) => e.target === e.currentTarget && fermer()}>
       <div className="palette" role="dialog" aria-modal="true" aria-label="Palette de commandes">
         <div className="palette-saisie">
-          <Search size={18} aria-hidden />
-          <input autoFocus value={requete} placeholder="Chercher une commande…" role="combobox" aria-expanded="true" aria-controls="palette-liste"
+          <Search size={16} aria-hidden />
+          <input autoFocus value={requete} placeholder="Commande" role="combobox" aria-expanded="true" aria-controls="palette-liste"
             aria-activedescendant={lignes[actif] ? `palette-${lignes[actif]!.cmd.id}` : undefined} aria-label="Chercher une commande" maxLength={80}
             onChange={(e) => setRequete(e.target.value)}
             onKeyDown={(e) => {
@@ -87,9 +86,9 @@ export function Palette({ fermer }: { fermer: () => void }) {
                   className={`palette-ligne${l.raison !== null ? " indisponible" : ""}`} onPointerMove={() => setActif(i)} onClick={() => lancer(l)}>
                   <span className="palette-icone">{Icone ? <Icone size={16} aria-hidden /> : null}</span>
                   <span className="palette-libelle">{l.libelle}{l.raison !== null && <small className="palette-raison">Indisponible : {l.raison}</small>}</span>
-                  {l.cmd.actif?.(c) && <Check size={14} className="palette-coche" aria-label="actif" />}
+                  {l.cmd.actif?.(c) && <Check size={16} className="palette-coche" aria-label="actif" />}
                   {!l.groupe && <span className="palette-categorie">{l.cmd.categorie}</span>}
-                  {r && <kbd>{afficher(r)}</kbd>}
+                  {r && <Touches raccourci={r} />}
                 </div>
               </div>
             );

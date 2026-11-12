@@ -23,23 +23,23 @@ export async function requete<T>(path: string, body?: unknown, signal?: AbortSig
   const r = await fetch(path, { credentials: "same-origin", signal,
     ...(body === undefined ? {} : { method: "POST", headers: { "Content-Type": "application/json", "X-Jarvis-Studio": "1" }, body: JSON.stringify(body) }) });
   const data = await r.json().catch(() => ({}));
-  if (!r.ok) throw new Error(data.erreur || `Le serveur a repondu ${r.status}.`);
+  if (!r.ok) throw new Error(data.erreur || `Le serveur a répondu ${r.status}`);
   return data as T;
 }
 // Exemples explicitement fictifs : aucune session, mesure ou inference simulee n'est declaree reelle.
 export function catalogueDemo(): Catalogue {
   const roles = [
-    ["architecte", "Architecte systèmes", "Architecture", "Conception", "AR", "claude", "Transforme une ambition en décisions techniques solides."],
-    ["frontend", "Ingénieur interface", "Interface", "Fabrication", "UI", "codex", "Donne vie aux interfaces rapides, accessibles et soignées."],
-    ["recherche", "Analyste recherche", "Recherche", "Veille", "RE", "claude", "Relie les sources, compare les faits et explicite les incertitudes."],
-    ["design", "Designer produit", "Design", "Conception", "DS", "claude", "Transforme les usages en interactions simples et mémorables."],
-    ["qa", "Ingénieur qualité", "Qualité", "Qualité", "QA", "codex", "Cherche les régressions avant qu'elles atteignent ton produit."],
-    ["backend", "Ingénieur backend", "Backend", "Fabrication", "BE", "codex", "Construit les contrats, la persistance et la reprise après panne."],
+    ["architecte", "Architecte systèmes", "Architecture", "Conception", "AR", "claude", "Découpe une demande en décisions techniques"],
+    ["frontend", "Ingénieur interface", "Interface", "Fabrication", "UI", "codex", "Écrit les écrans React et leurs tests"],
+    ["recherche", "Analyste recherche", "Recherche", "Veille", "RE", "claude", "Compare les sources et signale ce qui reste incertain"],
+    ["design", "Designer produit", "Design", "Conception", "DS", "claude", "Dessine les parcours et les maquettes"],
+    ["qa", "Ingénieur qualité", "Qualité", "Qualité", "QA", "codex", "Rejoue les parcours et relève les régressions"],
+    ["backend", "Ingénieur backend", "Backend", "Fabrication", "BE", "codex", "Écrit les contrats d'API, la persistance et la reprise après panne"],
   ];
   return {
     agents: roles.map(([nom, titre, court, equipe, sigle, fournisseur, resume]) => ({
       nom: nom!, titre: titre!, court: court!, equipe: equipe!, sigle: sigle!, fournisseur: fournisseur!, resume: resume!, niveau: 2,
-      corps: `Tu es ${titre}. ${resume}\n\nTravaille dans le perimetre autorise. Explique tes choix, conserve les sources et verifie tes resultats. Ne modifie jamais les permissions ni les secrets. Demande une validation pour les actions sensibles.`,
+      corps: `Tu es ${titre}. ${resume}.\n\nTravaille dans le périmètre autorisé. Explique tes choix, conserve les sources et vérifie tes résultats. Ne modifie jamais les permissions ni les secrets. Demande une validation pour les actions sensibles.`,
       empreinte: `demo-${nom}`, candidats: [],
     })),
     execution: { executants: [], connexions: [], taches: {}, arret_urgence: false, budget_inference_centimes: 0 },
@@ -53,12 +53,10 @@ export async function chargerProduit(source: Source, signal?: AbortSignal): Prom
   ]);
   return { catalogue, board };
 }
-export function dateCourte(ts: number) {
-  return new Intl.DateTimeFormat("fr-CA", { day: "numeric", month: "short" }).format(ts * 1000);
-}
+export { dateCourte } from "../lib/format";
 export function verifierAgent(agent: Agent, corps: string, demo: boolean): Promise<Verification> {
   if (demo) return Promise.resolve({ valide: corps.trim().length >= 80 && corps !== agent.corps,
-    raisons: corps.trim().length < 80 ? ["Ajoute des consignes plus précises (80 caractères minimum)."] : corps === agent.corps ? ["Les consignes n'ont pas change."] : [],
+    raisons: corps.trim().length < 80 ? ["Ajoute des consignes plus précises (80 caractères minimum)."] : corps === agent.corps ? ["Les consignes n'ont pas changé"] : [],
     diff: `--- Version de démonstration\n+++ Ton brouillon\n\n${corps}`, empreinte: "demo-preview", base: agent.empreinte, qualite_modele: null });
   return requete(`/api/v2/atelier/agents/${encodeURIComponent(agent.nom)}/verifier`, { corps, base: agent.empreinte });
 }

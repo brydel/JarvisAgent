@@ -53,7 +53,7 @@ export interface EtatUi extends Preferences {
 }
 
 const CLE = "jarvis.board.preferences.v1";
-const DEFAUT: Preferences = { theme: "nuit", minicarte: true, grille: false, guides: true, couleur: "indigo", epaisseur: 6 };
+const DEFAUT: Preferences = { theme: "nuit", minicarte: true, grille: false, guides: true, couleur: "neutre", epaisseur: 6 };
 const VIDE: ReadonlySet<string> = new Set();
 
 function lirePreferences(): Preferences {

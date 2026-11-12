@@ -1,14 +1,16 @@
 import { memo, useEffect, useState } from "react";
 import { AnimatePresence, motion } from "motion/react";
-import { Calendar, Check, CircleDashed, Copy, FileText, Image as IconeImage, Link2, Loader, MoreHorizontal, Music, Play, Plus, ShieldCheck, Sparkles, Star, Target, Video, X } from "lucide-react";
+import { Check, CircleDashed, Copy, FileText, Folder, Image as IconeImage, Link2, Loader, Music, Play, Plus, ShieldCheck, Target, Users, Video, X } from "lucide-react";
 import type { Approbation, Evenement, ObjetBoard, Priorite, ReglagesBoard } from "../types";
 import type { Inspection, Source } from "../api";
-import { ilya, libelleTache, taille } from "../lib/format";
+import { ilya, libelleTache, taille, LIBELLE_TYPE } from "../lib/format";
 import { rendreNote } from "../lib/markdown";
 import { Avatar } from "./Avatar";
 import { statutAgent } from "../nodes/CartesVivantes";
 import { etatJarvis } from "../nodes/CardShell";
 import { CONTEXTUALISABLES } from "../nodes/contexte";
+import { LigneCredit } from "../cartes/Provenance";
+import { provenance } from "../cartes/etat";
 
 type Onglet = "details" | "activite" | "commentaires";
 const NIVEAUX: Record<string, string> = { P1: "Élevée", P2: "Moyenne", P3: "Basse" };
@@ -19,29 +21,51 @@ export function decrireEvenement(e: Evenement | Inspection["chronologie"][number
     case "demo": return String(d.texte ?? "");
     case "board_objet": return `Objet ${d.type ?? ""} ajouté au Board`;
     case "board_maj": return `Objet modifié (${(d.champs as string[] | undefined)?.join(", ") ?? ""})`;
-    case "board_supprime": return "Objet(s) supprimé(s)";
-    case "board_restaure": return "Objet(s) restauré(s)";
+    case "board_supprime": return "Suppression sur le Board";
+    case "board_restaure": return "Restauration sur le Board";
     case "board_lien": return "Relation créée";
     case "board_fichier": return `Fichier ${d.famille ?? ""} téléversé`;
     case "board_commentaire": return "Commentaire ajouté";
-    case "board_propositions": return `Jarvis a contextualisé l'élément (${d.n ?? 0} action(s) proposée(s)${Number(d.liens) ? `, ${d.liens} lien(s)` : ""})`;
+    case "board_propositions": return `Jarvis a contextualisé l'élément (${d.n ?? 0} ${Number(d.n) > 1 ? "actions proposées" : "action proposée"}${Number(d.liens) ? `, ${d.liens} ${Number(d.liens) > 1 ? "liens" : "lien"}` : ""})`;
     case "outils": return `Outils : ${((d.outils as unknown as { outil: string; detail: string }[]) ?? []).map((o) => `${o.outil} ${o.detail}`).join(" · ")}`;
     case "reglages_board": return "Réglages du chef modifiés";
     case "board_proposition": return `Proposition ${d.decision === "lancer" ? "lancée" : "écartée"}`;
+    case "tache_creee": return "Tâche créée";
     case "mission_creee": return `Mission créée (${d.source ?? ""})`;
     case "mission_etat": return `Mission ${String(d.vers ?? "").toLowerCase()}`;
     case "tache_etat": return `Tâche : ${d.de} → ${d.vers}${d.raison ? ` — ${d.raison}` : ""}`;
     case "artefact": return `Livrable reçu de ${d.fournisseur}${d.factice ? " (factice)" : ""}`;
     case "approbation": return `Approbation ${d.decision} par ${d.par}`;
     case "resultat_perime": return "Résultat périmé refusé";
-    default: return e.type.replace(/_/g, " ");
+    case "executant_enrole": return "Exécutant enrôlé";
+    case "executant_revoque": return "Exécutant révoqué";
+    case "reference_etat": return `Référence : ${ETATS_REFERENCE[String(d.statut ?? "")] ?? "état mis à jour"}`;
+    case "tache_retenue": return "Tâche retenue par un exécutant";
+    case "outbox_relance": return "Envoi relancé";
+    case "budget_inference": return "Budget d'inférence modifié";
+    case "board_relecture": return "Relecture demandée";
+    case "board_lien_maj": return "Relation modifiée";
+    case "board_deplace": return "Carte déplacée vers un autre Board";
+    case "board_dependance": return "Dépendance enregistrée";
+    case "board_debloquee": return "Carte débloquée";
+    case "arret_urgence": return "Arrêt d'urgence du moteur";
+    // un type que l'interface ne connaît pas encore : jamais la clé technique à l'écran
+    default: return "Événement";
   }
 }
+const ETATS_REFERENCE: Record<string, string> = { en_attente: "capture en attente", capture: "capture en cours", en_cours: "capture en cours",
+  prete: "prête", indexee: "indexée", echec: "capture en échec", erreur: "capture en échec" };
+/** Type d'approbation lisible : « envoi_candidature » → « Envoi de candidature ». */
+const typeApprobation = (t: string) => LIBELLE_TYPE[t] ?? "Action à valider";
 
-function IconeType({ type }: { type: string }) {
-  const I = type === "mission" ? Target : type === "image" ? IconeImage : type === "lien" ? Link2 : type === "audio" ? Music
-    : type === "video" ? Video : FileText;
-  return <span className="icone-mission" style={type === "mission" ? undefined : { background: "var(--surface-tile)", color: "var(--text-accent-soft)" }}><I size={22} /></span>;
+const NOMS_TYPES: Record<string, string> = { note: "Note", texte: "Texte", mission: "Mission", image: "Image", capture: "Capture", lien: "Lien", audio: "Audio",
+  video: "Vidéo", pdf: "PDF", document: "Document", dossier: "Dossier", agents: "Équipe d'agents", plan: "Plan", tache: "Tâche" };
+
+/** La rubrique de la carte : une icône au trait et le nom du type, au-dessus du titre. */
+function Rubrique({ type }: { type: string }) {
+  const I = type === "mission" ? Target : type === "image" || type === "capture" ? IconeImage : type === "lien" ? Link2 : type === "audio" ? Music
+    : type === "video" ? Video : type === "dossier" ? Folder : type === "agents" ? Users : FileText;
+  return <span className="p-rubrique"><I size={16} aria-hidden />{NOMS_TYPES[type] ?? type.charAt(0).toUpperCase() + type.slice(1)}</span>;
 }
 
 interface Props {
@@ -98,14 +122,15 @@ export const Panneau = memo(function Panneau({ source, objet, objets, evenements
   return (
     <aside className="panneau" aria-label="Panneau contextuel">
       <div className="onglets" role="tablist">
-        {([["details", "Détails"], ["activite", "Activité"], ["commentaires", `Commentaires (${comms.length})`]] as [Onglet, string][]).map(([k, nom]) => (
-          <button key={k} role="tab" aria-selected={onglet === k} onClick={() => setOnglet(k)}>{nom}</button>
+        {([["details", "Détails"], ["activite", "Activité"], ["commentaires", "Commentaires"]] as [Onglet, string][]).map(([k, nom]) => (
+          <button key={k} role="tab" aria-selected={onglet === k} onClick={() => setOnglet(k)}>{nom}
+            {k === "commentaires" && comms.length > 0 && <span className="compte">{comms.length}</span>}</button>
         ))}
       </div>
       <div className="panneau-corps">
         <AnimatePresence mode="wait" initial={false}>
-          <motion.div key={`${onglet}-${objet?.id ?? "aucun"}`} initial={{ opacity: 0, x: 8 }} animate={{ opacity: 1, x: 0 }}
-            exit={{ opacity: 0 }} transition={{ duration: 0.18, ease: [0.2, 0, 0, 1] }}>
+          <motion.div key={`${onglet}-${objet?.id ?? "aucun"}`} initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0 }} transition={{ duration: 0.18, ease: [0.22, 1, 0.36, 1] }}>
             {onglet === "details" && (objet
               ? <>
                   <SectionJarvis objet={objet} contextualiser={contextualiser} deciderProposition={deciderProposition} />
@@ -115,12 +140,12 @@ export const Panneau = memo(function Panneau({ source, objet, objets, evenements
               : <><ReglagesJarvis reglages={reglages} regler={regler} /><Apercu objets={objets} approbations={approbations} activite={activite} /></>)}
             {onglet === "activite" && (
               <div className="section">
-                {activite.length ? <ListeActivite activite={activite} /> : <p className="vide">Aucune activité enregistrée pour l'instant.</p>}
+                {activite.length ? <ListeActivite activite={activite} /> : <p className="vide">Aucune activité enregistrée pour l'instant</p>}
               </div>
             )}
             {onglet === "commentaires" && (
-              <div className="section" style={{ display: "grid", gap: 10 }}>
-                {!objet && <p className="vide">Sélectionne une carte pour lire ou écrire ses commentaires.</p>}
+              <div className="section fil-commentaires">
+                {!objet && <p className="vide">Sélectionne une carte pour lire ou écrire ses commentaires</p>}
                 {comms.map((c) => <div key={c.id} className="commentaire"><div className="qui">{c.auteur} · {ilya(c.cree)}</div>{c.texte}</div>)}
                 {objet && (
                   <form onSubmit={async (e) => {
@@ -130,9 +155,9 @@ export const Panneau = memo(function Panneau({ source, objet, objets, evenements
                     setBrouillon("");
                     setComms(await source.commentaires(objet.id));
                   }}>
-                    <textarea className="champ" style={{ height: 80, paddingTop: 8 }} placeholder="Écrire un commentaire…" value={brouillon}
+                    <textarea className="champ zone-commentaire" placeholder="Commentaire" value={brouillon}
                       onChange={(e) => setBrouillon(e.target.value)} maxLength={4000} aria-label="Nouveau commentaire" />
-                    <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 8 }}>
+                    <div className="ligne-actions">
                       <button className="bouton primaire" disabled={!brouillon.trim()}>Commenter</button>
                     </div>
                   </form>
@@ -158,10 +183,10 @@ function ReglagesJarvis({ reglages, regler }: { reglages?: ReglagesBoard; regler
   );
   return (
     <section className="section section-jarvis" aria-label="Autonomie de Jarvis">
-      <div className="tete"><h4><Sparkles size={17} /> Autonomie de Jarvis</h4></div>
-      {ligne("auto_analyse", "Analyser ce que je dépose", "Résumé, contexte, liens vers les autres cartes du projet.")}
+      <div className="tete"><h4>Autonomie de Jarvis</h4></div>
+      {ligne("auto_analyse", "Analyser ce que je dépose", "Résumé, contexte, liens vers les autres cartes du projet")}
       {ligne("actions_auto", "Lancer seul les actions sans risque", "Une action L1 par élément (rédiger, résumer, comparer). Rien d'externe.")}
-      <p className="vide">Envoyer, publier, postuler ou modifier tes fichiers attend toujours ton accord.</p>
+      <p className="vide">Envoyer, publier, postuler ou modifier tes fichiers attend toujours ton accord</p>
     </section>
   );
 }
@@ -177,12 +202,12 @@ function SectionJarvis({ objet, contextualiser, deciderProposition }: {
   const props = objet.meta.propositions ?? [];
   return (
     <section className="section section-jarvis" aria-label="Actions proposées par Jarvis">
-      <div className="tete"><h4><Sparkles size={17} /> Jarvis</h4>
+      <div className="tete"><h4>Jarvis</h4>
         {e?.etat !== "analyse" && (
           <button type="button" className="lien-texte" onClick={() => contextualiser(objet.id)}>{e ? "Relancer l'analyse" : "Analyser avec Jarvis"}</button>
         )}</div>
-      {!e && <p className="vide">Pas encore analysé.</p>}
-      {e && e.etat !== "pret" && <p className={`vide etat-${e.etat}`}>{e.etat === "analyse" ? <Loader size={14} className="tourne" /> : null} {e.texte}</p>}
+      {!e && <p className="vide">Pas encore analysé</p>}
+      {e && e.etat !== "pret" && <p className={`vide etat-${e.etat}`}>{e.etat === "analyse" ? <Loader size={16} className="tourne" /> : null}{e.texte}</p>}
       {objet.meta.jarvis_resume && <p className="resume-jarvis">{objet.meta.jarvis_resume}</p>}
       {props.length > 0 && <h5 className="sous-titre">Actions proposées par Jarvis</h5>}
       <ul className="propositions">
@@ -198,9 +223,9 @@ function SectionJarvis({ objet, contextualiser, deciderProposition }: {
                 <button type="button" className="bouton primaire" disabled={occupe !== null}
                   aria-label={`${p.niveau === "L1" ? "Lancer" : "Préparer"} « ${p.titre} »`}
                   onClick={async () => { setOccupe(i); await deciderProposition(objet, i, "lancer"); setOccupe(null); }}>
-                  <Play size={13} /> {p.niveau === "L1" ? "Lancer" : "Préparer"}</button>
+                  <Play size={16} />{p.niveau === "L1" ? "Lancer" : "Préparer"}</button>
                 <button type="button" className="bouton" aria-label={`Écarter « ${p.titre} »`} disabled={occupe !== null}
-                  onClick={async () => { setOccupe(i); await deciderProposition(objet, i, "ecarter"); setOccupe(null); }}><X size={13} /> Écarter</button>
+                  onClick={async () => { setOccupe(i); await deciderProposition(objet, i, "ecarter"); setOccupe(null); }}><X size={16} />Écarter</button>
               </div>
             ) : <span className="meta-carte">{p.statut === "lancee" ? (p.par?.startsWith("jarvis") ? "Lancée par Jarvis" : "Lancée") : "Écartée"}</span>}
           </li>
@@ -219,8 +244,8 @@ function Livrable({ artefacts }: { artefacts: Inspection["artefacts"] }) {
   const long = a.contenu.length > 900;
   return (
     <section className="section section-livrable" aria-label="Livrable">
-      <div className="tete"><h4><FileText size={17} /> Livrable</h4>
-        <span className="meta-carte">{a.fournisseur}{a.factice && a.fournisseur !== "factice" ? " · factice" : ""}{a.revue !== "acceptee" ? " · refusé par la revue" : ""}</span></div>
+      <div className="tete"><h4><FileText size={16} />Livrable</h4>
+        <p className="credit points"><b>{a.fournisseur}</b>{a.factice && a.fournisseur !== "factice" ? <span>factice</span> : null}{a.revue !== "acceptee" ? <span>refusé par la revue</span> : null}</p></div>
       <div className={`livrable-texte${long && !tout ? " replie" : ""}`}>{rendreNote(a.contenu)}</div>
       <div className="livrable-actions">
         {long && <button type="button" className="lien-texte" onClick={() => setTout((v) => !v)}>{tout ? "Réduire" : "Tout afficher"}</button>}
@@ -228,7 +253,7 @@ function Livrable({ artefacts }: { artefacts: Inspection["artefacts"] }) {
           await navigator.clipboard?.writeText(a.contenu).catch(() => undefined);
           setCopie(true);
           window.setTimeout(() => setCopie(false), 1500);
-        }}><Copy size={13} /> {copie ? "Copié" : "Copier"}</button>
+        }}><Copy size={16} />{copie ? "Copié" : "Copier"}</button>
       </div>
     </section>
   );
@@ -239,9 +264,9 @@ function ListeActivite({ activite, max }: { activite: { cle: string; texte: stri
     <ul className="activite">
       {activite.slice(0, max).map((a) => (
         <li key={a.cle}>
-          {a.agent ? <Avatar id={a.agent} role={a.agent} taille={34} point /> : <span className="bouton-rond" style={{ width: 34, height: 34 }}><CircleDashed size={16} /></span>}
+          {a.agent ? <Avatar id={a.agent} role={a.agent} taille={32} /> : <span className="sans-agent"><CircleDashed size={16} /></span>}
           <span>{a.texte.split(" ").map((m, i) => (i === 0 && a.agent ? <b key={i}>{m} </b> : `${m} `))}</span>
-          <span className="tab-num" style={{ whiteSpace: "nowrap" }}>{ilya(a.ts)}</span>
+          <span className="quand">{ilya(a.ts)}</span>
         </li>
       ))}
     </ul>
@@ -252,16 +277,16 @@ function Apercu({ objets, approbations, activite }: { objets: ObjetBoard[]; appr
   return (
     <>
       <div className="section">
-        <h4>Board</h4>
-        <p className="vide" style={{ marginTop: 6 }}>{objets.length} carte(s). Sélectionne une carte pour voir ses détails, son activité et ses commentaires.</p>
+        <div className="tete"><h4>Board</h4><span className="compte">{objets.length} carte{objets.length > 1 ? "s" : ""}</span></div>
+        <p className="vide">Sélectionne une carte pour voir ses détails, son activité et ses commentaires</p>
       </div>
       <div className="section">
-        <div className="tete"><h4><ShieldCheck size={17} /> Approbations</h4>{approbations.length > 0 && <span className="compte-attente">{approbations.length} en attente</span>}</div>
-        {approbations.length ? approbations.map((a) => <div key={a.id} className="meta-carte" style={{ fontSize: 13 }}>{a.niveau} · {a.type} ({a.tache_id})</div>)
-          : <p className="vide">Rien à décider.</p>}
+        <div className="tete"><h4><ShieldCheck size={16} />Approbations</h4>{approbations.length > 0 && <span className="compte-attente">{approbations.length} en attente</span>}</div>
+        {approbations.length ? approbations.map((a) => <div key={a.id} className="ligne-approbation"><span className="niveau">{a.niveau}</span>{typeApprobation(a.type)}<span className="compte">{a.tache_id}</span></div>)
+          : <p className="vide">Rien à décider</p>}
       </div>
       <div className="section"><div className="tete"><h4>Activité récente</h4></div>
-        {activite.length ? <ListeActivite activite={activite} max={6} /> : <p className="vide">Pas encore d'activité.</p>}</div>
+        {activite.length ? <ListeActivite activite={activite} max={6} /> : <p className="vide">Pas encore d'activité</p>}</div>
     </>
   );
 }
@@ -277,59 +302,69 @@ function Details({ objet, insp, approbations, demo, activite, priorite, modifier
   const [decides, setDecides] = useState<Record<string, string>>({});
   const tags = (objet.meta.tags ?? insp?.tags ?? []) as string[];
   const enAttente = demo
-    ? (insp?.taches ?? []).flatMap((t) => t.approbations.filter((a) => a.statut === "en_attente").map((a) => ({ id: a.id, titre: "Maquettes UI finales", cree: a.cree })))
-    : approbations.filter((a) => a.mission_id === objet.mission_id).map((a) => ({ id: a.id, titre: `${a.niveau} · ${a.type}`, cree: a.cree }));
+    ? (insp?.taches ?? []).flatMap((t) => t.approbations.filter((a) => a.statut === "en_attente").map((a) => ({ id: a.id, titre: libelleTache(t), cree: a.cree })))
+    : approbations.filter((a) => a.mission_id === objet.mission_id).map((a) => ({ id: a.id, titre: `${a.niveau} · ${typeApprobation(a.type)}`, cree: a.cree }));
   const encours = m?.taches.some((t) => ["LEASED", "RUNNING", "REVIEW"].includes(t.statut));
+  const credit = provenance(objet);
+  const description = objet.meta.description ?? insp?.description
+    // un élément analysé garde sa propre description : l'objectif de la mission d'analyse n'en est pas une
+    // à défaut, le début du texte de la carte, sans ses marques de mise en forme
+    ?? (objet.type === "mission" ? m?.objectif : objet.contenu?.slice(0, 280).replace(/\*\*|__|^#+\s*/gm, "").replace(/\s*\n+- /g, " · ").replace(/\n+/g, " ") || objet.asset?.nom);
+  // une décision qui t'attend passe avant la liste des tâches : c'est la seule chose à faire sur cette carte
+  const approbationsBloc = (m || enAttente.length > 0) && (
+        <div className="section">
+          <div className="tete"><h4><ShieldCheck size={16} />Approbations</h4>
+            {enAttente.length > 0 && <span className="compte-attente">{enAttente.length} en attente</span>}</div>
+          {enAttente.length ? enAttente.map((a) => (
+            <div key={a.id} className="approbation">
+                            <div><div className="titre">{a.titre}</div><div className="quand">{ilya(a.cree)}</div></div>
+              <div className="actions">
+                {decides[a.id] ? <span className="meta-carte">{decides[a.id]}</span> : (
+                  <>
+                    <button type="button" className="bouton succes" onClick={async () => { await decider(a.id, true); setDecides((d) => ({ ...d, [a.id]: demo ? "Approuvée (démo)" : "Approuvée" })); }}>Approuver</button>
+                    <button type="button" className="bouton danger" onClick={async () => { await decider(a.id, false); setDecides((d) => ({ ...d, [a.id]: demo ? "Refusée (démo)" : "Refusée" })); }}>Refuser</button>
+                  </>
+                )}
+              </div>
+            </div>
+          )) : <p className="vide">Aucune décision attendue de ta part</p>}
+        </div>
+      );
   return (
     <>
       <div className="section">
         <div className="p-entete">
-          <IconeType type={objet.type} />
-          <div style={{ minWidth: 0 }}>
-            <h3>{objet.meta.titre || m?.objectif || objet.asset?.nom || objet.type}</h3>
-            <span className="etiquette-type" style={{ height: 22, fontSize: 11 }}>{objet.type === "mission" ? <>✳ MISSION</> : objet.type.toUpperCase()}</span>
-          </div>
-          <span className="actions"><Star size={18} /><MoreHorizontal size={18} style={{ marginLeft: 14 }} /></span>
+          <Rubrique type={objet.type} />
+          <h3>{objet.meta.titre || m?.objectif || objet.asset?.nom || NOMS_TYPES[objet.type] || objet.type}</h3>
+          {credit && <LigneCredit p={credit} />}
         </div>
         <dl className="grille-details">
-          {m ? (
-            <dd style={{ gridRow: "span 3", alignSelf: "start" }}>
-              <span className="select-statut">{encours ? <Loader size={15} /> : <Check size={15} />}
-                {m.statut === "SUCCEEDED" ? "Réussie" : m.statut === "FAILED" ? "Échouée" : encours ? "En cours" : "En file"}</span>
-            </dd>
-          ) : <dd style={{ gridRow: "span 3", alignSelf: "start" }} className="meta-carte">{objet.asset ? taille(objet.asset.taille) : ""}</dd>}
-          <dt style={{ display: "contents" }} />
-          <div style={{ display: "grid", gridTemplateColumns: "86px 1fr", gap: "12px 6px", gridRow: "span 3", whiteSpace: "nowrap" }}>
-            <span style={{ color: "var(--text-secondary)" }}>Priorité</span>
-            <span className="choix-priorite">
-              {objet.priorite ? <span className={`badge-p ${objet.priorite} doux`}>{objet.priorite}</span> : null}
-              <span>{NIVEAUX[objet.priorite] ?? "Aucune"}</span>
-              <select className="nodrag" aria-label="Priorité" value={objet.priorite} onChange={(e) => priorite(objet.id, e.target.value as Priorite)}>
-                <option value="">Aucune</option><option value="P1">P1 Élevée</option><option value="P2">P2 Moyenne</option><option value="P3">P3 Basse</option>
-              </select>
-            </span>
-            <span style={{ color: "var(--text-secondary)" }}>Échéance</span>
-            <span><Calendar size={14} style={{ verticalAlign: -2, marginRight: 6 }} />{String(objet.meta.echeance ?? "—")}</span>
-            <span style={{ color: "var(--text-secondary)" }}>Propriétaire</span>
-            <span style={{ display: "flex", alignItems: "center", gap: 8 }}><span className="profil-avatar" style={{ width: 24, height: 24, fontSize: 11 }}>J</span>Vous</span>
-          </div>
+          {m && <><dt>Statut</dt><dd className={`p-statut${encours ? " en-cours" : ""}`}>{encours ? <Loader size={16} className="tourne" /> : m.statut === "SUCCEEDED" ? <Check size={16} /> : null}
+            {m.statut === "SUCCEEDED" ? "Réussie" : m.statut === "FAILED" ? "Échouée" : encours ? "En cours" : "En file"}</dd></>}
+          {!m && objet.asset && <><dt>Taille</dt><dd className="chiffre">{taille(objet.asset.taille)}</dd></>}
+          <dt>Priorité</dt>
+          <dd><span className="choix-priorite">
+            {objet.priorite ? <span className={`badge-p ${objet.priorite} doux`}>{objet.priorite}</span> : null}
+            <span>{NIVEAUX[objet.priorite] ?? "Aucune"}</span>
+            <select className="nodrag" aria-label="Priorité" value={objet.priorite} onChange={(e) => priorite(objet.id, e.target.value as Priorite)}>
+              <option value="">Aucune</option><option value="P1">P1 Élevée</option><option value="P2">P2 Moyenne</option><option value="P3">P3 Basse</option>
+            </select>
+          </span></dd>
+          {Boolean(objet.meta.echeance) && <><dt>Échéance</dt><dd className="chiffre">{String(objet.meta.echeance)}</dd></>}
+          <dt>Propriétaire</dt><dd>Toi</dd>
         </dl>
         {m && (
-          <div className="p-progression" aria-label={`${m.faites} tâche(s) faite(s) sur ${m.total}`}>
-            Progression<div className="barre"><span style={{ width: `${m.progression}%` }} /></div><output className="tab-num">{m.progression}%</output>
+          <div className="p-progression" aria-label={`${m.faites} sur ${m.total} tâche${m.total > 1 ? "s" : ""}`}>
+            Progression<div className="barre"><span style={{ transform: `scaleX(${m.progression / 100})` }} /></div><output>{m.faites} / {m.total}</output>
           </div>
         )}
-        <div className="p-description">Description
-          <p>{String(objet.meta.description ?? insp?.description
-            // un élément analysé garde sa propre description : l'objectif de la mission d'analyse n'en est pas une
-            ?? (objet.type === "mission" ? m?.objectif : objet.contenu?.slice(0, 280) || objet.asset?.nom) ?? "—")}</p>
-        </div>
+        {Boolean(description) && <div className="p-description">Description<p>{String(description)}</p></div>}
         <div className="tags">
-          {tags.map((t, i) => <span key={t} className={`tag c${i % 3}`}>#{t}</span>)}
+          {tags.map((t) => <span key={t} className="tag">#{t}</span>)}
           {nouveauTag === null ? (
-            <button type="button" className="bouton-rond" style={{ width: 26, height: 26 }} aria-label="Ajouter une étiquette" onClick={() => setNouveauTag("")}><Plus size={14} /></button>
+            <button type="button" className="ajout-tag" aria-label="Ajouter une étiquette" onClick={() => setNouveauTag("")}><Plus size={16} /></button>
           ) : (
-            <input className="champ" style={{ width: 120, height: 26 }} autoFocus value={nouveauTag} aria-label="Nouvelle étiquette" maxLength={30}
+            <input className="champ champ-tag" autoFocus value={nouveauTag} aria-label="Nouvelle étiquette" maxLength={30}
               onChange={(e) => setNouveauTag(e.target.value.replace(/[#\s]/g, ""))}
               onKeyDown={(e) => {
                 if (e.key === "Enter" && nouveauTag) {
@@ -341,16 +376,16 @@ function Details({ objet, insp, approbations, demo, activite, priorite, modifier
           )}
         </div>
       </div>
+      {enAttente.length > 0 && approbationsBloc}
       {insp && (
         <div className="section">
-          <div className="tete"><h4>Tâches ({insp.taches.filter((t) => t.statut === "SUCCEEDED").length}/{insp.taches.length})</h4>
-            <button type="button" className="bouton" style={{ height: 28, color: "var(--brand-indigo-soft)" }} disabled title="La délégation de sous-tâches arrive avec le compilateur de missions (M4)"><Plus size={14} /> Ajouter</button></div>
+          <div className="tete"><h4>Tâches</h4><span className="compte">{insp.taches.filter((t) => t.statut === "SUCCEEDED").length} / {insp.taches.length}</span></div>
           <ul className="liste-taches">
             {insp.taches.map((t) => {
               const e = t.statut === "SUCCEEDED" ? "faite" : ["LEASED", "RUNNING", "REVIEW"].includes(t.statut) ? "encours" : "";
               return <li key={t.id} className={e === "faite" ? "faite" : ""} title={t.raison}>
-                <span className={`case ${e}`}>{e === "faite" && <Check size={12} strokeWidth={3} />}</span>{libelleTache(t)}
-                <span className="meta-carte" style={{ marginLeft: "auto", fontSize: 11 }}>{t.niveau}</span></li>;
+                <span className={`case ${e}`}>{e === "faite" && <Check size={12} className="trait-fort" />}</span>{libelleTache(t)}
+                <span className="niveau">{t.niveau}</span></li>;
             })}
           </ul>
         </div>
@@ -360,34 +395,14 @@ function Details({ objet, insp, approbations, demo, activite, priorite, modifier
         <div className="section ligne-agents">Agents assignés
           <span className="pile">
             {m.agents.length ? m.agents.slice(0, 5).map((a) => <Avatar key={a.id} id={a.id} role={a.role} taille={32} statut={statutAgent(a)} titre={`${a.nom ?? a.executant ?? ""} ${a.fournisseur}`} />)
-              : <span className="vide">aucun pour l'instant</span>}
-            <button type="button" className="bouton-rond" aria-label="Affecter un agent" disabled title="L'affectation passe par l'ordonnanceur"><Plus size={15} /></button>
+              : <span className="vide">Aucun pour l'instant</span>}
           </span>
         </div>
       )}
-      {(m || enAttente.length > 0) && (
-        <div className="section">
-          <div className="tete"><h4><ShieldCheck size={17} /> Approbations</h4>
-            {enAttente.length > 0 && <span className="compte-attente">{enAttente.length} en attente</span>}</div>
-          {enAttente.length ? enAttente.map((a) => (
-            <div key={a.id} className="approbation">
-              <span className="icone"><FileText size={13} /></span>
-              <div><div className="titre">{a.titre}</div><div className="quand">{ilya(a.cree)}</div></div>
-              <div className="actions">
-                {decides[a.id] ? <span className="meta-carte">{decides[a.id]}</span> : (
-                  <>
-                    <button type="button" className="bouton succes" onClick={async () => { await decider(a.id, true); setDecides((d) => ({ ...d, [a.id]: demo ? "Approuvée (démo)" : "Approuvée" })); }}>Approuver</button>
-                    <button type="button" className="bouton danger" onClick={async () => { await decider(a.id, false); setDecides((d) => ({ ...d, [a.id]: demo ? "Refusée (démo)" : "Refusée" })); }}>Refuser</button>
-                  </>
-                )}
-              </div>
-            </div>
-          )) : <p className="vide">Aucune décision attendue de ta part.</p>}
-        </div>
-      )}
+      {!enAttente.length && approbationsBloc}
       <div className="section">
         <div className="tete"><h4>Activité récente</h4><button type="button" className="lien-texte" onClick={voirTout}>Voir tout</button></div>
-        {activite.length ? <ListeActivite activite={activite} max={3} /> : <p className="vide">Pas encore d'activité.</p>}
+        {activite.length ? <ListeActivite activite={activite} max={3} /> : <p className="vide">Pas encore d'activité</p>}
       </div>
     </>
   );

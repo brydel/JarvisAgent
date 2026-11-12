@@ -1,8 +1,9 @@
+import { MENTION_DEMO } from "../lib/format";
 import { useEffect, useId, useRef, useState } from "react";
 import { motion } from "motion/react";
-import { Loader, ShieldCheck, Sparkles, X } from "lucide-react";
-import { siClaude } from "simple-icons";
+import { Loader, ShieldCheck, X } from "lucide-react";
 import type { Priorite } from "../types";
+import "../styles/dialogue-mission.css";
 
 export interface DemandeMission {
   objectif: string;
@@ -63,7 +64,7 @@ export function DialogueMission({ ouvert, initialObjectif, demo, fermer, lancer 
       setContexte("");
       fermer();
     } catch (x) {
-      setErreur(x instanceof Error ? x.message : "La mission n'a pas pu être créée.");
+      setErreur(x instanceof Error ? x.message : "La mission n'a pas pu être créée");
     } finally {
       setEnvoi(false);
     }
@@ -78,36 +79,35 @@ export function DialogueMission({ ouvert, initialObjectif, demo, fermer, lancer 
         }
       }}>
       {ouvert && (
-        <motion.form method="dialog" className="dialogue-carte" initial={{ opacity: 0, y: 10, scale: 0.98 }} animate={{ opacity: 1, y: 0, scale: 1 }}
-          transition={{ duration: 0.2, ease: [0.2, 0, 0, 1] }}
+        <motion.form method="dialog" className="dialogue-carte" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.22, ease: [0.22, 1, 0.36, 1] }}
           onSubmit={(e) => {
             e.preventDefault();
             soumettre();
           }}>
           <header className="dialogue-tete">
-            <span className="dialogue-icone" aria-hidden="true"><Sparkles size={20} /></span>
             <div>
               <h2 id={`${id}-titre`}>Lancer une mission</h2>
-              <p>Jarvis prépare une analyse de cadrage et l'ajoute au Board.</p>
+              <p>Jarvis prépare une analyse de cadrage et l'ajoute au Board</p>
             </div>
-            <button type="button" className="icone-bouton" aria-label="Fermer" onClick={fermer}><X size={18} /></button>
+            <button type="button" className="icone-bouton" aria-label="Fermer" onClick={fermer}><X size={16} strokeWidth={1.5} /></button>
           </header>
 
           <div className="dialogue-corps">
             <label className="champ-groupe">
               <span className="champ-libelle">Objectif <span className="requis" aria-hidden="true">*</span></span>
               <input ref={champObjectif} className="champ" name="objectif" required autoComplete="off" maxLength={OBJECTIF_MAX}
-                placeholder="Ex. : Préparer le lancement du site web IA…" value={objectif} onChange={(e) => setObjectif(e.target.value)}
+                placeholder="Ex. : refondre l'accueil du Studio" value={objectif} onChange={(e) => setObjectif(e.target.value)}
                 aria-invalid={objectif.length > OBJECTIF_MAX} />
-              <span className="champ-aide tab-num">{objectif.length} / {OBJECTIF_MAX}</span>
+              <span className="champ-aide compte">{objectif.length} / {OBJECTIF_MAX}</span>
             </label>
 
             <label className="champ-groupe">
               <span className="champ-libelle">Contexte <span className="facultatif">facultatif</span></span>
               <textarea className="champ zone" name="contexte" rows={5} maxLength={CONTEXTE_MAX} autoComplete="off"
-                placeholder="Colle un compte rendu, un cahier des charges ou des notes… Jarvis les analyse, sans exécuter ce qu'ils demandent."
+                placeholder="Compte rendu, cahier des charges ou notes"
                 value={contexte} onChange={(e) => setContexte(e.target.value)} />
-              <span className="champ-aide tab-num">{contexte.length.toLocaleString("fr-FR")} / {CONTEXTE_MAX.toLocaleString("fr-FR")}</span>
+              <span className="champ-pied"><span className="champ-aide">Jarvis l'analyse, sans exécuter ce qu'il demande</span><span className="champ-aide compte">{contexte.length.toLocaleString("fr-FR")} / {CONTEXTE_MAX.toLocaleString("fr-FR")}</span></span>
             </label>
 
             <div className="dialogue-ligne">
@@ -116,7 +116,6 @@ export function DialogueMission({ ouvert, initialObjectif, demo, fermer, lancer 
                 {FOURNISSEURS.map((f) => (
                   <label key={f.cle} title={f.aide} className={fournisseur === f.cle ? "actif" : undefined}>
                     <input type="radio" name="fournisseur" value={f.cle} checked={fournisseur === f.cle} onChange={() => setFournisseur(f.cle)} />
-                    {f.cle === "claude" && <svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true"><path d={siClaude.path} fill={`#${siClaude.hex}`} /></svg>}
                     {f.nom}
                   </label>
                 ))}
@@ -133,19 +132,19 @@ export function DialogueMission({ ouvert, initialObjectif, demo, fermer, lancer 
             </div>
 
             <p className="dialogue-politique" id={`${id}-politique`}>
-              <ShieldCheck size={17} aria-hidden="true" />
+              <ShieldCheck size={16} strokeWidth={1.5} aria-hidden="true" />
               <span>Mission de cadrage <b>L1</b> : analyse sans outils, aucun envoi, aucune publication, aucune dépense.
                 Toute action externe (L3/L4) demandera ton accord dans le panneau d'approbations.</span>
             </p>
-            {demo && <p className="dialogue-demo" role="note">Mode démo : la carte est ajoutée localement, aucune mission réelle n'est lancée.</p>}
+            {demo && <p className="mention-demo" role="note">{MENTION_DEMO}</p>}
             {erreur && <p className="dialogue-erreur" role="alert">{erreur}</p>}
           </div>
 
           <footer className="dialogue-pied">
-            <span className="raccourci">Ctrl + Entrée</span>
+            <span className="raccourci" aria-label="Raccourci : Ctrl + Entrée"><kbd className="touche">Ctrl</kbd><kbd className="touche">Entrée</kbd></span>
             <button type="button" className="bouton" onClick={fermer}>Annuler</button>
             <button type="submit" className="bouton primaire" disabled={!valide || envoi} aria-busy={envoi}>
-              {envoi ? <><Loader size={15} className="tourne" /> Lancement…</> : <><Sparkles size={15} /> Lancer la mission</>}
+              {envoi ? <><Loader size={16} strokeWidth={1.5} className="tourne" /> Lancement…</> : <>Lancer la mission</>}
             </button>
           </footer>
         </motion.form>

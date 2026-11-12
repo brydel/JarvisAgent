@@ -28,11 +28,12 @@ import { AdhesifNode, CadreNode, FormeNode, TexteLibreNode, TraitNode } from "..
 import { BarreModes } from "../outils/BarreModes";
 import { CoucheOutils } from "../outils/CoucheOutils";
 import { EditeurTexte } from "../outils/EditeurTexte";
-import { contenuDuCadre, indexDe } from "../outils/espace";
+import { TYPES_TABLEAU, contenuDuCadre, indexDe } from "../outils/espace";
 import { Guides } from "../outils/Guides";
 import type { DonneesNoeud, ObjetBoard } from "../types";
 import { ContexteDetail, MARGE_VUE, ZONE_LIBRE, ZOOM_MAX, ZOOM_MIN, useNiveauCalcule } from "./detail";
 import { estVisible, versNoeud } from "./noeuds";
+import { degagementDe, publierDegagements, type Degagement } from "./degagement";
 import { useGlisser } from "./useGlisser";
 
 const TYPES_NOEUDS = {
@@ -41,10 +42,10 @@ const TYPES_NOEUDS = {
   adhesif: AdhesifNode, texte_libre: TexteLibreNode, forme: FormeNode, trait: TraitNode, cadre: CadreNode, fleche: FlecheNode,
 };
 const TYPES_LIENS = { relation: RelationEdge };
+// la mini-carte reste neutre : seule la mission (l'article de une) et les notes adhésives (leur vraie couleur) ressortent
 const COULEUR_MINICARTE: Record<string, string> = {
-  plan: "var(--accent-plan-strong)", tache: "var(--edge-utilise)", mission: "var(--brand-indigo)", agents: "var(--success)", note: "var(--note-border)",
-  image: "var(--cadre-bord)", video: "var(--cadre-bord)", adhesif: "var(--adhesif-jaune)", forme: "var(--teinte-indigo)", cadre: "transparent",
-  trait: "var(--teinte-neutre)", fleche: "transparent", texte_libre: "var(--teinte-neutre)",
+  mission: "var(--encre)", adhesif: "var(--adhesif-jaune)", cadre: "transparent", fleche: "transparent",
+  trait: "var(--text-secondary)", texte_libre: "var(--text-secondary)",
 };
 const OUTILS_DIRECTS = new Set(["selection", "main"]);
 /** sous 12 % de zoom, les relations ne sont plus tracées (illisibles, et les blocs n'ont plus de poignée) */
@@ -68,6 +69,7 @@ interface Props {
 
 export function Canevas({ source, etat, b, filtre, priorite, recherche, selection, setSelection, aSelectionner, deposer, children }: Props) {
   const rf = useReactFlow<Noeud, Edge<DonneesLien>>();
+  const cadrage = useRef<{ espace: string; vide: boolean; cadrer: boolean } | null>(null);
   const [noeuds, setNoeuds] = useState<Noeud[]>([]);
   const [depot, setDepot] = useState(false);
   const outil = useUi((e) => e.outil);
@@ -107,6 +109,25 @@ export function Canevas({ source, etat, b, filtre, priorite, recherche, selectio
       });
     });
   }, [etat, source.demo, sources, nets, filtre, priorite, recherche, aSelectionner]);
+
+  // place libre autour des cartes qui écrivent quelque chose hors de leur cadre (effets de relations, états, crédit) :
+  // ces lignes ne recouvrent jamais une carte voisine (board/degagement.ts)
+  useEffect(() => {
+    const valeurs = new Map<string, Degagement>();
+    if (etat) {
+      const index = indexDe(etat.objets);
+      const visible = (o: ObjetBoard) => estVisible(o, filtre, priorite, recherche);
+      const nombreux = etat.objets.length > 500;
+      for (const o of etat.objets) {
+        if (o.parent_id || TYPES_TABLEAU.has(o.type)) continue;
+        // Board très chargé : seulement les cartes qui ont quelque chose à écrire dehors
+        if (nombreux && !o.relations && !o.mission && !o.relecture && !o.meta.propositions && !sources.has(o.id) && o.version <= 1
+          && !o.meta.source && !o.artefacts?.length) continue;
+        valeurs.set(o.id, degagementDe(o, index, visible));
+      }
+    }
+    publierDegagements(valeurs);
+  }, [etat, sources, filtre, priorite, recherche]);
 
   const renommer = useCallback((id: string, libelle: string) => void b.modifierLien(id, { libelle }), [b]);
   const aretes = useMemo<Edge<DonneesLien>[]>(() => {
@@ -174,6 +195,13 @@ export function Canevas({ source, etat, b, filtre, priorite, recherche, selectio
   /* ---------------------------------------------------------------- rendu ---------------------------------- */
   // la démo ouvre sur une vue fixe (contrat visuel), décalée sous la barre d'outils ; un vrai Board est cadré dans
   // la zone libre du canevas (fitView + MARGE_VUE) : dans les deux cas aucune carte n'est sous une barre à l'ouverture
+  // un vrai Board est cadré dans la zone libre dès qu'il a un objet (à l'ouverture, ou quand le premier arrive), sauf si ce
+  // premier objet est tracé à la main : la vue ne bouge pas sous un trait qu'on vient de dessiner
+  if (etat) {
+    const c = cadrage.current, vide = etat.objets.length === 0;
+    if (!c || c.espace !== source.espace) cadrage.current = { espace: source.espace, vide, cadrer: !source.demo && !vide };
+    else if (c.vide !== vide) { c.vide = vide; c.cadrer = !source.demo && !vide && OUTILS_DIRECTS.has(outil); }
+  }
   const vueInitiale: Viewport = source.demo ? { x: 0, y: ZONE_LIBRE.top - 12, zoom: 0.8 } : { x: ZONE_LIBRE.left, y: ZONE_LIBRE.top, zoom: 0.8 };
   const direct = OUTILS_DIRECTS.has(outil);
   const enPresentation = presentation !== null;
@@ -221,11 +249,11 @@ export function Canevas({ source, etat, b, filtre, priorite, recherche, selectio
         snapToGrid={grille} snapGrid={[20, 20]} deleteKeyCode={null} multiSelectionKeyCode={["Shift", "Meta", "Control"]}
         selectionKeyCode="Shift" panOnScroll={false} zoomOnDoubleClick={false} onlyRenderVisibleElements={noeuds.length > 80}
         nodesDraggable={manipulable} nodesConnectable={manipulable} elementsSelectable={manipulable}
-        elevateNodesOnSelect={false} proOptions={{ hideAttribution: false }} fitView={!source.demo && Boolean(etat?.objets.length)}
+        elevateNodesOnSelect={false} proOptions={{ hideAttribution: false }} fitView={cadrage.current?.cadrer ?? false}
         fitViewOptions={{ padding: MARGE_VUE, maxZoom: 0.9 }}>
         <Background variant={BackgroundVariant.Dots} gap={20} size={1.6} color="var(--grid-dot)" />
         {minicarte && !enPresentation && (
-          <MiniMap pannable zoomable ariaLabel="Mini-carte du Board" nodeBorderRadius={8} maskColor="var(--minimap-mask)"
+          <MiniMap pannable zoomable ariaLabel="Mini-carte du Board" nodeBorderRadius={8} nodeStrokeWidth={0} maskColor="var(--minimap-mask)"
             nodeColor={(n) => COULEUR_MINICARTE[n.type ?? ""] ?? "var(--minimap-node)"} style={{ width: 124, height: 92 }} />
         )}
       </ReactFlow>
@@ -239,16 +267,16 @@ export function Canevas({ source, etat, b, filtre, priorite, recherche, selectio
       {focus && !enPresentation && (
         <div className="bandeau-mode" role="status">
           Concentration sur « {etat?.objets.find((o) => o.id === focus)?.meta.titre || "Cadre"} »
-          <BoutonCommande id="affichage.concentration.quitter" texte><X size={14} aria-hidden /></BoutonCommande>
+          <BoutonCommande id="affichage.concentration.quitter" texte><X size={16} aria-hidden /></BoutonCommande>
         </div>
       )}
       {enPresentation && (
         <div className="barre-presentation" role="toolbar" aria-label="Présentation">
-          <BoutonCommande id="presentation.precedente"><ChevronLeft size={18} aria-hidden /></BoutonCommande>
+          <BoutonCommande id="presentation.precedente"><ChevronLeft size={16} aria-hidden /></BoutonCommande>
           <output className="tab-num" aria-live="polite">{presentation + 1} / {cadres.length}</output>
           <span className="titre-diapo">{cadres[presentation]?.meta.titre || "Cadre"}</span>
-          <BoutonCommande id="presentation.suivante"><ChevronRight size={18} aria-hidden /></BoutonCommande>
-          <BoutonCommande id="presentation.quitter" texte><X size={14} aria-hidden /></BoutonCommande>
+          <BoutonCommande id="presentation.suivante"><ChevronRight size={16} aria-hidden /></BoutonCommande>
+          <BoutonCommande id="presentation.quitter" texte><X size={16} aria-hidden /></BoutonCommande>
         </div>
       )}
       {depot && <div className="depot">Dépose pour ajouter au Board</div>}

@@ -12,7 +12,7 @@ for (const [name, width, height] of [["desktop", 1440, 1000], ["mobile", 390, 84
     page.on("pageerror", e => errors.push(e.message));
     await page.setViewportSize({ width, height });
     await page.goto("/v2/?demo=1&vue=accueil");
-    await expect(page.getByRole("heading", { name: /Une id/ })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Cadre une mission sur le Board, tes agents la mènent", exact: true })).toBeVisible();
     await page.screenshot({ path: path.join(output, `accueil-${name}.png`) });
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
     await page.getByRole("navigation", { name: "Sections" }).getByRole("button", { name: "Agents", exact: true }).click();
@@ -47,7 +47,7 @@ test("brouillon conserve entre vues, controle sans inference", async ({ page }) 
   await expect(page.locator("#agent-brief")).toHaveValue(next);
   await page.getByRole("button", { name: /V.rifier les consignes/ }).click();
   await expect(page.locator(".p-verification")).toContainText(/structurelles/);
-  await expect(page.locator(".p-verification")).toContainText(/aucun appel IA/);
+  await expect(page.locator(".p-verification")).toContainText(/sans appel à un modèle/);
   await page.screenshot({ path: path.join(output, "atelier-comparaison.png") });
 });
 

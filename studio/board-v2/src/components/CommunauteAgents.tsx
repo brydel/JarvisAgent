@@ -1,5 +1,6 @@
+import { dateHeure } from "../lib/format";
 import { useEffect, useId, useRef, useState } from "react";
-import { ArrowLeft, ArrowUpRight, Brain, CheckCheck, Hash, Lightbulb, LoaderCircle, MessageCircle, Plus, RefreshCw, Send, Sparkles, Wrench, X } from "lucide-react";
+import { ArrowLeft, ArrowUpRight, Brain, Hash, Lightbulb, LoaderCircle, MessageCircle, Plus, RefreshCw, Wrench, X } from "lucide-react";
 import { Avatar } from "./Avatar";
 import type { Source } from "../api";
 import "../styles/communaute.css";
@@ -22,8 +23,8 @@ const SALONS = [
   { id: "atelier", nom: "Atelier", icone: Wrench, description: "Partager le travail en cours et se donner un coup de main." },
   { id: "idees", nom: "Idées", icone: Lightbulb, description: "Explorer ce qui pourrait rendre l'usine et ses réalisations meilleures." },
 ];
-const TYPES: Record<TypeMessage, string> = { discussion: "Discussion", constat: "Constat", question: "❓ Question", revue: "Revue",
-  amelioration: "Amélioration", felicitation: "🎉 Bravo", critique: "🧐 Critique", entraide: "🤝 Entraide", debat: "⚔️ Débat", idee: "💡 Idée" };
+const TYPES: Record<TypeMessage, string> = { discussion: "Discussion", constat: "Constat", question: "Question", revue: "Revue",
+  amelioration: "Amélioration", felicitation: "Bravo", critique: "Critique", entraide: "Entraide", debat: "Débat", idee: "Idée" };
 const STATUTS: Record<string, string> = { proposee: "Proposée", evaluee: "Évaluée", retenue: "Retenue", rejetee: "Non retenue", ouvert: "Ouverte" };
 
 async function requete<T>(url: string, init?: RequestInit): Promise<T> {
@@ -35,7 +36,7 @@ async function requete<T>(url: string, init?: RequestInit): Promise<T> {
 }
 
 function date(ts: number) {
-  return new Date(ts * 1000).toLocaleString("fr-FR", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
+  return dateHeure(ts);
 }
 
 function fusionner(avant: Message[], apres: Message[]) {
@@ -47,7 +48,7 @@ function fusionner(avant: Message[], apres: Message[]) {
 function Preuve({ texte }: { texte: string }) {
   let lien = false;
   try { lien = ["https:", "http:"].includes(new URL(texte).protocol); } catch { /* Une preuve peut être un chemin local. */ }
-  return lien ? <a href={texte} target="_blank" rel="noreferrer noopener"><ArrowUpRight size={13}/>{texte}</a> : <code>{texte}</code>;
+  return lien ? <a href={texte} target="_blank" rel="noreferrer noopener"><ArrowUpRight size={16}/>{texte}</a> : <code>{texte}</code>;
 }
 
 /** Espace de conversation partagé, sans conversation fictive ni identité d'agent saisie par l'humain. */
@@ -90,7 +91,7 @@ export function CommunauteAgents({ source }: { source: Source }) {
       const r = await requete<{ participants: string[] }>("/api/v2/communaute/debat", { method: "POST",
         headers: { "Content-Type": "application/json", "X-Jarvis-Studio": "1" },
         body: JSON.stringify({ sujet: sujetDebat.trim(), projet, salon }) });
-      setSujetDebat(""); setInfoDebat(`Débat lancé : ${r.participants.join(", ")} vont prendre la parole.`);
+      setSujetDebat(""); setInfoDebat(`Débat lancé : ${r.participants.join(", ")} vont prendre la parole`);
       setActualisation((n) => n + 1);
     } catch (e) { setInfoDebat(e instanceof Error ? e.message : "Débat impossible"); }
   };
@@ -215,7 +216,7 @@ export function CommunauteAgents({ source }: { source: Source }) {
       setTexte(""); setTitre(""); setPreuves(""); setType("discussion");
       operation.current = { empreinte: "", id: "" };
       if (creation) { setSelection(r.id); setNouveau(false); }
-      setConfirmation("Message publié."); setActualisation(n => n + 1);
+      setConfirmation("Message publié"); setActualisation(n => n + 1);
     } catch (e) { setErreurEnvoi(e instanceof Error ? e.message : "Publication impossible"); }
     finally { setEnvoi(false); }
   };
@@ -233,7 +234,7 @@ export function CommunauteAgents({ source }: { source: Source }) {
         body: JSON.stringify({ ...corps, operation_id: operation.current.id }),
       });
       operation.current = { empreinte: "", id: "" };
-      setEvaluation(""); setAvis(""); setPreuvesAvis(""); setConfirmation("Relecture enregistrée."); setActualisation(n => n + 1);
+      setEvaluation(""); setAvis(""); setPreuvesAvis(""); setConfirmation("Relecture enregistrée"); setActualisation(n => n + 1);
     } catch (e) { setErreurEnvoi(e instanceof Error ? e.message : "Relecture impossible"); }
     finally { setEnvoi(false); }
   };
@@ -241,31 +242,30 @@ export function CommunauteAgents({ source }: { source: Source }) {
 
   return <>
     <button type="button" className="reseau-ouvrir" onClick={() => setOuvert(true)} aria-haspopup="dialog" title="Réseau des agents">
-      <MessageCircle size={17}/><span>Réseau des agents</span>
+      <MessageCircle size={16}/><span>Réseau des agents</span>
     </button>
     <dialog ref={dialogue} className="reseau-dialog" aria-labelledby={`${id}-titre`} onClose={() => setOuvert(false)}>
       {ouvert && <div className="reseau-coque">
         <header className="reseau-entete">
-          <span className="reseau-embleme"><MessageCircle size={22}/></span>
-          <div><span className="reseau-surtitre">L'espace commun de toute l'usine</span><h2 id={`${id}-titre`}>Réseau des agents</h2></div>
-          <button type="button" className="icone-bouton" aria-label="Actualiser les discussions" onClick={() => setActualisation(n => n + 1)}><RefreshCw size={17}/></button>
-          <button type="button" className="icone-bouton" aria-label="Fermer le réseau des agents" onClick={() => setOuvert(false)}><X size={20}/></button>
+          <h2 id={`${id}-titre`}>Réseau des agents</h2>
+          <button type="button" className="icone-bouton" aria-label="Actualiser les discussions" onClick={() => setActualisation(n => n + 1)}><RefreshCw size={16}/></button>
+          <button type="button" className="icone-bouton" aria-label="Fermer le réseau des agents" onClick={() => setOuvert(false)}><X size={16}/></button>
         </header>
         <div className="reseau-espace">
           <aside className="reseau-salons" aria-label="Salons de discussion">
             <span className="reseau-rubrique">Les salons</span>
-            {SALONS.map(s => <button type="button" key={s.id} disabled={envoi} aria-pressed={salon === s.id} onClick={() => setSalon(s.id)}><s.icone size={17}/>{s.nom}</button>)}
+            {SALONS.map(s => <button type="button" key={s.id} disabled={envoi} aria-pressed={salon === s.id} onClick={() => setSalon(s.id)}><s.icone size={16}/>{s.nom}</button>)}
             <div className="reseau-vie"><span className="reseau-rubrique">Vie de l'équipe</span>
               <div className="reseau-modes" role="radiogroup" aria-label="Vie sociale des agents">
                 {Object.entries(MODES_VIE).map(([m, nom]) => <button type="button" key={m} role="radio" aria-checked={vie?.mode === m}
                   onClick={() => void reglerVie(m)}>{nom}</button>)}
               </div>
-              <p>{vie?.mode === "off" ? "Les agents ne parlent que si tu leur écris." : vie?.mode === "active"
-                ? "Les agents lancent des sujets souvent et réagissent à tout." : "Les agents lancent quelques sujets par jour et réagissent aux livrables."}</p>
+              <p>{vie?.mode === "off" ? "Les agents ne parlent que si tu leur écris" : vie?.mode === "active"
+                ? "Les agents lancent des sujets souvent et réagissent à tout" : "Les agents lancent quelques sujets par jour et réagissent aux livrables"}</p>
               <form onSubmit={(e) => { e.preventDefault(); void lancerDebat(); }}>
                 <input className="champ" value={sujetDebat} maxLength={600} onChange={(e) => setSujetDebat(e.target.value)}
-                  placeholder="Un sujet à débattre…" aria-label="Sujet du débat" />
-                <button type="submit" className="bouton primaire" disabled={sujetDebat.trim().length < 5}><Sparkles size={14}/>Lancer un débat</button>
+                  placeholder="Sujet du débat" aria-label="Sujet du débat" />
+                <button type="submit" className="bouton" disabled={sujetDebat.trim().length < 5}>Lancer un débat</button>
               </form>
               {infoDebat && <p className="reseau-note" role="status">{infoDebat}</p>}
             </div>
@@ -275,69 +275,69 @@ export function CommunauteAgents({ source }: { source: Source }) {
             </div>
           </aside>
           <section className="reseau-fils" aria-label="Discussions du salon">
-            <header><div><h3>{salonCourant.nom}</h3><p>{fils.length} discussion{fils.length > 1 ? "s" : ""}</p></div>
-              <button type="button" className="reseau-nouveau" disabled={envoi} onClick={creer} aria-label="Nouvelle discussion"><Plus size={18}/></button></header>
+            <header><div><h3>{salonCourant.nom}</h3><p className="tab-num">{fils.length} discussion{fils.length > 1 ? "s" : ""}</p></div>
+              <button type="button" className="reseau-nouveau" disabled={envoi} onClick={creer} aria-label="Nouvelle discussion"><Plus size={16}/></button></header>
             {erreurListe && <p className="reseau-erreur" role="alert">{erreurListe}. Les échanges affichés peuvent être anciens.</p>}
             <div className="reseau-fils-liste">
-              {chargement && <p className="reseau-attente" role="status"><LoaderCircle size={16}/>Chargement…</p>}
-              {!chargement && !fils.length && !erreurListe && <div className="reseau-vide"><MessageCircle size={24}/><h4>La conversation commence ici</h4><p>Aucun échange pour le moment. Les agents et toi pouvez ouvrir la discussion.</p></div>}
+              {chargement && <p className="reseau-attente" role="status"><LoaderCircle size={16} className="tourne"/>Chargement</p>}
+              {!chargement && !fils.length && !erreurListe && <div className="reseau-vide"><h4>Aucune discussion dans ce salon</h4><p>Les agents et toi pouvez en ouvrir une</p></div>}
               {fils.map(f => <button type="button" className="reseau-fil" disabled={envoi} key={f.id} aria-pressed={!nouveau && selection === f.id} onClick={() => choisir(f)}>
                 <span className="reseau-fil-meta"><span>{qui(f.auteur).nom}</span><time dateTime={new Date((f.maj || f.cree) * 1000).toISOString()}>{date(f.maj || f.cree)}</time></span>
                 <strong>{f.titre || f.contenu.slice(0, 90)}</strong><p>{f.contenu}</p>
-                <span className="reseau-fil-pied"><span>{TYPES[f.type] || f.type}</span><span><MessageCircle size={12}/>{Math.max(0, (f.messages_nombre ?? 1) - 1)}</span></span>
+                <span className="reseau-fil-pied"><span>{TYPES[f.type] || f.type}</span><span title="Réponses"><MessageCircle size={16}/>{Math.max(0, (f.messages_nombre ?? 1) - 1)}</span></span>
               </button>)}
-              {suivant && <button type="button" className="bouton reseau-plus" disabled={plusEnCours} onClick={() => void voirPlus()}>{plusEnCours ? "Lecture…" : "Discussions plus anciennes"}</button>}
+              {suivant && <button type="button" className="bouton reseau-plus" disabled={plusEnCours} onClick={() => void voirPlus()}>{plusEnCours ? "Lecture" : "Discussions plus anciennes"}</button>}
             </div>
           </section>
           <section className={`reseau-conversation${creation ? " en-creation" : ""}`} aria-label={creation ? "Nouvelle discussion" : "Conversation"}>
             <header className="reseau-conversation-tete">
-              {creation ? <><span className="reseau-etiquette"><Plus size={13}/>Nouvelle discussion</span><h3>De quoi parle-t-on ?</h3><p>{salonCourant.description}</p></>
-                : discussion ? <><span className={`reseau-etiquette ${discussion.fil.statut}`}><Hash size={13}/>{discussion.fil.projet || "Toute l'usine"}
-                  {discussion.fil.type === "amelioration" && <> · {STATUTS[discussion.fil.statut] || discussion.fil.statut}</>}</span>
-                  <h3>{discussion.fil.titre}</h3><p>Ouvert par {qui(discussion.fil.auteur).nom} · {date(discussion.fil.cree)}</p></>
+              {creation ? <><h3>Nouvelle discussion</h3><p>{salonCourant.description}</p></>
+                : discussion ? <><h3>{discussion.fil.titre}</h3>
+                  <p className="credit"><span>Ouvert par <b>{qui(discussion.fil.auteur).nom}</b></span><span>·</span><span>{discussion.fil.projet || "Toute l'usine"}</span><span>·</span><time dateTime={new Date(discussion.fil.cree * 1000).toISOString()}>{date(discussion.fil.cree)}</time>
+                    {discussion.fil.type === "amelioration" && <span className={`reseau-etiquette ${discussion.fil.statut}`}>{STATUTS[discussion.fil.statut] || discussion.fil.statut}</span>}</p></>
                   : <h3>{erreurDiscussion ? "Discussion indisponible" : "Les échanges de l'usine"}</h3>}
-              {nouveau && selection && <button type="button" className="bouton" disabled={envoi} onClick={() => setNouveau(false)}><ArrowLeft size={14}/>Revenir au fil</button>}
+              {nouveau && selection && <button type="button" className="bouton" disabled={envoi} onClick={() => setNouveau(false)}><ArrowLeft size={16}/>Revenir au fil</button>}
               {!creation && discussion && discussion.fil.auteur !== "proprietaire" && !evaluation && <div className="reseau-relecture-actions">
-                {["ouvert", "proposee"].includes(discussion.fil.statut) && <button type="button" className="bouton" onClick={() => setEvaluation("evaluer")}><CheckCheck size={13}/>Tirer un enseignement</button>}
+                {["ouvert", "proposee"].includes(discussion.fil.statut) && <button type="button" className="bouton" onClick={() => setEvaluation("evaluer")}>Tirer un enseignement</button>}
                 {discussion.fil.statut === "evaluee" && <><button type="button" className="bouton" onClick={() => setEvaluation("retenir")}>Retenir la leçon</button><button type="button" className="bouton" onClick={() => setEvaluation("rejeter")}>Ne pas retenir</button></>}
               </div>}
             </header>
             {erreurDiscussion && !creation && <p className="reseau-erreur" role="alert">{erreurDiscussion}</p>}
             {!creation && <div className="reseau-messages" aria-label="Messages de la discussion">
-              {!discussion && !erreurDiscussion && <p className="reseau-attente" role="status"><LoaderCircle size={16}/>Lecture de la discussion…</p>}
+              {!discussion && !erreurDiscussion && <p className="reseau-attente" role="status"><LoaderCircle size={16} className="tourne"/>Lecture de la discussion</p>}
               {discussion?.messages.map(m => <article className="reseau-message" key={m.id}>
                 {m.auteur === "proprietaire" ? <div className="reseau-avatar humain" aria-hidden="true">TOI</div>
-                  : <Avatar id={m.auteur} role={qui(m.auteur).role} taille={36} />}
-                <div className={`reseau-message-corps type-${m.type}`}><header><strong>{qui(m.auteur).nom}</strong><span>{TYPES[m.type] || m.type}</span><time>{date(m.cree)}</time></header>
+                  : <Avatar id={m.auteur} role={qui(m.auteur).role} taille={32} />}
+                <div className={`reseau-message-corps type-${m.type}`}><header><strong>{qui(m.auteur).nom}</strong><span>{TYPES[m.type] || m.type}</span><time dateTime={new Date(m.cree * 1000).toISOString()}>{date(m.cree)}</time></header>
                   <p>{m.contenu}</p>
                   {m.preuves?.length > 0 && <div className="reseau-preuves" aria-label="Preuves et références">{m.preuves.map((p, i) => <Preuve key={`${i}-${p}`} texte={p}/>)}</div>}
-                  {m.type === "amelioration" && <span className={`reseau-etiquette ${m.statut}`}><CheckCheck size={13}/>{STATUTS[m.statut] || m.statut}</span>}
+                  {m.type === "amelioration" && <span className={`reseau-etiquette ${m.statut}`}>{STATUTS[m.statut] || m.statut}</span>}
                 </div>
               </article>)}
               {discussion?.suivant && <p className="reseau-note">Ce fil contient d'autres messages. Les 100 premiers sont affichés.</p>}
             </div>}
             {evaluation && discussion ? <form className="reseau-composition" aria-label="Relecture de la discussion" onSubmit={e => { e.preventDefault(); void evaluer(); }}>
-              <label>Ton évaluation<textarea value={avis} onChange={e => setAvis(e.target.value)} maxLength={8000} required rows={3} placeholder="Ce que l'expérience nous apprend, et pourquoi…"/></label>
+              <label>Ton évaluation<textarea value={avis} onChange={e => setAvis(e.target.value)} maxLength={8000} required rows={3} placeholder="Ce que l'expérience nous apprend, et pourquoi"/></label>
               <label>Références de vérification, une par ligne<textarea value={preuvesAvis} onChange={e => setPreuvesAvis(e.target.value)} maxLength={5120} rows={2} required={evaluation !== "rejeter"} placeholder="Rapport, résultat de test ou autre référence vérifiable"/></label>
-              <p className="reseau-note">Une leçon retenue doit être relue par une autre personne ou un autre agent, avec une référence de vérification.</p>
+              <p className="reseau-note">Une leçon retenue doit être relue par une autre personne ou un autre agent, avec une référence de vérification</p>
               {erreurEnvoi && <p className="reseau-erreur" role="alert">{erreurEnvoi}</p>}
               <footer><button type="button" className="bouton" disabled={envoi} onClick={() => setEvaluation("")}>Annuler la relecture</button><button type="submit" className="bouton primaire" disabled={envoi || !avis.trim() || (evaluation !== "rejeter" && !preuvesAvis.trim())}>Enregistrer la relecture</button></footer>
             </form> : (creation || discussion) && <form className="reseau-composition" onSubmit={e => { e.preventDefault(); void publier(); }}>
-              {creation && <label htmlFor={`${id}-sujet`}>Sujet<input id={`${id}-sujet`} className="champ" value={titre} maxLength={160} required placeholder="Une question, une idée, une découverte…" onChange={e => setTitre(e.target.value)}/></label>}
+              {creation && <label htmlFor={`${id}-sujet`}>Sujet<input id={`${id}-sujet`} className="champ" value={titre} maxLength={160} required placeholder="Question, idée ou découverte" onChange={e => setTitre(e.target.value)}/></label>}
               <label htmlFor={`${id}-message`}>{creation ? "Premier message" : "Répondre à la discussion"}
                 <textarea id={`${id}-message`} value={texte} onChange={e => setTexte(e.target.value)} required maxLength={8000}
-                  rows={creation ? 6 : 3} placeholder="Partage ton point de vue, pose une question ou propose une piste…"/>
+                  rows={creation ? 6 : 3} placeholder="Message"/>
               </label>
               <details className="reseau-options"><summary>Type de message et références facultatives</summary>
                 <label>Type<select value={type} onChange={e => setType(e.target.value as TypeMessage)}>{Object.entries(TYPES).map(([cle, nom]) => <option value={cle} key={cle}>{nom}</option>)}</select></label>
-                <label>Références, une par ligne<textarea rows={2} maxLength={5120} value={preuves} onChange={e => setPreuves(e.target.value)} placeholder="URL, chemin de rapport, résultat de test…"/></label>
-                <p>10 références au maximum, de 512 caractères chacune.</p>
+                <label>Références, une par ligne<textarea rows={2} maxLength={5120} value={preuves} onChange={e => setPreuves(e.target.value)} placeholder="URL, chemin de rapport, résultat de test"/></label>
+                <p>10 références au maximum, de 512 caractères chacune</p>
               </details>
-              {!referencesValides && <p className="reseau-erreur" role="alert">Ajoute au plus 10 références de 512 caractères chacune.</p>}
+              {!referencesValides && <p className="reseau-erreur" role="alert">Ajoute au plus 10 références de 512 caractères chacune</p>}
               {erreurEnvoi && <p className="reseau-erreur" role="alert">{erreurEnvoi}. Ton message est conservé ; tu peux réessayer.</p>}
-              <footer><span className="reseau-signature">Tu publies en ton nom.</span><span className="reseau-confirmation" role="status">{confirmation}</span>
+              <footer><span className="reseau-signature">Tu publies en ton nom</span><span className="reseau-confirmation" role="status">{confirmation}</span>
                 <button type="submit" className="bouton primaire" disabled={envoi || !texte.trim() || !referencesValides || (creation && !titre.trim())} aria-busy={envoi}>
-                  {envoi ? <LoaderCircle size={15}/> : <Send size={15}/>} {envoi ? "Publication…" : "Publier"}
+                  {envoi && <LoaderCircle size={16} className="tourne"/>}{envoi ? "Publication…" : "Publier"}
                 </button></footer>
             </form>}
           </section>

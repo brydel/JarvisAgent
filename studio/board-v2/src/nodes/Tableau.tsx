@@ -79,7 +79,7 @@ export const FormeNode = memo(function FormeNode({ data, selected, width, height
     <>
       <NodeResizer isVisible={selected && !o.verrouille} minWidth={40} minHeight={40} maxWidth={4000} maxHeight={4000} />
       <Poignees niveau={niveau} />
-      <div className={`forme teinte-${teinte(o, "indigo")}${sansFond ? " sans-fond" : ""}`} onDoubleClick={() => !o.verrouille && editer(o.id)}>
+      <div className={`forme teinte-${teinte(o, "neutre")}${sansFond ? " sans-fond" : ""}`} onDoubleClick={() => !o.verrouille && editer(o.id)}>
         <svg width={l} height={h} aria-hidden style={{ strokeWidth: e }}>{dessin}</svg>
         {niveau < 2 && !enEdition && o.contenu && <div className={`forme-texte ${o.meta.forme ?? "rectangle"}`}>{o.contenu}</div>}
       </div>
@@ -98,7 +98,7 @@ export const TraitNode = memo(function TraitNode({ data, selected, width, height
   return (
     <>
       <NodeResizer isVisible={selected && !o.verrouille} minWidth={40} minHeight={40} maxWidth={4000} maxHeight={4000} />
-      <svg className={`trait ${outil} teinte-${teinte(o, "indigo")}`} width={width ?? o.largeur} height={height ?? o.hauteur}
+      <svg className={`trait ${outil} teinte-${teinte(o, "neutre")}`} width={width ?? o.largeur} height={height ?? o.hauteur}
         viewBox={`0 0 ${l0} ${h0}`} preserveAspectRatio="none" aria-hidden>
         <path d={d} />
       </svg>

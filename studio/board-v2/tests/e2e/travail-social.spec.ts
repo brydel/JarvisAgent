@@ -22,7 +22,7 @@ test("le travail du chef apparaît en cartes : plan, tâche (rôle, modèle) et 
   }, ENTETES);
   await page.reload();
   const plan = page.locator(".react-flow__node-plan");
-  await expect(plan.getByText("PLAN P-0042")).toBeVisible();
+  await expect(plan.getByText("Plan P-0042", { exact: true })).toBeVisible();
   await expect(plan.getByText("Approuvé")).toBeVisible();
   const tache = page.locator(".react-flow__node-tache");
   await expect(tache.getByText("Ingénieur interface")).toBeVisible();
@@ -56,7 +56,7 @@ test("réseau ouvert : régler la vie sociale et lancer un débat que les agents
   await expect(fil).toBeVisible({ timeout: 30_000 });
   await fil.click();
   await expect.poll(async () => reseau.getByRole("article").count(), { timeout: 40_000 }).toBeGreaterThanOrEqual(3);
-  await expect(reseau.getByText("🎉 Bravo").first()).toBeVisible();
+  await expect(reseau.locator(".reseau-message header span").filter({ hasText: /^Bravo$/ }).first()).toBeVisible();
   await expect(reseau.locator(".reseau-message .avatar").first()).toBeVisible();
   await page.screenshot({ path: path.join(RAPPORTS, "etat-reseau-ouvert.png") });
   await vie.getByRole("radio", { name: "Coupée" }).click();

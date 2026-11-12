@@ -20,8 +20,7 @@ export const PlanNode = memo(function PlanNode({ data, selected }: P) {
     <CardShell objet={o} selected={selected} sources={data.sources} classe="c-plan" entete={false}>
       <div className="contenu">
         <div className="ligne1">
-          <span className="icone-plan"><ClipboardList size={22} /></span>
-          <span className="etiquette-type">PLAN {String(m.plan_id ?? "")}</span>
+          <span className="etiquette-type"><ClipboardList size={20} aria-hidden />Plan {String(m.plan_id ?? "")}</span>
           <span className={`statut-pill ${statut === "approuve" ? "reussie" : statut === "refuse" ? "echec" : "attente"}`}>
             {STATUT_PLAN[statut] ?? statut}</span>
         </div>
@@ -57,9 +56,9 @@ export const TacheNode = memo(function TacheNode({ data, selected }: P) {
     <CardShell objet={o} selected={selected} sources={data.sources} classe={`c-tache${actif ? " active" : ""}`} entete={false}>
       <div className="contenu">
         <div className="ligne1">
-          <span className="etiquette-type"><Wrench size={13} /> TÂCHE {String(m.issue ?? "")}</span>
+          <span className="etiquette-type"><Wrench size={20} aria-hidden />Tâche {String(m.issue ?? "")}</span>
           <span className={`statut-pill ${actif ? "en-cours" : statut === "terminé" ? "reussie" : "attente"}`}>
-            {actif && <Loader size={15} className="tourne" />}{statut}{actif && m.debut ? ` · ${depuis(m.debut)}` : ""}</span>
+            {actif && <Loader size={16} className="tourne" />}{statut}{actif && m.debut ? ` · ${depuis(m.debut)}` : ""}</span>
         </div>
         <div className="agent-tache">
           <Avatar id={String(m.role ?? "agent")} role={String(m.role_titre ?? m.role ?? "agent")} taille={52}
@@ -67,8 +66,8 @@ export const TacheNode = memo(function TacheNode({ data, selected }: P) {
             titre={`${String(m.role_titre ?? "")} — ${String(m.modele || m.agent || "")}`} />
           <div>
             <b>{String(m.role_titre ?? m.role ?? "Agent")}</b>
-            <span className="modele">{String(m.modele || m.agent || "modèle ?")}{m.effort ? ` · ${String(m.effort)}` : ""}</span>
-            <span className="meta-carte"><GitBranch size={12} /> {String(m.worktree ?? "")}</span>
+            <span className="modele">{String(m.modele || m.agent || "modèle inconnu")}{m.effort ? ` · ${String(m.effort)}` : ""}</span>
+            <span className="meta-carte"><GitBranch size={16} aria-hidden /> {String(m.worktree ?? "")}</span>
           </div>
         </div>
         {Boolean(m.verdict) && <p className="meta-carte">Verdict : {String(m.verdict)}</p>}

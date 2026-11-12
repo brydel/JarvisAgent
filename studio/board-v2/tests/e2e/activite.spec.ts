@@ -12,6 +12,10 @@ test("sessions visibles sans carte, aperçu direct et évolution sans événemen
   await page.route(`**/api/v2/activite/${id}/apercu?**`, route => route.fulfill({ json: { texte: "Lecture de pagination.py\nTests de régression en cours" } }));
   await ouvrir(page);
   const panneau = page.getByRole("region", { name: "Travail en direct" });
+  // repliée par défaut : une ligne qui compte les sessions et les tâches ; le détail s'ouvre à la demande
+  await expect(panneau.getByRole("button", { name: /Travail en direct/ })).toContainText("1 session · 0 tâche");
+  await expect(panneau.locator("#travail-observe")).toHaveCount(0);
+  await panneau.getByRole("button", { name: /Travail en direct/ }).click();
   await expect(panneau.getByText("repriceo / bis-42", { exact: true })).toBeVisible();
   await panneau.getByRole("button", { name: /repriceo \/ bis-42/ }).click();
   await expect(panneau.locator("pre")).toContainText("Tests de régression en cours");
@@ -26,7 +30,8 @@ test("sessions visibles sans carte, aperçu direct et évolution sans événemen
   expect((await panneau.boundingBox())!.y).toBeGreaterThanOrEqual(barre.y + barre.height - 1);
   const canevas = (await page.locator(".canevas").boundingBox())!;
   expect(canevas.height).toBeGreaterThanOrEqual(160);
-  expect((await page.locator(".panneau").boundingBox())!.y).toBeGreaterThanOrEqual(canevas.y + canevas.height - 1);
+  // petit écran : sans sélection, le panneau laisse toute la hauteur au canevas (il revient en tiroir avec une carte)
+  await expect(page.locator(".panneau")).toBeHidden();
   await page.screenshot({ path: test.info().outputPath("activite-mobile.png") });
   await panneau.getByRole("button", { name: /Travail en direct/ }).click();
   await expect(panneau.locator("#travail-observe")).toHaveCount(0);

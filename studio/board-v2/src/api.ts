@@ -192,7 +192,7 @@ export class SourceReelle implements Source {
 /** Démo en mémoire : chaque modification vit le temps de l'onglet. */
 export class SourceDemo implements Source {
   demo = true;
-  espace = "Projet Site Web IA";
+  espace = "Refonte de l'accueil";
   private reglagesDemo: ReglagesBoard = { auto_analyse: true, actions_auto: true };
   async espaces() {
     return [{ nom: this.espace, objets: this.etat.objets.length, projet: true, description: "Démonstration" }];

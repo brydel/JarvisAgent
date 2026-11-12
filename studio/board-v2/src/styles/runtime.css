@@ -1,33 +1,159 @@
-.runtime-ouvrir { flex: none; height: 39px; padding: 0 11px; display: inline-flex; align-items: center; gap: 7px; white-space: nowrap; font-size: 12px; color: var(--text-p2); border: 1px solid color-mix(in srgb, var(--warning) 50%, transparent); border-radius: 10px; background: color-mix(in srgb, var(--warning) 14%, var(--surface-card)); cursor: pointer; }
-.runtime-ouvrir:hover { background: color-mix(in srgb, var(--warning) 22%, var(--surface-card)); border-color: color-mix(in srgb, var(--warning) 50%, transparent); }
-.runtime-dialog { width: min(1110px,calc(100vw - 40px)); height: min(820px,calc(100dvh - 48px)); color: var(--text-primary); background: var(--surface-panel); padding: 0; border: 1px solid var(--border-strong); border-radius: 20px; box-shadow: 0 30px 100px color-mix(in srgb, var(--shadow-color) 67%, transparent); overflow: hidden; }
-.runtime-dialog::backdrop { background: var(--scrim); backdrop-filter: blur(5px); }
-.runtime-coque { height: 100%; display: flex; flex-direction: column; }
-.runtime-entete { display: flex; align-items: center; gap: 12px; flex: none; padding: 18px 22px; background: linear-gradient(110deg,color-mix(in srgb, var(--warning) 14%, var(--surface-card)),var(--surface-hover)); border-bottom: 1px solid var(--border-strong); }
-.runtime-entete>div { flex: 1; min-width: 0; }.runtime-entete p { font-size: 11px; color: var(--text-p2); margin: 0 0 3px; }.runtime-entete h2 { margin: 0; font-size: 19px; letter-spacing: -.02em; }
-.runtime-embleme { display: grid; place-items: center; width: 44px; height: 44px; flex: none; color: var(--text-p2); background: color-mix(in srgb, var(--warning) 22%, var(--surface-card)); border: 1px solid color-mix(in srgb, var(--warning) 33%, transparent); border-radius: 14px; }
-.runtime-onglets { display: flex; gap: 7px; flex: none; padding: 12px 22px 0; border-bottom: 1px solid var(--border-strong); overflow: auto; background: var(--surface-card-raised); }
-.runtime-onglets button { display: inline-flex; align-items: center; gap: 7px; padding: 11px 13px; border: 0; border-bottom: 2px solid transparent; color: var(--text-secondary); background: none; cursor: pointer; font-size: 12px; white-space: nowrap; }.runtime-onglets button[aria-selected=true] { color: var(--text-p2); border-bottom-color: var(--warning); }
-.runtime-contenu { flex: 1; min-height: 0; overflow: auto; padding: 23px; }
-.runtime-intro { margin: 0 0 20px; }.runtime-intro h3 { font-size: 17px; letter-spacing: -.02em; margin: 0 0 8px; }.runtime-intro p { font-size: 12px; line-height: 1.65; color: var(--text-secondary); max-width: 650px; margin: 0; }.runtime-intro.avec-action { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: flex-start; gap: 16px; }.runtime-intro.avec-action>div { flex: 1; min-width: 240px; }.runtime-intro .bouton { font-size: 11px; }
-.runtime-form { display: grid; gap: 15px; padding: 20px; margin-bottom: 22px; border: 1px solid var(--border-strong); border-radius: 13px; background: var(--surface-pressed); }.runtime-form label { display: grid; gap: 7px; font-size: 11px; color: var(--text-secondary); font-weight: 500; min-width: 0; }.runtime-form input,.runtime-form textarea,.runtime-form select { width: 100%; min-width: 0; padding: 10px 12px; background: var(--surface-card-raised); border: 1px solid var(--border-strong); border-radius: 8px; color: var(--text-primary); font: inherit; }.runtime-form input::placeholder,.runtime-form textarea::placeholder { color: var(--text-muted); }.runtime-form textarea { resize: vertical; line-height: 1.6; }.runtime-form footer { display: flex; align-items: center; justify-content: flex-end; flex-wrap: wrap; gap: 8px; }.runtime-form footer .bouton { font-size: 11px; }.runtime-form h4 { margin: 0; font-size: 14px; }.runtime-form>p { margin: 0; font-size: 11px; color: var(--text-secondary); line-height: 1.6; }
-.runtime-grille { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; }.runtime-grille.trois { grid-template-columns: repeat(3,minmax(0,1fr)); }
-.runtime-aide { display: flex; gap: 7px; align-items: flex-start; font-size: 11px; color: var(--text-secondary); line-height: 1.6; margin: 0; }.runtime-aide>svg { flex: none; margin-top: 2px; }.runtime-lien { border: 0; padding: 0; color: var(--text-p2); background: transparent; text-decoration: underline; cursor: pointer; font: inherit; }
-.runtime-prealable,.runtime-autorisation { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; padding: 17px 18px; border: 1px solid color-mix(in srgb, var(--warning) 40%, transparent); border-radius: 11px; background: color-mix(in srgb, var(--warning) 19%, transparent); margin-bottom: 20px; color: var(--text-p2); }.runtime-prealable>div,.runtime-autorisation>div { flex: 1; min-width: 190px; }.runtime-prealable strong,.runtime-autorisation strong { display: block; font-size: 12px; }.runtime-prealable p,.runtime-autorisation p { margin: 5px 0 0; font-size: 11px; color: var(--text-p2); line-height: 1.6; }.runtime-prealable .bouton,.runtime-autorisation .bouton { font-size: 11px; }.runtime-autorisation>a { display: inline-flex; gap: 7px; align-items: center; font-size: 11px; text-decoration: none; padding: 10px 12px; border-radius: 8px; }
-.runtime-outils { border: 1px solid var(--border-strong); border-radius: 10px; padding: 13px 15px; min-width: 0; }.runtime-outils legend { font-size: 11px; color: var(--text-secondary); padding: 0 5px; }.runtime-outils label { display: flex; align-items: flex-start; gap: 9px; cursor: pointer; padding: 6px 0; }.runtime-outils input { flex: none; width: 14px; height: 14px; margin-top: 2px; accent-color: var(--text-p2); }.runtime-outils span { font-size: 11px; overflow-wrap: anywhere; }.runtime-outils small { display: block; margin-top: 4px; color: var(--text-muted); font-size: 10px; }.runtime-outils>p { margin: 0; color: var(--text-secondary); font-size: 11px; }
-.runtime-travail { display: grid; grid-template-columns: minmax(230px,.8fr) minmax(0,1.7fr); gap: 18px; align-items: start; }.runtime-liste { display: grid; gap: 9px; min-width: 0; }.runtime-liste>button { display: grid; justify-items: start; gap: 9px; width: 100%; text-align: left; padding: 15px; background: var(--surface-hover); border: 1px solid var(--border-strong); border-radius: 11px; cursor: pointer; color: var(--text-primary); }.runtime-liste>button[aria-pressed=true] { border-color: color-mix(in srgb, var(--warning) 50%, transparent); background: var(--surface-pressed); box-shadow: inset 3px 0 var(--warning); }.runtime-liste>button strong { font-size: 12px; font-weight: 500; line-height: 1.6; overflow-wrap: anywhere; }.runtime-liste>button small { color: var(--text-secondary); font-size: 10px; overflow-wrap: anywhere; }
-.runtime-etat { display: inline-flex; align-items: center; padding: 4px 8px; border: 1px solid color-mix(in srgb, var(--border-strong) 33%, transparent); border-radius: 999px; font-size: 9px; font-weight: 500; color: var(--text-secondary); background: var(--surface-more); white-space: nowrap; }.runtime-etat.succeeded,.runtime-etat.connectee { color: var(--text-success); background: color-mix(in srgb, var(--success) 22%, var(--surface-card)); border-color: color-mix(in srgb, var(--success) 40%, transparent); }.runtime-etat.blocked,.runtime-etat.awaiting_review,.runtime-etat.paused,.runtime-etat.expiree { color: var(--text-p2); background: color-mix(in srgb, var(--warning) 22%, var(--surface-card)); border-color: color-mix(in srgb, var(--warning) 40%, transparent); }.runtime-etat.failed,.runtime-etat.cancelled,.runtime-etat.revoquee { color: var(--text-danger-soft); background: color-mix(in srgb, var(--danger) 14%, var(--surface-card)); border-color: color-mix(in srgb, var(--danger) 40%, transparent); }.runtime-etat.factice { color: var(--tag-violet-text); background: color-mix(in srgb, var(--accent-violet) 14%, var(--surface-card)); border-color: color-mix(in srgb, var(--accent-violet) 40%, transparent); }
-.runtime-detail { min-width: 0; padding: 20px; border: 1px solid var(--border-strong); border-radius: 13px; background: var(--surface-card-raised); }.runtime-detail>header>.runtime-etat { margin-right: 7px; }.runtime-detail>header h3 { margin: 13px 0 7px; font-size: 16px; line-height: 1.6; font-weight: 500; overflow-wrap: anywhere; }.runtime-detail>header p { color: var(--text-secondary); font-size: 11px; margin: 0; }.runtime-detail>h4 { font-size: 12px; color: var(--text-secondary); margin: 22px 0 10px; }.runtime-mesures { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 10px; margin: 19px 0; }.runtime-mesures>div { border: 1px solid var(--border-strong); border-radius: 9px; padding: 12px; background: var(--surface-hover); }.runtime-mesures span { display: block; font-size: 10px; color: var(--text-secondary); }.runtime-mesures strong { display: block; font-size: 15px; margin-top: 7px; color: var(--text-primary); font-variant-numeric: tabular-nums; }.runtime-commandes { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }.runtime-commandes .bouton { font-size: 10px; height: 32px; }.runtime-arreter { color: var(--text-danger-soft); border-color: color-mix(in srgb, var(--accent-violet) 50%, transparent); background: color-mix(in srgb, var(--accent-violet) 14%, var(--surface-card)); }.runtime-raison { font-size: 11px; line-height: 1.7; color: var(--text-secondary); padding: 12px; border: 1px solid var(--border-strong); border-radius: 9px; margin: 18px 0; overflow-wrap: anywhere; }.runtime-raison.blocked,.runtime-raison.failed { color: var(--text-p2); border-color: color-mix(in srgb, var(--warning) 44%, transparent); background: color-mix(in srgb, var(--warning) 17%, transparent); }
-.runtime-criteres { font-size: 11px; color: var(--text-secondary); line-height: 1.75; margin: 0; padding-left: 18px; }.runtime-criteres li { margin: 4px 0; overflow-wrap: anywhere; }.runtime-resultat { font: 12px/1.75 var(--font-sans); color: var(--text-primary); white-space: pre-wrap; overflow-wrap: anywhere; background: var(--surface-card-raised); padding: 15px; border: 1px solid var(--border-strong); border-radius: 10px; }.runtime-revue { margin-top: 20px; padding: 16px; border-color: color-mix(in srgb, var(--warning) 33%, transparent); background: color-mix(in srgb, var(--border-strong) 17%, transparent); }.runtime-revue footer .bouton { font-size: 10px; height: auto; min-height: 32px; }
-.runtime-info { background: var(--surface-pressed); border: 1px solid var(--border-strong); border-radius: 10px; padding: 17px 18px; margin: 18px 0; }.runtime-info h4 { font-size: 13px; margin: 0 0 12px; }.runtime-info p { font-size: 11px; line-height: 1.7; color: var(--text-secondary); margin: 0; overflow-wrap: anywhere; }.runtime-info dl,.runtime-cartes dl { display: grid; grid-template-columns: 125px minmax(0,1fr); gap: 7px 12px; font-size: 11px; margin: 12px 0 0; }.runtime-info dt,.runtime-cartes dt { color: var(--text-secondary); }.runtime-info dd,.runtime-cartes dd { margin: 0; color: var(--text-secondary); overflow-wrap: anywhere; }
-.runtime-trace { border-top: 1px solid var(--border-strong); margin-top: 24px; padding-top: 16px; font-size: 11px; color: var(--text-secondary); }.runtime-trace summary { display: flex; gap: 7px; align-items: center; cursor: pointer; }.runtime-trace ol { list-style: none; padding: 0; margin: 15px 0 0; }.runtime-trace li { display: grid; grid-template-columns: 95px minmax(0,1fr); gap: 5px 9px; padding: 9px 0; border-bottom: 1px solid var(--border-strong); }.runtime-trace time { font-size: 10px; color: var(--text-muted); }.runtime-trace code { grid-column: 2; overflow-wrap: anywhere; font-size: 10px; color: var(--text-p2); }
-.runtime-references { margin: 16px 0; border: 1px solid var(--border-strong); border-radius: 9px; padding: 12px; color: var(--text-secondary); font-size: 11px; }.runtime-references summary { cursor: pointer; }.runtime-references ul { padding-left: 16px; margin: 12px 0 0; }.runtime-references li { margin-top: 7px; }.runtime-references code { font-size: 10px; color: var(--text-p2); overflow-wrap: anywhere; }
-.runtime-cartes { display: grid; gap: 13px; }.runtime-cartes>article { padding: 19px; background: var(--surface-pressed); border: 1px solid var(--border-strong); border-radius: 12px; min-width: 0; }.runtime-cartes header { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; color: var(--text-p2); }.runtime-cartes h4 { flex: 1; font-size: 14px; color: var(--text-primary); margin: 0; overflow-wrap: anywhere; }.runtime-cartes article>code { display: block; color: var(--text-muted); font-size: 10px; margin-top: 13px; overflow-wrap: anywhere; }.runtime-cartes article>p { font-size: 11px; line-height: 1.7; color: var(--text-secondary); overflow-wrap: anywhere; margin: 12px 0; }.runtime-cartes article>.bouton,.runtime-cartes article>footer { margin-top: 16px; }.runtime-cartes footer { display: flex; flex-wrap: wrap; gap: 8px; }.runtime-cartes .bouton { font-size: 10px; height: 32px; }
-.runtime-vide { padding: 40px 20px; border: 1px dashed var(--border-strong); border-radius: 12px; color: var(--text-p2); text-align: center; }.runtime-vide h4 { color: var(--text-primary); font-size: 14px; font-weight: 500; margin: 15px 0 8px; }.runtime-vide p { color: var(--text-secondary); font-size: 11px; line-height: 1.6; margin: 0; }
-.runtime-erreur { border: 1px solid color-mix(in srgb, var(--danger) 33%, transparent); border-radius: 9px; padding: 11px 13px; background: color-mix(in srgb, var(--danger) 21%, transparent); color: var(--text-danger-soft); font-size: 11px; line-height: 1.6; margin: 0 0 16px; overflow-wrap: anywhere; }.runtime-confirmation { display: flex; align-items: center; gap: 7px; color: var(--text-success); background: color-mix(in srgb, var(--success) 19%, transparent); border: 1px solid color-mix(in srgb, var(--success) 33%, transparent); border-radius: 9px; padding: 11px 13px; font-size: 11px; margin: 0 0 16px; }.runtime-attente { display: flex; align-items: center; gap: 7px; font-size: 11px; color: var(--text-secondary); }
-@media (max-width: 1500px) { .runtime-ouvrir { width: 39px; padding: 0; justify-content: center; }.runtime-ouvrir>span { display: none; } }
-@media (max-width: 900px) { .runtime-ouvrir { width: 36px; height: 36px; }.runtime-travail { grid-template-columns: 1fr; }.runtime-liste { display: flex; gap: 8px; overflow: auto; padding-bottom: 5px; }.runtime-liste>button { min-width: 215px; max-width: 270px; }.runtime-liste>.runtime-vide { width: 100%; } }
+/* Missions outillées — même gabarit de dialogue que Réseau des agents et Intégrations.
+   Surfaces neutres, encre pour l'onglet et la mission choisis ; l'ambre, le vert et le rouge ne disent que l'état (pastille).
+   La mission ouverte porte sa ligne de crédit : modèle, projet, date. */
+.runtime-ouvrir { flex: none; width: 36px; height: 36px; padding: 0; display: inline-flex; align-items: center; justify-content: center; border: 1px solid var(--border-card); border-radius: var(--radius-sm); background: var(--surface-inset); color: var(--text-primary); font-size: 13px; cursor: pointer; white-space: nowrap; transition: background var(--dur-hover) var(--ease-standard); }
+.runtime-ouvrir:hover { background: var(--surface-hover); }
+.runtime-ouvrir svg { color: var(--text-secondary); stroke-width: 1.5; }
+.runtime-ouvrir > span { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+
+.runtime-dialog { width: min(1120px, calc(100vw - 40px)); max-height: min(800px, calc(100dvh - 96px)); margin-top: 48px; padding: 0; border: 1px solid var(--border-card); border-radius: var(--radius-panel); background: var(--surface-card); color: var(--text-primary); box-shadow: var(--shadow-lift); overflow: hidden; }
+.runtime-dialog[open] { display: flex; flex-direction: column; }
+.runtime-dialog::backdrop { background: var(--scrim); }
+.runtime-dialog svg { stroke-width: 1.5; flex: none; }
+.runtime-coque { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+.runtime-entete { display: flex; align-items: center; gap: 4px; flex: none; padding: 12px 16px 12px 24px; }
+.runtime-entete h2 { flex: 1; min-width: 0; margin: 0; font-size: 18px; line-height: 24px; font-weight: 500; }
+.runtime-onglets { display: flex; gap: 4px; flex: none; padding: 0 12px; border-bottom: 1px solid var(--border-subtle); overflow-x: auto; }
+.runtime-onglets button { display: inline-flex; align-items: center; gap: 8px; height: 40px; padding: 0 12px; border: 0; border-bottom: 2px solid transparent; background: none; color: var(--text-secondary); font-size: 13px; white-space: nowrap; cursor: pointer; transition: color var(--dur-hover) var(--ease-standard), border-color var(--dur-hover) var(--ease-standard); }
+.runtime-onglets button svg { color: var(--text-muted); }
+.runtime-onglets button:hover { color: var(--text-primary); }
+.runtime-onglets button[aria-selected=true] { color: var(--text-primary); border-bottom-color: var(--text-primary); }
+.runtime-onglets button:focus-visible { outline-offset: -2px; }
+.runtime-contenu { flex: 1; min-height: 0; overflow: auto; padding: 24px; }
+
+.runtime-intro { margin: 0 0 24px; }
+.runtime-intro h3 { margin: 0 0 4px; font-size: 15px; line-height: 20px; font-weight: 500; }
+.runtime-intro p { margin: 0; max-width: 640px; font-size: 13px; line-height: 20px; color: var(--text-secondary); }
+.runtime-intro.avec-action { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: flex-start; gap: 16px; }
+.runtime-intro.avec-action > div { flex: 1; min-width: 240px; }
+.runtime-dialog .bouton { height: 36px; padding: 0 12px; gap: 8px; text-decoration: none; }
+
+.runtime-form { display: grid; gap: 16px; padding: 20px; margin-bottom: 24px; border: 1px solid var(--border-card); border-radius: var(--radius-card); background: var(--surface-card-raised); }
+.runtime-form label { display: grid; gap: 8px; min-width: 0; font-size: 13px; line-height: 20px; font-weight: 500; color: var(--text-secondary); }
+.runtime-form input, .runtime-form textarea, .runtime-form select { width: 100%; min-width: 0; padding: 8px 12px; border: 1px solid var(--border-card); border-radius: var(--radius-sm); background: var(--surface-field); color: var(--text-primary); font: inherit; font-size: 14px; line-height: 20px; font-weight: 400; transition: border-color var(--dur-hover) var(--ease-standard); }
+.runtime-form input[type=number] { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
+.runtime-form input:focus, .runtime-form textarea:focus, .runtime-form select:focus { border-color: var(--text-secondary); }
+.runtime-form input::placeholder, .runtime-form textarea::placeholder { color: var(--text-muted); }
+.runtime-form textarea { resize: vertical; }
+.runtime-form footer { display: flex; align-items: center; justify-content: flex-end; flex-wrap: wrap; gap: 8px; }
+.runtime-form h4 { margin: 0; font-size: 14px; line-height: 20px; font-weight: 500; }
+.runtime-form > p { margin: 0; font-size: 13px; line-height: 20px; color: var(--text-secondary); }
+.runtime-grille { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; align-items: end; }
+.runtime-grille.trois { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.runtime-aide { display: flex; align-items: flex-start; gap: 8px; margin: 0; font-size: 13px; line-height: 20px; color: var(--text-secondary); }
+.runtime-aide > svg { margin-top: 2px; color: var(--text-muted); }
+.runtime-lien { padding: 0; border: 0; background: transparent; color: var(--text-primary); text-decoration: underline; text-underline-offset: 2px; cursor: pointer; font: inherit; }
+
+/* préalable et autorisation en attente : surface neutre, l'ambre reste sur l'icône */
+.runtime-prealable, .runtime-autorisation { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; padding: 16px 20px; margin-bottom: 24px; border: 1px solid var(--border-card); border-radius: var(--radius-card); background: var(--surface-card-raised); }
+.runtime-prealable > svg, .runtime-autorisation > svg { color: var(--text-secondary); }
+.runtime-prealable > div, .runtime-autorisation > div { flex: 1; min-width: 192px; }
+.runtime-prealable strong, .runtime-autorisation strong { display: block; font-size: 14px; line-height: 20px; font-weight: 500; color: var(--text-primary); }
+.runtime-prealable p, .runtime-autorisation p { margin: 4px 0 0; font-size: 13px; line-height: 20px; color: var(--text-secondary); }
+
+.runtime-outils { min-width: 0; margin: 0; padding: 12px 16px; border: 1px solid var(--border-card); border-radius: var(--radius-sm); }
+.runtime-outils legend { padding: 0 4px; font-size: 13px; line-height: 20px; font-weight: 500; color: var(--text-secondary); }
+.runtime-outils label { display: flex; align-items: flex-start; gap: 12px; padding: 4px 0; cursor: pointer; font-weight: 400; color: var(--text-primary); }
+.runtime-outils input { flex: none; width: 16px; height: 16px; margin: 2px 0 0; padding: 0; accent-color: var(--encre); }
+.runtime-outils span { font-size: 13px; line-height: 20px; overflow-wrap: anywhere; }
+.runtime-outils small { display: block; font: 400 12px/16px var(--font-mono); color: var(--text-muted); }
+.runtime-outils > p { margin: 0; font-size: 13px; line-height: 20px; color: var(--text-secondary); }
+
+/* le travail : la liste des missions à gauche, la mission ouverte à droite */
+.runtime-travail { display: grid; grid-template-columns: minmax(232px, .8fr) minmax(0, 1.7fr); gap: 24px; align-items: start; }
+.runtime-travail:has(.runtime-vide) { grid-template-columns: minmax(0, 1fr); }
+.runtime-liste { display: grid; gap: 2px; min-width: 0; }
+.runtime-liste > button { display: grid; justify-items: start; gap: 4px; width: 100%; padding: 12px; border: 0; border-radius: var(--radius-sm); background: transparent; color: var(--text-primary); text-align: left; cursor: pointer; transition: background var(--dur-hover) var(--ease-standard); }
+.runtime-liste > button:hover { background: var(--surface-hover); }
+.runtime-liste > button[aria-pressed=true] { background: var(--surface-hover); box-shadow: inset 0 1px 0 var(--hover-veil); }
+.runtime-liste > button:focus-visible { outline-offset: -2px; }
+.runtime-liste > button strong { font-size: 14px; line-height: 20px; font-weight: 500; overflow-wrap: anywhere; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+.runtime-liste > button small { font: 400 12px/16px var(--font-mono); font-variant-numeric: tabular-nums; color: var(--text-muted); overflow-wrap: anywhere; }
+/* dessin commun de l'état dans app.css ; ici, la couleur du point */
+.runtime-etat.succeeded::before, .runtime-etat.connectee::before { background: var(--success); }
+.runtime-etat.blocked::before, .runtime-etat.awaiting_review::before, .runtime-etat.paused::before, .runtime-etat.expiree::before { background: var(--warning); }
+.runtime-etat.failed::before, .runtime-etat.cancelled::before, .runtime-etat.revoquee::before { background: var(--danger); }
+.runtime-etat.factice { color: var(--text-muted); }
+.runtime-etat.factice::before { display: none; }
+
+.runtime-detail { min-width: 0; padding: 20px; border: 1px solid var(--border-card); border-radius: var(--radius-card); background: var(--surface-card-raised); }
+.runtime-detail > header { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 16px; }
+.runtime-detail > header h3 { flex-basis: 100%; margin: 8px 0 0; font-size: 18px; line-height: 26px; font-weight: 500; overflow-wrap: anywhere; text-wrap: pretty; }
+.runtime-detail > header .credit { flex-basis: 100%; margin-top: 8px; flex-wrap: wrap; row-gap: 4px; overflow-wrap: anywhere; }
+.runtime-detail > h4 { margin: 24px 0 8px; font-size: 13px; line-height: 20px; font-weight: 500; color: var(--text-secondary); }
+/* mesures : des chiffres, sans boîte par mesure */
+.runtime-mesures { display: flex; flex-wrap: wrap; gap: 12px 40px; margin: 20px 0; padding: 16px 0; border-top: 1px solid var(--border-subtle); border-bottom: 1px solid var(--border-subtle); }
+.runtime-mesures span { display: block; font-size: 12px; line-height: 16px; color: var(--text-muted); }
+.runtime-mesures strong { display: block; margin-top: 4px; font: 400 18px/24px var(--font-mono); font-variant-numeric: tabular-nums; color: var(--text-primary); }
+.runtime-commandes { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
+.runtime-arreter { background: transparent; border-color: var(--border-card); color: var(--text-danger); }
+.runtime-arreter:hover:not(:disabled) { border-color: var(--danger); }
+.runtime-raison { margin: 16px 0 0; padding: 12px; border: 1px solid var(--border-subtle); border-radius: var(--radius-sm); background: var(--surface-inset); font-size: 13px; line-height: 20px; color: var(--text-secondary); overflow-wrap: anywhere; }
+.runtime-raison.blocked, .runtime-raison.failed { color: var(--text-primary); border-color: var(--border-card); }
+.runtime-criteres { margin: 0; padding-left: 20px; font-size: 13px; line-height: 20px; color: var(--text-primary); }
+.runtime-criteres li { margin: 4px 0; overflow-wrap: anywhere; }
+.runtime-resultat { margin: 0; padding: 16px; border: 1px solid var(--border-subtle); border-radius: var(--radius-sm); background: var(--surface-inset); font: 400 14px/22px var(--font-sans); color: var(--text-primary); white-space: pre-wrap; overflow-wrap: anywhere; }
+.runtime-revue { margin: 24px 0 0; padding: 16px; background: var(--surface-card); }
+
+.runtime-info { margin: 0 0 16px; padding: 16px 20px; border: 1px solid var(--border-card); border-radius: var(--radius-card); background: var(--surface-card-raised); }
+.runtime-detail .runtime-info { margin: 16px 0 0; background: var(--surface-card); }
+.runtime-info h4 { margin: 0 0 8px; font-size: 14px; line-height: 20px; font-weight: 500; }
+.runtime-info p { margin: 0; font-size: 13px; line-height: 20px; color: var(--text-secondary); overflow-wrap: anywhere; }
+.runtime-info dl, .runtime-cartes dl { display: grid; grid-template-columns: 144px minmax(0, 1fr); gap: 8px 12px; margin: 12px 0 0; font-size: 13px; line-height: 20px; }
+.runtime-info dt, .runtime-cartes dt { color: var(--text-muted); }
+.runtime-info dd, .runtime-cartes dd { margin: 0; color: var(--text-primary); overflow-wrap: anywhere; }
+
+.runtime-trace { margin-top: 24px; padding-top: 16px; border-top: 1px solid var(--border-subtle); font-size: 13px; line-height: 20px; color: var(--text-secondary); }
+.runtime-trace summary { display: flex; align-items: center; gap: 8px; cursor: pointer; }
+.runtime-trace ol { list-style: none; margin: 12px 0 0; padding: 0; }
+.runtime-trace li { display: grid; grid-template-columns: 112px minmax(0, 1fr); gap: 4px 12px; padding: 8px 0; border-top: 1px solid var(--border-subtle); }
+.runtime-trace time { font: 400 12px/20px var(--font-mono); font-variant-numeric: tabular-nums; color: var(--text-muted); }
+.runtime-trace code { grid-column: 2; font: 400 12px/16px var(--font-mono); color: var(--text-secondary); overflow-wrap: anywhere; }
+.runtime-references { margin: 16px 0 0; font-size: 13px; line-height: 20px; color: var(--text-secondary); }
+.runtime-references summary { cursor: pointer; }
+.runtime-references ul { margin: 8px 0 0; padding-left: 20px; }
+.runtime-references li { margin-top: 4px; }
+.runtime-references code { font: 400 12px/16px var(--font-mono); color: var(--text-secondary); overflow-wrap: anywhere; }
+
+/* mandats et comptes de courriel */
+.runtime-cartes { display: grid; gap: 12px; }
+.runtime-cartes > article { min-width: 0; padding: 20px; border: 1px solid var(--border-card); border-radius: var(--radius-card); background: var(--surface-card-raised); }
+.runtime-cartes header { display: flex; align-items: center; flex-wrap: wrap; gap: 8px 12px; color: var(--text-muted); }
+.runtime-cartes h4 { flex: 1; margin: 0; font-size: 15px; line-height: 20px; font-weight: 500; color: var(--text-primary); overflow-wrap: anywhere; }
+.runtime-cartes article > code { display: block; margin-top: 8px; font: 400 12px/16px var(--font-mono); color: var(--text-muted); overflow-wrap: anywhere; }
+.runtime-cartes article > p { margin: 12px 0 0; font-size: 13px; line-height: 20px; color: var(--text-secondary); overflow-wrap: anywhere; }
+.runtime-cartes article > p.runtime-mandat-outils { font-family: var(--font-mono); font-size: 12px; }
+.runtime-cartes article > .bouton, .runtime-cartes article > footer { margin-top: 16px; }
+.runtime-cartes footer { display: flex; flex-wrap: wrap; gap: 8px; }
+.runtime-cartes footer:empty { display: none; }
+
+.runtime-vide { padding: 16px 0; border-top: 1px solid var(--border-subtle); }
+.runtime-vide h4 { margin: 0; font-size: 14px; line-height: 20px; font-weight: 500; color: var(--text-primary); }
+.runtime-vide p { margin: 0; font-size: 13px; line-height: 20px; color: var(--text-secondary); }
+.runtime-vide h4 + p { margin-top: 4px; }
+.runtime-erreur { margin: 0 0 16px; padding: 8px 12px; border-radius: var(--radius-sm); background: var(--danger-bg); color: var(--text-danger-soft); font-size: 13px; line-height: 20px; overflow-wrap: anywhere; }
+.runtime-confirmation { display: flex; align-items: center; gap: 8px; margin: 0 0 16px; font-size: 13px; line-height: 20px; color: var(--text-success); }
+.runtime-attente { display: flex; align-items: center; gap: 8px; margin: 0 0 16px; font-size: 13px; color: var(--text-secondary); }
+
+@media (max-width: 900px) {
+  .runtime-travail { grid-template-columns: minmax(0, 1fr); }
+  .runtime-liste { display: flex; gap: 4px; overflow: auto; padding-bottom: 4px; }
+  .runtime-liste > button { min-width: 216px; max-width: 272px; }
+  .runtime-liste > .runtime-vide { width: 100%; }
+}
 @media (max-width: 600px) {
-  .runtime-dialog { width: calc(100vw - 20px); height: calc(100dvh - 28px); border-radius: 14px; }.runtime-entete { gap: 8px; padding: 12px; }.runtime-embleme { width: 35px; height: 35px; }.runtime-entete h2 { font-size: 16px; }.runtime-entete p { font-size: 9px; }
-  .runtime-onglets { padding: 7px 7px 0; gap: 0; }.runtime-onglets button { font-size: 10px; gap: 5px; padding: 10px 8px; }.runtime-contenu { padding: 16px 12px; }.runtime-intro h3 { font-size: 15px; }.runtime-intro.avec-action>div { min-width: 0; }.runtime-form { padding: 15px; gap: 13px; }.runtime-grille,.runtime-grille.trois { grid-template-columns: 1fr; gap: 13px; }.runtime-detail { padding: 15px; }.runtime-detail>header h3 { font-size: 14px; }.runtime-mesures { gap: 6px; }.runtime-mesures>div { padding: 10px 8px; }.runtime-mesures strong { font-size: 13px; }.runtime-mesures span { font-size: 9px; }.runtime-info dl,.runtime-cartes dl { grid-template-columns: 90px minmax(0,1fr); font-size: 10px; }.runtime-cartes>article { padding: 15px; }
+  .runtime-dialog { width: calc(100vw - 16px); max-height: calc(100dvh - 24px); margin-top: 12px; border-radius: var(--radius-card); }
+  .runtime-entete { padding: 8px 8px 8px 16px; }
+  .runtime-entete h2 { font-size: 16px; }
+  .runtime-onglets { padding: 0 4px; gap: 0; }
+  .runtime-onglets button svg { display: none; }
+  .runtime-contenu { padding: 16px; }
+  .runtime-intro { margin-bottom: 16px; }
+  .runtime-intro.avec-action > div { min-width: 0; flex-basis: 100%; }
+  .runtime-form, .runtime-detail, .runtime-cartes > article { padding: 16px; }
+  .runtime-grille, .runtime-grille.trois { grid-template-columns: 1fr; gap: 12px; }
+  .runtime-detail > header h3 { font-size: 16px; line-height: 24px; }
+  .runtime-mesures { gap: 12px 24px; }
+  .runtime-mesures strong { font-size: 16px; }
+  .runtime-info dl, .runtime-cartes dl { grid-template-columns: 104px minmax(0, 1fr); }
 }

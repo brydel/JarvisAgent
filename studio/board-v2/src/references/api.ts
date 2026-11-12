@@ -1,5 +1,6 @@
 // Bibliothèque de références : types et appels à /api/v2/references (lib/jarvis/references_api.py).
 // En mode démo, tout vient de ./demo (données fictives, aucune requête).
+import { dateCourte } from "../lib/format";
 import { requete } from "../product/api";
 import { chercherDemo, listerDemo, voirDemo } from "./demo";
 
@@ -69,7 +70,7 @@ export function hote(url: string): string {
   try { return new URL(url).hostname.replace(/^www\./, ""); } catch { return url; }
 }
 export function dateCapture(ts: number | null): string {
-  return ts ? new Intl.DateTimeFormat("fr-CA", { day: "numeric", month: "long", year: "numeric" }).format(ts * 1000) : "date inconnue";
+  return ts ? dateCourte(ts) : "date inconnue";
 }
 /** Citation prête à coller : titre, section, source, date — et les identifiants pour la retrouver. */
 export function citation(p: Passage): string {

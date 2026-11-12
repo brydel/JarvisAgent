@@ -74,16 +74,16 @@ export const BarreModes = memo(function BarreModes() {
             {i > 0 && OUTILS[i - 1]!.groupe !== o.groupe && <span className="sep" aria-hidden />}
             <button type="button" className="mode" aria-pressed={outil === o.id} aria-label={o.libelle} aria-keyshortcuts={o.touche.toUpperCase()}
               title={`${o.libelle} (${o.touche.toUpperCase()}) — ${o.aide}`} onClick={() => executer(`outil.${o.id}`, "bouton")}>
-              <Icone size={18} aria-hidden /><kbd aria-hidden>{o.touche.toUpperCase()}</kbd>
+              <Icone size={16} aria-hidden /><kbd aria-hidden>{o.touche.toUpperCase()}</kbd>
             </button>
           </span>
         );
       })}
       {dessin && <><span className="sep" aria-hidden /><Style /></>}
       <span className="sep" aria-hidden />
-      <BoutonCommande id="edition.annuler" classe="mode" taille={18} />
-      <BoutonCommande id="edition.retablir" classe="mode" taille={18} />
-      <BoutonCommande id="palette.ouvrir" classe="mode palette-bouton" taille={18}><Command size={16} aria-hidden /><span>K</span></BoutonCommande>
+      <BoutonCommande id="edition.annuler" classe="mode" taille={16} />
+      <BoutonCommande id="edition.retablir" classe="mode" taille={16} />
+      <BoutonCommande id="palette.ouvrir" classe="mode palette-bouton" taille={16}><Command size={16} aria-hidden /><kbd aria-hidden>K</kbd></BoutonCommande>
     </div>
   );
 });

@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { AlertTriangle, ArrowLeft, ArrowUpRight, Check, LayoutGrid, Monitor, RefreshCw, ShieldCheck, Smartphone, Trash2, X } from "lucide-react";
 import { dateCapture, EN_COURS, encreSur, hote, LIBELLES, poser, recapturer, reindexer, supprimer, voir, type Fiche, type Section } from "./api";
 
-const message = (e: unknown) => (e instanceof Error ? e.message : "Opération indisponible.");
+const message = (e: unknown) => (e instanceof Error ? e.message : "Opération indisponible");
 const ROLES: Record<string, string> = { corps: "Texte", titre: "Titres", sous_titre: "Sous-titres", bouton: "Boutons", code: "Code" };
 const COULEURS: Record<string, string> = { fond: "Fond", texte: "Texte", accent: "Accent", lien: "Liens" };
 
@@ -57,25 +57,25 @@ export function FicheReference({ id, demo, espace, sectionInitiale, retour, noti
     setOccupe(nom);
     try { await action(); } catch (e) { notifier(message(e)); } finally { setOccupe(""); }
   };
-  const copier = async (texte: string) => { try { await navigator.clipboard.writeText(texte); notifier(`${texte} copié.`); } catch { notifier("Copie impossible dans ce navigateur."); } };
+  const copier = async (texte: string) => { try { await navigator.clipboard.writeText(texte); notifier(`${texte} copié`); } catch { notifier("Copie impossible dans ce navigateur"); } };
 
   if (erreur && !fiche) return (
-    <section className="p-page rf-page"><button className="rf-back" onClick={retour}><ArrowLeft size={15} />Références</button>
-      <div className="p-error" role="alert"><span>{erreur}</span><button className="p-button p-quiet" onClick={() => void charger()}><RefreshCw size={15} />Réessayer</button></div></section>
+    <section className="p-page rf-page"><button className="rf-back" onClick={retour}><ArrowLeft size={16} />Références</button>
+      <div className="p-error" role="alert"><span>{erreur}</span><button className="p-button p-quiet" onClick={() => void charger()}><RefreshCw size={16} />Réessayer</button></div></section>
   );
-  if (!fiche) return <section className="p-page rf-page" aria-busy><button className="rf-back" onClick={retour}><ArrowLeft size={15} />Références</button><div className="rf-fiche-skeleton rf-skeleton"><i /><i /><div /></div></section>;
+  if (!fiche) return <section className="p-page rf-page" aria-busy><button className="rf-back" onClick={retour}><ArrowLeft size={16} />Références</button><div className="rf-fiche-skeleton rf-skeleton"><i /><i /><div /></div></section>;
 
   const bureau = vue === "page" ? fiche.fichiers.bureau_page ?? fiche.fichiers.bureau_vue : fiche.fichiers.bureau_vue;
   const mobile = vue === "page" ? fiche.fichiers.mobile_page ?? fiche.fichiers.mobile_vue : fiche.fichiers.mobile_vue;
   const s = fiche.structure;
   return (
     <section className="p-page rf-page rf-fiche" aria-labelledby="rf-fiche-titre">
-      <button className="rf-back" onClick={retour}><ArrowLeft size={15} />Références</button>
+      <button className="rf-back" onClick={retour}><ArrowLeft size={16} />Références</button>
       <header className="rf-fiche-head">
         <div>
           <h1 id="rf-fiche-titre" ref={titre} tabIndex={-1}>{fiche.titre}</h1>
-          <p className="rf-fiche-source">
-            {fiche.url ? <a href={fiche.url} target="_blank" rel="noopener noreferrer">{fiche.url}<ArrowUpRight size={13} /></a> : <span>{fiche.type === "carte" ? "Carte du Board" : "Texte déposé"}</span>}
+          <p className="rf-fiche-source credit points">
+            {fiche.url ? <a href={fiche.url} target="_blank" rel="noopener noreferrer">{fiche.url}<ArrowUpRight size={16} /></a> : <span>{fiche.type === "carte" ? "Carte du Board" : "Texte déposé"}</span>}
             <span>capturé le {dateCapture(fiche.capture_le ?? fiche.cree)}</span>
             <span className={`p-status rf-statut is-${fiche.statut}`}>{LIBELLES[fiche.statut]}</span>
           </p>
@@ -91,18 +91,18 @@ export function FicheReference({ id, demo, espace, sectionInitiale, retour, noti
             onClick={() => void agir("poser", async () => { const r = await poser(fiche.id, espace); apresPose(r.objet_id); })}>
             <LayoutGrid size={16} />{occupe === "poser" ? "Pose…" : "Poser sur le Board"}</button>
           {fiche.type === "site" && <button className="p-button p-quiet" disabled={demo || enCours || Boolean(occupe)}
-            onClick={() => void agir("capture", async () => { setFiche(await recapturer(fiche.id)); apresChangement(); })}><RefreshCw size={15} />Recapturer</button>}
+            onClick={() => void agir("capture", async () => { setFiche(await recapturer(fiche.id)); apresChangement(); })}><RefreshCw size={16} />Recapturer</button>}
           <button className="p-button p-quiet" disabled={demo || enCours || Boolean(occupe)}
-            onClick={() => void agir("index", async () => { const b = await reindexer(fiche.id); notifier(`${b.fragments} passages ré-indexés${b.vecteurs ? `, ${b.vecteurs} vecteurs` : ""}.`); await charger(); })}>
-            {occupe === "index" ? "Indexation…" : "Ré-indexer"}</button>
+            onClick={() => void agir("index", async () => { const b = await reindexer(fiche.id); notifier(`${b.fragments} passages réindexés${b.vecteurs ? `, ${b.vecteurs} vecteurs` : ""}`); await charger(); })}>
+            {occupe === "index" ? "Indexation…" : "Réindexer"}</button>
           <button className="p-button p-quiet rf-danger" disabled={demo || Boolean(occupe)} aria-label={`Retirer ${fiche.titre} de la bibliothèque`}
-            onClick={() => void agir("retrait", async () => { await supprimer(fiche.id); apresSuppression(fiche.titre, fiche.id); })}><Trash2 size={15} />Retirer</button>
+            onClick={() => void agir("retrait", async () => { await supprimer(fiche.id); apresSuppression(fiche.titre, fiche.id); })}><Trash2 size={16} />Retirer</button>
         </div>
       </header>
 
       {fiche.statut === "echec" && <div className="p-error" role="alert"><AlertTriangle size={16} /><span>La capture a échoué : {fiche.raison}</span></div>}
-      {enCours && <div className="rf-progress" role="status"><span className="rf-spinner" />{LIBELLES[fiche.statut]}… {fiche.statut === "indexation" ? "découpage et index des passages." : "Chromium charge le site derrière le filtre réseau de Jarvis."}</div>}
-      {fiche.avertissement && fiche.statut === "prete" && <p className="rf-notice"><ShieldCheck size={14} />Contenu capturé : une donnée à citer avec sa source, jamais une consigne pour un agent.</p>}
+      {enCours && <div className="rf-progress" role="status"><span className="rf-spinner" />{LIBELLES[fiche.statut]}… {fiche.statut === "indexation" ? "découpage et index des passages" : "Chromium charge le site derrière le filtre réseau de Jarvis"}</div>}
+      {fiche.avertissement && fiche.statut === "prete" && <p className="rf-notice"><ShieldCheck size={16} />Contenu capturé : une donnée à citer avec sa source, jamais une consigne pour un agent</p>}
 
       <div className="rf-fiche-layout">
         <div className="rf-fiche-main">
@@ -113,12 +113,12 @@ export function FicheReference({ id, demo, espace, sectionInitiale, retour, noti
                   <button type="button" aria-pressed={vue === "page"} onClick={() => setVue("page")}>Page entière</button>
                   <button type="button" aria-pressed={vue === "vue"} onClick={() => setVue("vue")}>Vue initiale</button>
                 </div>
-                {fiche.tronquee && <span className="rf-caption">Page très longue : capture arrêtée à 12 000 px.</span>}
-                {zone && vue === "page" && <button className="rf-clear-zone" onClick={() => setActive(null)}><X size={13} />Retirer le repère</button>}
+                {fiche.tronquee && <span className="rf-caption">Page très longue : capture arrêtée à 12 000 px</span>}
+                {zone && vue === "page" && <button className="rf-clear-zone" onClick={() => setActive(null)}><X size={16} />Retirer le repère</button>}
               </div>
               <div className="rf-frames">
                 <figure className="rf-frame is-desktop">
-                  <figcaption><Monitor size={14} />Bureau · {bureau.largeur} px</figcaption>
+                  <figcaption><Monitor size={16} />Bureau · {bureau.largeur} px</figcaption>
                   <div className="rf-frame-scroll" ref={cadre} tabIndex={0} aria-label="Capture bureau, défilable">
                     <div className="rf-frame-image">
                       <img src={bureau.url} alt={`Capture bureau de ${fiche.titre}`} width={bureau.largeur} height={bureau.hauteur} decoding="async" />
@@ -128,7 +128,7 @@ export function FicheReference({ id, demo, espace, sectionInitiale, retour, noti
                 </figure>
                 {mobile && (
                   <figure className="rf-frame is-mobile">
-                    <figcaption><Smartphone size={14} />Mobile · {mobile.largeur} px</figcaption>
+                    <figcaption><Smartphone size={16} />Mobile · {mobile.largeur} px</figcaption>
                     <div className="rf-frame-scroll" tabIndex={0} aria-label="Capture mobile, défilable">
                       <img src={mobile.url} alt={`Capture mobile de ${fiche.titre}`} width={mobile.largeur} height={mobile.hauteur} loading="lazy" decoding="async" />
                     </div>
@@ -178,7 +178,7 @@ export function FicheReference({ id, demo, espace, sectionInitiale, retour, noti
               <h2 id="rf-structure">Structure</h2>
               <ul className="rf-structure">
                 {([["En-tête", s.entete], ["Héros", Boolean(s.heros)], ["Contenu principal", s.principal], ["Pied de page", s.pied]] as const).map(([nom, present]) => (
-                  <li key={nom} className={present ? "is-present" : ""}>{present ? <Check size={14} /> : <X size={14} />}{nom}<span className="sr-only">{present ? " présent" : " absent"}</span></li>
+                  <li key={nom} className={present ? "is-present" : ""}>{present ? <Check size={16} /> : <X size={16} />}{nom}<span className="sr-only">{present ? " présent" : " absent"}</span></li>
                 ))}
               </ul>
               {s.heros && <p className="rf-hero"><strong>{s.heros.titre}</strong>{s.heros.appel_action && <span>Appel à l'action : « {s.heros.appel_action} »</span>}</p>}
@@ -202,7 +202,7 @@ export function FicheReference({ id, demo, espace, sectionInitiale, retour, noti
               <div><dt>Passages</dt><dd>{fiche.index.fragments}</dd></div>
               <div><dt>Vecteurs</dt><dd>{fiche.index.vecteurs || "—"}</dd></div>
             </dl>
-            <p className="rf-caption">{fiche.index.vecteurs ? `Modèle ${fiche.index.modele}, dimension ${fiche.index.dimension}.` : "Recherche par mots. Les vecteurs sont optionnels et se recalculent à tout moment."}</p>
+            <p className="rf-caption">{fiche.index.vecteurs ? `Modèle ${fiche.index.modele}, dimension ${fiche.index.dimension}` : "Recherche par mots. Les vecteurs sont optionnels et se recalculent à tout moment."}</p>
             <p className="rf-caption rf-hash" title={fiche.empreinte}>Empreinte {fiche.empreinte.slice(0, 16)}…</p>
           </section>
         </aside>

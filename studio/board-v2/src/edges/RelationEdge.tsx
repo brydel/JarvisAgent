@@ -1,8 +1,9 @@
+import { useNiveauDetail } from "../board/detail";
 import { memo, useState } from "react";
 import {
   BaseEdge, EdgeLabelRenderer, Position, getBezierPath, useInternalNode, useReactFlow, type Edge, type EdgeProps, type InternalNode,
 } from "@xyflow/react";
-import { ArrowRightToLine, CircleCheck, CircleDashed, Lock, Sparkles, X } from "lucide-react";
+import { ArrowRightToLine, CircleCheck, CircleDashed, Lock, X } from "lucide-react";
 import { contourDe } from "../outils/fleche";
 import { pointSurContour } from "../outils/geometrie";
 import { etiquetteParlante, libelleUtile, type EtatFleche, type LectureFleche } from "../relations/effets";
@@ -97,6 +98,7 @@ export const RelationEdge = memo(function RelationEdge({ id, source, target, dat
   const [edition, setEdition] = useState(false);
   const [valeur, setValeur] = useState(data?.libelle ?? "");
   const { deleteElements } = useReactFlow();
+  const niveau = useNiveauDetail();
   if (!s || !t || !data) return null;
   const c = data.cotes;
   const a = c ? ancre(s, c.s, c.sf) : bord(s, t), b = c ? ancre(t, c.t, c.tf) : bord(t, s);
@@ -119,7 +121,8 @@ export const RelationEdge = memo(function RelationEdge({ id, source, target, dat
       <BaseEdge id={id} path={chemin} markerEnd={markerEnd} interactionWidth={18} className={`relation etat-${etat}`}
         style={{ stroke: couleur, strokeWidth: (effet.epaisseur ?? rendu.epaisseur) + (selected ? 0.9 : 0), strokeDasharray: tirets, strokeLinecap: tirets ? "round" : undefined,
           color: couleur, opacity: effet.opacite }} />
-      {!data.estompe && (data.libelle || edition || selected || parlante) && (
+      {/* sous 35 % de zoom une étiquette ferait moins de 6 px : la couleur et le tracé de la flèche suffisent */}
+      {!data.estompe && (niveau === 0 || edition) && (data.libelle || edition || selected || parlante) && (
         <EdgeLabelRenderer>
           <div key={etat} className={`etiquette-lien nodrag nopan etat-${etat}${data.auteur === "jarvis" ? " par-jarvis" : ""}`}
             title={aide || undefined} data-etat={etat} role="note" aria-label={lecture ? `${lecture.libelle} — ${lecture.detail}` : undefined}
@@ -140,16 +143,16 @@ export const RelationEdge = memo(function RelationEdge({ id, source, target, dat
                   if (e.key === "Escape") setEdition(false);
                 }} />
             ) : <>
-              {Etat && <Etat size={12} aria-hidden />}
-              {data.auteur === "jarvis" && <Sparkles size={11} aria-label="Tracé par Jarvis" />}
+              {Etat && <Etat size={16} aria-hidden />}
+              {data.auteur === "jarvis" && <span className="trace-par" title="Tracé par Jarvis">Jarvis ·</span>}
               {/* le libellé de l'humain d'abord ; l'effet du moment est toujours dit (jamais remplacé par lui) */}
               {libelle && <span>{libelle}</span>}
               {parlante ? <span className="effet-lien">{libelle ? `· ${lecture!.libelle}` : lecture!.libelle}</span>
-                : !libelle && <span style={{ opacity: 0.7 }}>{data.style === "defaut" ? "Nommer…" : lecture && etat !== "neutre" ? lecture.libelle : rendu.nom}</span>}
+                : !libelle && <span className="nom-type">{data.style === "defaut" ? "Nommer" : lecture && etat !== "neutre" ? lecture.libelle : rendu.nom}</span>}
             </>}
             {selected && !edition && (
               <button type="button" className="retirer-lien" aria-label="Retirer cette relation"
-                onClick={(e) => { e.stopPropagation(); deleteElements({ edges: [{ id }] }); }}><X size={12} /></button>
+                onClick={(e) => { e.stopPropagation(); deleteElements({ edges: [{ id }] }); }}><X size={12} className="trait-fort" /></button>
             )}
           </div>
         </EdgeLabelRenderer>

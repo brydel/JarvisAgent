@@ -1,6 +1,6 @@
 import { memo, useCallback, useEffect, useRef, useState } from "react";
 import type { Node, NodeProps } from "@xyflow/react";
-import { Bold, Calendar, Check, FileText, Italic, List, Loader, MoreHorizontal, Target, Underline, Users, Wrench, X } from "lucide-react";
+import { Bold, Check, FileText, Italic, List, Loader, Pencil, Target, Underline, Users, Wrench, X } from "lucide-react";
 import type { AgentResume, DonneesNoeud, MissionResume } from "../types";
 import { libelleTache } from "../lib/format";
 import { rendreNote } from "../lib/markdown";
@@ -53,16 +53,16 @@ export const NoteNode = memo(function NoteNode({ data, selected }: P) {
   return (
     <CardShell objet={o} selected={selected} sources={data.sources} classe="c-note">
       <div className="entete">
-        <FileText size={24} />
+        <FileText size={20} aria-hidden />
         <div className="titre-carte">{o.meta.titre || "Note"}</div>
       </div>
       <div className="barre-format nodrag" role="toolbar" aria-label="Mise en forme">
-        <button type="button" aria-label="Gras" onClick={() => entourer("**")}><Bold size={17} /></button>
-        <button type="button" aria-label="Italique" onClick={() => entourer("*")}><Italic size={17} /></button>
-        <button type="button" aria-label="Souligné" onClick={() => entourer("__")}><Underline size={17} /></button>
-        <button type="button" aria-label="Liste" onClick={() => entourer("\n- ", "")}><List size={17} /></button>
+        <button type="button" aria-label="Gras" onClick={() => entourer("**")}><Bold size={20} /></button>
+        <button type="button" aria-label="Italique" onClick={() => entourer("*")}><Italic size={20} /></button>
+        <button type="button" aria-label="Souligné" onClick={() => entourer("__")}><Underline size={20} /></button>
+        <button type="button" aria-label="Liste" onClick={() => entourer("\n- ", "")}><List size={20} /></button>
         <button type="button" aria-label="Modifier le texte" onClick={() => (edition ? terminer() : setEdition(true))}>
-          {edition ? <Check size={17} /> : <MoreHorizontal size={17} />}
+          {edition ? <Check size={20} /> : <Pencil size={20} />}
         </button>
       </div>
       {edition ? (
@@ -103,7 +103,7 @@ export const MissionNode = memo(function MissionNode({ data, selected }: P) {
   if (!m) {
     return (
       <CardShell objet={o} selected={selected} sources={data.sources} classe="c-mission" entete={false}>
-        <div className="contenu"><h3>Mission introuvable</h3><p className="meta-carte">La mission liée n'existe plus.</p></div>
+        <div className="contenu"><h3>Mission introuvable</h3><p className="meta-carte">La mission liée n'existe plus</p></div>
       </CardShell>
     );
   }
@@ -113,17 +113,16 @@ export const MissionNode = memo(function MissionNode({ data, selected }: P) {
     <CardShell objet={o} selected={selected} sources={data.sources} classe="c-mission" entete={false}>
       <div className="contenu" onDoubleClick={() => a.inspecter(o.id)}>
         <div className="ligne1">
-          <span className="icone-mission"><Target size={26} /></span>
-          <span className="etiquette-type">MISSION</span>
+          <span className="etiquette-type"><Target size={20} aria-hidden />Mission</span>
           <span className={`statut-pill ${s.classe}`}>
-            {s.classe === "en-cours" ? <Loader size={17} className="tourne" /> : s.classe === "reussie" ? <Check size={17} /> : null}
+            {s.classe === "en-cours" ? <Loader size={20} className="tourne" /> : <i className="point-statut" aria-hidden />}
             {s.libelle}{s.classe === "en-cours" && <DepuisTravail agents={agents} />}
           </span>
         </div>
         <h3>{o.meta.titre || m.objectif}</h3>
-        <div className="progression" aria-label={`Progression : ${m.faites} tâche(s) sur ${m.total}`}>
+        <div className="progression" aria-label={`Progression : ${m.faites} sur ${m.total} tâche${m.total > 1 ? "s" : ""}`}>
           <div className="barre"><span style={{ transform: `scaleX(${m.progression / 100})` }} /></div>
-          <output className="tab-num">{m.progression}%</output>
+          <output className="tab-num">{m.faites} / {m.total}</output>
         </div>
         <ul className="etapes">
           {m.taches.slice(0, 4).map((t) => {
@@ -131,8 +130,9 @@ export const MissionNode = memo(function MissionNode({ data, selected }: P) {
               : ["FAILED", "CANCELLED", "EXPIRED"].includes(t.statut) ? "echec" : "attente";
             return (
               <li key={t.id} className={etat === "encours" ? "encours" : ""}>
-                <span className={`coche ${etat}`}>{etat === "faite" ? <Check size={15} strokeWidth={3} /> : etat === "echec" ? <X size={14} /> : null}</span>
-                {libelleTache(t)}
+                <span className={`coche ${etat}`}>{etat === "faite" ? <Check size={16} className="trait-fort" /> : etat === "echec" ? <X size={16} className="trait-fort" /> : null}</span>
+                <span className="libelle-etape">{libelleTache(t)}</span>
+                {t.niveau && <span className="niveau" title={t.niveau === "L1" ? "Sans effet externe" : "Attend ton accord avant toute action externe"}>{t.niveau}</span>}
               </li>
             );
           })}
@@ -140,8 +140,7 @@ export const MissionNode = memo(function MissionNode({ data, selected }: P) {
         </ul>
         <OutilsAgents agents={agents} />
         <div className="bas">
-          <Calendar size={19} />
-          {o.meta.echeance ? <>Échéance <span className="date">{String(o.meta.echeance)}</span></> : <span>Sans échéance</span>}
+          {o.meta.echeance ? <span>Échéance <span className="date">{String(o.meta.echeance)}</span></span> : null}
           <span className="pile-avatars">
             {agents.slice(0, 2).map((ag) => (
               <Avatar key={ag.id} id={ag.id} role={ag.nom ?? (NOMS_ROLES[ag.role]?.[0] ?? ag.role)} taille={40} titre={`${ag.nom ?? NOMS_ROLES[ag.role]?.[0] ?? ag.executant ?? "agent"} — ${ag.fournisseur}`} />
@@ -163,8 +162,25 @@ function DepuisTravail({ agents }: { agents: AgentResume[] }) {
   }, []);
   const ag = agents.find((x) => !x.fin);
   if (!ag) return null;
-  const s = Math.max(0, Date.now() / 1000 - ag.debut);
-  return <span className="depuis tab-num" title={`Agent au travail depuis ${Math.round(s)} s`}> · {s < 60 ? "< 1 min" : `${Math.floor(s / 60)} min`}</span>;
+  return <span className="depuis" title="Durée de travail de l'agent en cours"> · {dureeDepuis(ag.debut)}</span>;
+}
+
+const ISSUES: Record<string, string> = { reussi: "terminé", echec: "échec", annule: "annulé", expire: "expiré" };
+
+/** Durée bornée (min, puis h, puis j) depuis un horodatage en secondes. */
+function dureeDepuis(debut: number): string {
+  const s = Math.max(0, Date.now() / 1000 - debut);
+  return s < 60 ? "< 1 min" : s < 3600 ? `${Math.floor(s / 60)} min` : s < 86400 ? `${Math.floor(s / 3600)} h` : `${Math.floor(s / 86400)} j`;
+}
+
+/** Depuis quand cet agent travaille (tentative réelle, sans fin) ; actualisé toutes les 30 s. */
+function DepuisAgent({ debut }: { debut: number }) {
+  const [, rafraichir] = useState(0);
+  useEffect(() => {
+    const t = window.setInterval(() => rafraichir((n) => n + 1), 30_000);
+    return () => window.clearInterval(t);
+  }, []);
+  return <>{dureeDepuis(debut)}</>;
 }
 
 /** Dernière action réelle de l'équipe (outils déclarés par l'exécutant) : ce qui a été lu ou utilisé. */
@@ -174,7 +190,7 @@ function OutilsAgents({ agents }: { agents: AgentResume[] }) {
   const [nom] = NOMS_ROLES[ag.role] ?? [ag.role];
   return (
     <p className="outils-mission" title={ag.outils!.map((x) => `${x.outil} ${x.detail}`).join(" · ")}>
-      <Wrench size={13} /> <b>{nom}</b> {ag.outils!.map((x) => `${x.outil} · ${x.detail}`).join(" ; ")}
+      <Wrench size={16} aria-hidden /><b>{nom}</b> {ag.outils!.map((x) => `${x.outil} · ${x.detail}`).join(" ; ")}
     </p>
   );
 }
@@ -195,21 +211,20 @@ function EquipeProjet({ o, selected }: { o: P["data"]["objet"]; selected: boolea
   return (
     <CardShell objet={o} selected={selected} classe="c-agents" entete={false}>
       <div className="entete">
-        <Users size={19} /> {String(o.meta.titre ?? "ÉQUIPE").toUpperCase()}
+        <Users size={20} aria-hidden />{String(o.meta.titre ?? "Équipe")}
         <span className="badge-actifs tab-num">{actifs ? `${actifs} au travail` : "au repos"}</span>
       </div>
-      <div className="grille-agents">
+      <ul className="liste-agents">
         {[...membres].sort((a, b) => Number(b.actif) - Number(a.actif)).slice(0, 4).map((ag) => (
-          <div key={ag.id} className="agent">
-            <Avatar id={ag.id} role={ag.titre} taille={80} statut={ag.actif ? "actif" : "termine"} point={ag.actif}
+          <li key={ag.id} className={ag.actif ? "actif" : undefined}>
+            <Avatar id={ag.id} role={ag.titre} taille={44} point={ag.actif}
               fournisseur={ag.agent} titre={`${ag.titre} — ${ag.modele || ag.agent} — ${ag.statut}`} />
-            <span className="nom">{ag.titre}</span>
-            <span className="role">{ag.modele || ag.agent}</span>
+            <span className="qui"><span className="nom">{ag.titre}</span><span className="role">{ag.modele || ag.agent}</span></span>
             <span className="outil-agent">{ag.issue ? `${ag.issue} · ` : ""}{ag.statut}{ag.depuis ? ` · ${ag.depuis}` : ""}</span>
-          </div>
+          </li>
         ))}
-      </div>
-      {membres.length > 4 && <p className="meta-carte">+ {membres.length - 4} autre(s) agent(s)</p>}
+      </ul>
+      {membres.length > 4 && <p className="meta-carte">+ {membres.length - 4} {membres.length - 4 > 1 ? "autres agents" : "autre agent"}</p>}
     </CardShell>
   );
 }
@@ -222,29 +237,30 @@ export const AgentsNode = memo(function AgentsNode({ data, selected }: P) {
   return (
     <CardShell objet={o} selected={selected} sources={data.sources} classe="c-agents" entete={false}>
       <div className="entete">
-        <Users size={19} /> ÉQUIPE D'AGENTS
+        <Users size={20} aria-hidden />Équipe d'agents
         <span className="badge-actifs tab-num">{actifs} actif{actifs > 1 ? "s" : ""}</span>
       </div>
       {agents.length ? (
-        <div className="grille-agents">
+        <ul className="liste-agents">
           {agents.slice(0, 4).map((ag) => {
             const [nom, role] = NOMS_ROLES[ag.role] ?? [ag.nom ?? ag.executant ?? "Agent", ag.role];
+            const actif = !ag.fin && !ag.issue;
+            const dernier = ag.outils?.length ? ag.outils[ag.outils.length - 1]! : null;
             return (
-              <div key={ag.id} className="agent">
-                <Avatar id={ag.id} role={ag.nom ?? nom} taille={80} statut={statutAgent(ag)} point={!ag.issue}
+              <li key={ag.id} className={actif ? "actif" : undefined}>
+                <Avatar id={ag.id} role={ag.nom ?? nom} taille={44} point={actif}
                   fournisseur={ag.fournisseur} titre={`${ag.nom ?? nom} — ${ag.fournisseur}${ag.executant ? ` sur ${ag.executant}` : ""}`} />
-                <span className="nom">{ag.nom ?? nom}</span>
-                <span className="role">{ag.nom ? ag.role : role}</span>
-                {ag.outils?.[0] && <span className="outil-agent" title={ag.outils.map((x) => `${x.outil} ${x.detail}`).join(" · ")}>
-                  <Wrench size={11} /> {ag.outils[ag.outils.length - 1]!.outil}</span>}
-              </div>
+                <span className="qui"><span className="nom">{ag.nom ?? nom}</span><span className="role">{ag.nom ? ag.role : role}</span></span>
+                <span className="outil-agent" title={ag.outils?.length ? ag.outils.map((x) => `${x.outil} ${x.detail}`).join(" · ") : undefined}>
+                  {dernier ? dernier.outil : actif ? <DepuisAgent debut={ag.debut} /> : ISSUES[ag.issue ?? ""] ?? ag.issue}</span>
+              </li>
             );
           })}
-        </div>
+        </ul>
       ) : (
         <div className="vide-agents">Aucun agent n'a encore travaillé sur cette mission.<br />Ils apparaîtront ici dès qu'un exécutant prendra une tâche.</div>
       )}
-      {agents.length > 4 && <p className="meta-carte">+ {agents.length - 4} tentative(s) dans l'historique de la mission</p>}
+      {agents.length > 4 && <p className="meta-carte">+ {agents.length - 4} {agents.length - 4 > 1 ? "tentatives" : "tentative"} dans l'historique de la mission</p>}
     </CardShell>
   );
 });

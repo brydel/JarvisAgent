@@ -1,6 +1,6 @@
 import { memo, useEffect, useRef, useState } from "react";
 import type { Node, NodeProps } from "@xyflow/react";
-import { Maximize, Pause, Play, Plus } from "lucide-react";
+import { Maximize, Pause, Play } from "lucide-react";
 import type { DonneesNoeud } from "../types";
 import { duree, extension, taille } from "../lib/format";
 import { annoncerLecture, formeOnde, surAutreLecture, useVisible } from "../lib/medias";
@@ -18,9 +18,9 @@ const CODEC = "Format ou codec non pris en charge par ce navigateur. Ouvre le Bo
 
 function messageErreur(m: HTMLMediaElement): string {
   const e = m.error;
-  if (!e) return "Lecture impossible.";
-  return e.code === 4 ? CODEC : e.code === 2 ? "Erreur réseau pendant le chargement."
-    : e.code === 3 ? "Fichier endommagé (décodage impossible)." : "Lecture interrompue.";
+  if (!e) return "Lecture impossible";
+  return e.code === 4 ? CODEC : e.code === 2 ? "Erreur réseau pendant le chargement"
+    : e.code === 3 ? "Fichier endommagé (décodage impossible)" : "Lecture interrompue";
 }
 
 /* ---------------------------------------------------------------- audio ------------------------------------ */
@@ -58,7 +58,7 @@ export const AudioNode = memo(function AudioNode({ data, selected }: P) {
     // couleurs du thème courant (un canvas ne lit pas les variables CSS tout seul)
     const style = getComputedStyle(c);
     const jeton = (nom: string) => style.getPropertyValue(nom).trim();
-    const [joue, plein, vide] = [jeton("--text-accent"), jeton("--brand-indigo"), jeton("--cadre-bord")];
+    const [joue, plein, vide] = [jeton("--text-secondary"), jeton("--encre"), jeton("--cadre-bord")];
     pics.forEach((v, i) => {
       const bh = Math.max(3, v * h * 0.95);
       g.fillStyle = i / pics.length <= fait ? joue : i / pics.length < 0.62 ? plein : vide;
@@ -102,7 +102,7 @@ export const AudioNode = memo(function AudioNode({ data, selected }: P) {
       </div>
       <div className="lecteur" ref={ref}>
         <button type="button" className="bouton-lecture nodrag" onClick={basculer} aria-label={lecture ? "Pause" : "Lecture"}>
-          {lecture ? <Pause size={24} fill="currentColor" /> : <Play size={24} fill="currentColor" style={{ marginLeft: 3 }} />}
+          {lecture ? <Pause size={20} fill="currentColor" /> : <Play size={20} fill="currentColor" style={{ marginLeft: 2 }} />}
         </button>
         <div className="onde nodrag nopan" onPointerDown={chercher} role="slider" aria-label="Position de lecture"
           aria-valuemin={0} aria-valuemax={Math.round(total)} aria-valuenow={Math.round(t)} tabIndex={0}
@@ -121,9 +121,7 @@ export const AudioNode = memo(function AudioNode({ data, selected }: P) {
             const v = VITESSES[(VITESSES.indexOf(vitesse) + 1) % VITESSES.length] ?? 1;
             setVitesse(v);
             if (audio.current) audio.current.playbackRate = v;
-          }}>{vitesse}x ⌄</button>
-          <span style={{ width: 18 }} />
-          <Plus size={20} aria-hidden="true" />
+          }}>{String(vitesse).replace(".", ",")}×</button>
         </div>
       </div>
       {src && (
@@ -181,10 +179,10 @@ export const VideoNode = memo(function VideoNode({ data, selected }: P) {
       {!actif && (
         <>
           <button type="button" className="lecture-centre nodrag" onClick={demarrer} aria-label="Lire la vidéo">
-            <Play size={26} fill="currentColor" style={{ marginLeft: 3 }} />
+            <Play size={24} fill="currentColor" style={{ marginLeft: 2 }} />
           </button>
           <div className="bas">
-            <button type="button" className="petit-lecture nodrag" onClick={demarrer} aria-label="Lire la vidéo"><Play size={17} fill="currentColor" /></button>
+            <button type="button" className="petit-lecture nodrag" onClick={demarrer} aria-label="Lire la vidéo"><Play size={16} fill="currentColor" /></button>
             <div style={{ minWidth: 0 }}>
               <div className="titre-carte">{o.meta.titre || a?.nom || "Vidéo"}</div>
               <div className="meta-carte tab-num">{[a && extension(a.mime, a.nom), duree(total), a && taille(a.taille)].filter(Boolean).join(" · ")}</div>

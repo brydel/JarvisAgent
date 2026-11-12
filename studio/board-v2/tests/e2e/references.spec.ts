@@ -19,8 +19,8 @@ test("réel : état vide, capture d'un site, états, recherche citée, fiche, po
   page.on("pageerror", (e) => erreurs.push(e.message));
   await ouvrir(page);
   await page.getByRole("navigation", { name: "Sections" }).getByRole("button", { name: "Références", exact: true }).click();
-  await expect(page.getByRole("heading", { level: 1, name: /Tes références/ })).toBeVisible();
-  await expect(page.getByText("Ta bibliothèque attend son premier site")).toBeVisible();
+  await expect(page.getByRole("heading", { level: 1, name: "Références" })).toBeVisible();
+  await expect(page.getByText("Aucune référence dans la bibliothèque", { exact: true })).toBeVisible();
   await page.screenshot({ path: path.join(sorties, "vide.png") });
 
   // une adresse refusée par la garde : l'état « échec » est montré avec sa raison (rien n'est contacté)
@@ -70,7 +70,7 @@ test("réel : état vide, capture d'un site, états, recherche citée, fiche, po
     await expect.poll(() => page.getByRole("img", { name: new RegExp(`Capture ${nom}`) }).evaluate((i: HTMLImageElement) => i.naturalWidth)).toBe(largeur);
   }
   await expect(page.locator(".rf-swatches button").first()).toBeVisible();
-  await expect(page.locator(".rf-fonts")).toContainText(/Inter/);
+  await expect(page.locator(".rf-fonts")).toContainText(/Instrument Sans/);
   await expect(page.locator(".rf-sections li").first()).toBeVisible();
   await page.locator(".rf-sections button").first().click();
   await expect(page.locator(".rf-zone")).toBeVisible();
@@ -135,9 +135,9 @@ for (const [nom, largeur, hauteur] of [["bureau", 1440, 1000], ["mobile", 390, 8
     await page.screenshot({ path: path.join(sorties, `demo-fiche-${nom}.png`) });
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
     await page.keyboard.press("Escape");
-    await expect(page.getByRole("heading", { level: 1, name: /Tes références/ })).toBeVisible();
+    await expect(page.getByRole("heading", { level: 1, name: "Références" })).toBeVisible();
     await page.goto("/v2/?demo=1&vue=connaissances");
-    await expect(page.getByRole("heading", { level: 1, name: /Tes références/ })).toBeVisible();
+    await expect(page.getByRole("heading", { level: 1, name: "Références" })).toBeVisible();
     expect(erreurs).toEqual([]);
   });
 }
