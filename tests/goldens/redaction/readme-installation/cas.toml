@@ -2,6 +2,7 @@ titre = "Section d'installation du README"
 role = "redaction"
 duree_max_min = 20
 exigences_brief = ["commande", "lecteur"]
+exigences_compte_rendu = ["exemple", "ecart_declare"]
 consigne = """
 Le README n'explique pas comment installer le projet. Ajoute une section « ## Installation » : prérequis
 (Python 3.11 ou plus), puis les étapes numérotées avec les commandes dans un bloc de code :

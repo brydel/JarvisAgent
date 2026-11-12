@@ -1,7 +1,8 @@
 titre = "Retirer une clé d'API écrite en dur"
 role = "securite"
 duree_max_min = 20
-exigences_brief = ["secret", "tests?"]
+exigences_brief = ["secret"]
+exigences_compte_rendu = ["exemple", "preuve_par_test"]
 consigne = """
 config.py contient une clé d'API en clair. Lis-la depuis la variable d'environnement PAIEMENT_CLE ; si elle
 est absente, lève une RuntimeError claire au premier appel de `cle_paiement()`. Aucune clé ne doit rester

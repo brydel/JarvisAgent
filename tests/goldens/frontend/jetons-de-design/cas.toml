@@ -2,6 +2,7 @@ titre = "Remplacer les couleurs en dur par des jetons"
 role = "frontend"
 duree_max_min = 20
 exigences_brief = ["jarvis-design|jetons?", "en dur"]
+exigences_compte_rendu = ["exemple", "ecart_declare"]
 consigne = """
 styles.css répète des couleurs en dur dans chaque composant. Définis les couleurs comme variables CSS dans
 :root (préfixe --couleur-) et utilise-les partout ailleurs avec var(). Aucune couleur hexadécimale ou rgb()

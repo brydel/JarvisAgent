@@ -41,3 +41,13 @@ Hypothèses :
 Risques :
 - export/legacy.py duplique la même logique : non touché (hors périmètre), à traiter à part.
 ```
+
+**Contre-exemple (refusé : aucune preuve, rien de lancé, périmètre débordé)**
+```
+Critères :
+1. L'export CSV est corrigé
+Vérifications :
+- relu, ça devrait marcher
+Fichiers :
+- export/csv.py, export/legacy.py (nettoyé au passage), utils/format.py (renommé)
+```

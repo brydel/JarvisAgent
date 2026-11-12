@@ -1,0 +1,16 @@
+titre = "Corriger les jetons : contraste AA, focus visible, largeur mobile"
+role = "design"
+duree_max_min = 20
+exigences_brief = ["Contraste AA", "navigation au clavier", "en dur", "360 px"]
+exigences_compte_rendu = ["exemple", "contre_exemple", "ecart_declare"]
+consigne = """
+styles/jetons.css définit les jetons d'un produit et trois règles qui s'en servent. Le texte est illisible, le
+focus du bouton est invisible et le bouton déborde sur mobile. Corrige ce fichier :
+- `--couleur-texte` et `--couleur-texte-discret` atteignent un contraste d'au moins 4,5:1 (WCAG AA) sur
+  `--couleur-fond` ; `--couleur-marque` et `--couleur-fond` ne changent pas ;
+- `--taille-texte` vaut au moins 16px ;
+- le bouton a un focus visible : une règle `.bouton:focus-visible` avec un `outline` d'au moins 2px, et plus aucun
+  `outline: none` dans le fichier ;
+- aucune largeur fixe en px au-delà de 360 (l'écran mobile de référence) ;
+- aucune couleur en dur (hexadécimale, rgb ou hsl) en dehors du bloc `:root` : tout passe par `var(--…)`.
+"""

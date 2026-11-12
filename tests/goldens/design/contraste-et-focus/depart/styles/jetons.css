@@ -1,0 +1,27 @@
+:root {
+  --couleur-marque: #1f6feb;
+  --couleur-fond: #ffffff;
+  --couleur-texte: #9aa0a6;
+  --couleur-texte-discret: #c4c7cc;
+  --taille-texte: 13px;
+}
+
+body {
+  background: var(--couleur-fond);
+  color: var(--couleur-texte);
+  font-size: var(--taille-texte);
+}
+
+.aide {
+  color: var(--couleur-texte-discret);
+}
+
+.bouton {
+  background: var(--couleur-marque);
+  color: #ffffff;
+  width: 480px;
+}
+
+.bouton:focus {
+  outline: none;
+}

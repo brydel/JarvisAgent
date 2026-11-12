@@ -1,0 +1,30 @@
+:root {
+  --couleur-marque: #1f6feb;
+  --couleur-fond: #ffffff;
+  --couleur-texte: #202124;
+  --couleur-texte-discret: #5f6368;
+  --couleur-sur-marque: #ffffff;
+  --taille-texte: 16px;
+}
+
+body {
+  background: var(--couleur-fond);
+  color: var(--couleur-texte);
+  font-size: var(--taille-texte);
+}
+
+.aide {
+  color: var(--couleur-texte-discret);
+}
+
+.bouton {
+  background: var(--couleur-marque);
+  color: var(--couleur-sur-marque);
+  width: 100%;
+  max-width: 320px;
+}
+
+.bouton:focus-visible {
+  outline: 3px solid var(--couleur-texte);
+  outline-offset: 2px;
+}

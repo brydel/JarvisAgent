@@ -1,0 +1,16 @@
+titre = "Décider par un ADR comment sortir l'envoi de courriels de la requête"
+role = "architecte"
+duree_max_min = 20
+exigences_brief = ["ADR", "revient en arrière|retour arrière", "aucun fichier dans deux tâches"]
+exigences_compte_rendu = ["exemple", "contre_exemple", "ecart_declare"]
+consigne = """
+Lis ISSUE.md, le code de app/ et docs/adr/0001-base-postgresql.md. Écris la décision dans un nouveau fichier
+docs/adr/0002-<titre>.md, au gabarit de docs/adr/0001 : première ligne « # ADR-0002 : … », une ligne
+« Statut : proposé », puis les sections « ## Contexte », « ## Options », « ## Décision », « ## Conséquences » et
+« ## Découpage », dans cet ordre. Dans « Options » : au moins deux options, chacune sous un titre « ### Option … »
+avec ses lignes « Coût : », « Bloque : » et « Retour arrière : ». Dans « Contexte » : cite l'existant au moins une
+fois sous la forme fichier:ligne (un fichier de app/). Dans « Découpage » : un tableau Markdown
+« tâche | rôle conseillé | fichiers | critère vérifiable » d'au moins deux tâches ; le rôle est un rôle de l'usine
+(backend, data, devops, qa, frontend, securite…), et aucun fichier n'apparaît dans deux tâches.
+Tu décides et tu découpes : ne modifie pas le code de app/.
+"""

@@ -11,6 +11,18 @@
   ],
   "tests": [
     {
+      "description": "architecte/adr-file-de-courriels",
+      "vars": {
+        "cas": "architecte/adr-file-de-courriels"
+      },
+      "assert": [
+        {
+          "type": "contains",
+          "value": "VERDICT: OK"
+        }
+      ]
+    },
+    {
       "description": "backend/cache-expiration",
       "vars": {
         "cas": "backend/cache-expiration"
@@ -38,6 +50,42 @@
       "description": "backend/validation-entrees",
       "vars": {
         "cas": "backend/validation-entrees"
+      },
+      "assert": [
+        {
+          "type": "contains",
+          "value": "VERDICT: OK"
+        }
+      ]
+    },
+    {
+      "description": "data/migration-reversible",
+      "vars": {
+        "cas": "data/migration-reversible"
+      },
+      "assert": [
+        {
+          "type": "contains",
+          "value": "VERDICT: OK"
+        }
+      ]
+    },
+    {
+      "description": "design/contraste-et-focus",
+      "vars": {
+        "cas": "design/contraste-et-focus"
+      },
+      "assert": [
+        {
+          "type": "contains",
+          "value": "VERDICT: OK"
+        }
+      ]
+    },
+    {
+      "description": "devops/script-idempotent",
+      "vars": {
+        "cas": "devops/script-idempotent"
       },
       "assert": [
         {
@@ -83,6 +131,42 @@
       ]
     },
     {
+      "description": "generaliste/correctif-minimal",
+      "vars": {
+        "cas": "generaliste/correctif-minimal"
+      },
+      "assert": [
+        {
+          "type": "contains",
+          "value": "VERDICT: OK"
+        }
+      ]
+    },
+    {
+      "description": "ia-produit/drapeau-et-repli",
+      "vars": {
+        "cas": "ia-produit/drapeau-et-repli"
+      },
+      "assert": [
+        {
+          "type": "contains",
+          "value": "VERDICT: OK"
+        }
+      ]
+    },
+    {
+      "description": "marketing/annonces-verifiables",
+      "vars": {
+        "cas": "marketing/annonces-verifiables"
+      },
+      "assert": [
+        {
+          "type": "contains",
+          "value": "VERDICT: OK"
+        }
+      ]
+    },
+    {
       "description": "qa/reproduire-un-bug",
       "vars": {
         "cas": "qa/reproduire-un-bug"
@@ -110,6 +194,18 @@
       "description": "qa/tests-qui-attrapent",
       "vars": {
         "cas": "qa/tests-qui-attrapent"
+      },
+      "assert": [
+        {
+          "type": "contains",
+          "value": "VERDICT: OK"
+        }
+      ]
+    },
+    {
+      "description": "recherche/comparatif-source",
+      "vars": {
+        "cas": "recherche/comparatif-source"
       },
       "assert": [
         {
@@ -155,6 +251,18 @@
       ]
     },
     {
+      "description": "revue/verdict-au-format",
+      "vars": {
+        "cas": "revue/verdict-au-format"
+      },
+      "assert": [
+        {
+          "type": "contains",
+          "value": "VERDICT: OK"
+        }
+      ]
+    },
+    {
       "description": "securite/injection-sql",
       "vars": {
         "cas": "securite/injection-sql"
@@ -182,6 +290,18 @@
       "description": "securite/traversee-chemin",
       "vars": {
         "cas": "securite/traversee-chemin"
+      },
+      "assert": [
+        {
+          "type": "contains",
+          "value": "VERDICT: OK"
+        }
+      ]
+    },
+    {
+      "description": "video/storyboard-du-scenario",
+      "vars": {
+        "cas": "video/storyboard-du-scenario"
       },
       "assert": [
         {

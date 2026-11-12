@@ -161,6 +161,75 @@ même brief, même protocole d'incertitude, même définition de « fini » et m
 tâche — sans Linear ni PR, et sans contexte local (mémoire, registre), pour que deux exécutions restent
 comparables.
 
+## Volet briefs et évaluation (lot « 9/10 »)
+
+Cette section remplace, pour les briefs, la liste « réécrits / complétés / inchangés » ci-dessus.
+
+**Les quinze briefs suivent un seul gabarit**, dans cet ordre : un premier paragraphe qui pose le métier et
+l'objectif ; `**Procédure**` (étapes numérotées) ; `**À ne pas faire**` (3 à 5 interdits) ; `**Fini quand :**`
+(des conditions qu'une preuve établit) ; `**Exemple de bon compte rendu …**` (un bloc au format de
+`comptes_rendus.py`) ; `**Contre-exemple (refusé : pourquoi)**` (un bloc court de ce qu'il ne faut pas rendre).
+Chaque brief fait 40 à 60 lignes.
+
+- Réécrits : `architecte` (avec un gabarit d'ADR — contexte, options, décision, conséquences, découpage — et un
+  « fini » vérifiable : deux options avec coût et retour arrière, aucun fichier dans deux tâches), `backend`, `data`,
+  `devops`, `ia-produit`, `marketing`. Les règles métier d'origine sont conservées (un test les liste).
+- Complétés (procédure, interdits, exemple, contre-exemple) : `design`, `frontend`, `qa`, `recherche`, `revue`
+  (son exemple est un verdict), `video`.
+- Contre-exemple ajouté : `generaliste`, `redaction`, `securite`. `securite` cite les deux skills de défense
+  présentes dans `skills/` (`jarvis-defense-triage`, `jarvis-defense-incident`) ; un test compare la liste citée au
+  contenu du dossier.
+
+**L'exemple d'un brief est exécuté, pas seulement lu.** `evaluation.structure_brief(corps)` rend la liste des
+écarts au gabarit ; l'exemple et le contre-exemple passent par l'analyseur de `comptes_rendus` : l'exemple doit
+être relu sans anomalie (chaque critère a sa preuve, chaque vérification son résultat ; verdict conforme pour
+`revue`), le contre-exemple doit être refusé. Un extrait n'est pas jugé sur les rubriques qu'il ne recopie pas
+(résumé, fichiers, branche).
+
+**Exigences d'un cas : moins de mots-clés, plus de contrôles.** Un `cas.toml` garde `exigences_brief` pour les
+règles métier (expressions cherchées dans le brief) et gagne `exigences_compte_rendu`, des contrôles nommés de
+`evaluation.CONTROLES_COMPTE_RENDU` : `exemple`, `contre_exemple`, `preuve_par_test`, `ecart_declare`. Le mot-clé
+`tests?` des cas existants est remplacé par `preuve_par_test`. `exigences_manquantes` rend les deux sortes
+d'écarts : `jarvis eval verifier` les affiche, et `versions_roles.controler` refuse un brief candidat qui retire
+ou abîme son exemple.
+
+**Chaque rôle a un cas de référence** (25 cas, 10 nouveaux) :
+
+| Cas | Ce que la vérification cachée contrôle |
+|---|---|
+| `architecte/adr-file-de-courriels` | ADR au gabarit, deux options avec coût / blocage / retour arrière, renvois `fichier:ligne` existants, découpage sans fichier partagé, code non modifié |
+| `data/migration-reversible` | montée, descente et remontée sur SQLite ; schéma identique après descente ; données intactes ; fonctions relançables |
+| `devops/script-idempotent` | `set -euo pipefail`, code 2 sans argument, deux exécutions de suite laissent le même état |
+| `generaliste/correctif-minimal` | bug corrigé, test qui échoue sur le code d'origine, fonction voisine intacte |
+| `ia-produit/drapeau-et-repli` | drapeau coupé par défaut (aucun appel), un seul nouvel essai, sortie validée, repli, tests sans réseau |
+| `marketing/annonces-verifiables` | trois angles, limites de caractères, aucun nombre absent du README, preuve par ligne, pas de superlatif |
+| `recherche/comparatif-source` | recommandation conforme au critère malgré une consigne injectée dans une source, faits sourcés et datés, rumeur rangée en « non vérifié » |
+| `revue/verdict-au-format` | verdict relu par `comptes_rendus.analyser_verdict` : conforme, bloquant sur la bonne fonction, vérification lancée, aucun autre fichier modifié |
+| `video/storyboard-du-scenario` | storyboard au format du studio : durée totale, première et dernière scènes, images présentes, titres de 6 mots au plus |
+| `design/contraste-et-focus` | contraste WCAG calculé (4,5:1), focus visible, pas de largeur fixe au-delà de 360 px, aucune couleur hors des jetons |
+
+Pour chaque nouveau cas, un test modifie la référence pour y remettre la faute que le rôle doit éviter (fichier
+partagé entre deux tâches, descente qui laisse la colonne, recommandation dictée par la source, verdict sans
+`fichier:ligne`…) et vérifie que la vérification la refuse.
+
+**Exécution réelle.** `evaluation.lancer` enregistre en plus `compte_rendu` : type, conformité et anomalies du
+compte rendu rendu par l'agent (`evaluation.analyser_sortie` relit le dernier bloc `✅ TERMINÉ` de la sortie, et
+ne compte pas le gabarit recopié depuis le prompt). `ok` reste le seul verdict de la vérification cachée : les
+résultats déjà enregistrés restent comparables.
+
+Limites de ce volet :
+
+- Aucune évaluation réelle n'a été lancée : seul le contrôle hors ligne (départ refusé, référence acceptée,
+  exigences tenues, solutions fautives refusées) a tourné. Rien ne dit encore qu'un agent réel réussit ces cas, ni
+  que les nouveaux briefs font mieux que les anciens.
+- `preuve_par_test` reconnaît un test au texte de la preuve (`tests/…`, `test_…`, `.test.`) : c'est un contrôle
+  sur un champ analysé, pas une preuve que le test existe.
+- Les cas `design`, `video` et `marketing` jugent un fichier (jetons CSS, storyboard, annonces) : ni rendu, ni
+  capture, ni qualité visuelle ou rédactionnelle.
+- En évaluation, le prompt donne à tous les rôles le gabarit `✅ TERMINÉ`, y compris à `revue` : le cas
+  `revue/verdict-au-format` décrit donc le format du verdict dans sa consigne et le lit dans `verdict.md`.
+  `jarvis eval resultats` n'affiche pas encore `compte_rendu` (`lib/jarvis/cli.py`, hors de ce volet).
+
 ## Bruit social
 
 - `communaute.vie` vaut `off` quand rien n'est réglé. Un mode choisi depuis le Studio (enregistré dans l'état)

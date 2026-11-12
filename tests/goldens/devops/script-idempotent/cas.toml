@@ -1,0 +1,15 @@
+titre = "Rendre un script de préparation idempotent"
+role = "devops"
+duree_max_min = 20
+exigences_brief = ["idempotents?", "set -euo pipefail", "deux fois de suite"]
+exigences_compte_rendu = ["exemple", "contre_exemple", "ecart_declare"]
+consigne = """
+scripts/preparer.sh prépare un dossier de déploiement, mais il échoue ou abîme le dossier dès qu'on le relance.
+Rends-le idempotent, sans changer ce qu'il produit :
+- il commence par `set -euo pipefail` ;
+- sans argument : un message d'usage sur la sortie d'erreur et le code de sortie 2 ;
+- lancé deux fois de suite sur le même dossier : code 0 les deux fois, et exactement le même état après la
+  deuxième exécution qu'après la première (partage/config.env contient une seule fois chacune de ses deux lignes,
+  config.env reste un lien vers partage/config.env) ;
+- le dossier cible est créé s'il n'existe pas, et son chemin peut contenir une espace.
+"""
