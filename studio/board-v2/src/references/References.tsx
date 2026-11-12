@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent, type KeyboardEvent, type ReactNode } from "react";
-import { AlertTriangle, ArrowUpRight, CheckCircle2, Copy, FileText, Globe, Library, Plus, RefreshCw, Search, Trash2, X } from "lucide-react";
+import { AlertTriangle, ArrowUpRight, CheckCircle2, Copy, FileText, Globe, Plus, RefreshCw, Search, Trash2, X } from "lucide-react";
 import type { Source } from "../api";
 import { ProductNav } from "../product/ProductNav";
 import { useStudioNavigation } from "../product/routing";
@@ -9,7 +9,7 @@ import { FicheReference } from "./FicheReference";
 import "../styles/product.css";
 import "./references.css";
 
-const message = (e: unknown) => (e instanceof Error ? e.message : "Opération indisponible.");
+const message = (e: unknown) => (e instanceof Error ? e.message : "Opération indisponible");
 const ANTI_REBOND_MS = 140;
 
 function lireUrl() {
@@ -110,13 +110,13 @@ export default function ReferencesWorkspace({ source }: { source: Source }) {
     try {
       await supprimer(r.id);
       rafraichir();
-      setAvis({ texte: `« ${r.titre} » retirée de la bibliothèque.`, action: { libelle: "Annuler", faire: () => { void supprimer(r.id, true).then(rafraichir); setAvis(null); } } });
+      setAvis({ texte: `« ${r.titre} » retirée de la bibliothèque`, action: { libelle: "Annuler", faire: () => { void supprimer(r.id, true).then(rafraichir); setAvis(null); } } });
     } catch (e) { setAvis({ texte: message(e) }); }
   };
   const relancer = async (r: Reference) => { try { await recapturer(r.id); rafraichir(); } catch (e) { setAvis({ texte: message(e) }); } };
   const copier = async (p: Passage) => {
-    try { await navigator.clipboard.writeText(citation(p)); setAvis({ texte: "Citation copiée, avec sa source et sa date de capture." }); }
-    catch { setAvis({ texte: "Copie impossible dans ce navigateur." }); }
+    try { await navigator.clipboard.writeText(citation(p)); setAvis({ texte: "Citation copiée, avec sa source et sa date de capture" }); }
+    catch { setAvis({ texte: "Copie impossible dans ce navigateur" }); }
   };
   const fleches = (e: KeyboardEvent<HTMLElement>) => {
     if (e.key !== "ArrowDown" && e.key !== "ArrowUp") return;
@@ -138,14 +138,13 @@ export default function ReferencesWorkspace({ source }: { source: Source }) {
           <FicheReference key={ouverte.id} id={ouverte.id} sectionInitiale={ouverte.section} demo={demo} espace={source.espace} retour={fermer}
             notifier={(texte) => setAvis({ texte })} apresChangement={rafraichir}
             apresPose={(objet) => aller("board", { carte: objet })}
-            apresSuppression={(titre, id) => { fermer(); rafraichir(); setAvis({ texte: `« ${titre} » retirée de la bibliothèque.`, action: { libelle: "Annuler", faire: () => { void supprimer(id, true).then(rafraichir); setAvis(null); } } }); }} />
+            apresSuppression={(titre, id) => { fermer(); rafraichir(); setAvis({ texte: `« ${titre} » retirée de la bibliothèque`, action: { libelle: "Annuler", faire: () => { void supprimer(id, true).then(rafraichir); setAvis(null); } } }); }} />
         ) : (
           <section className="p-page rf-page" aria-labelledby="rf-titre">
             <div className="p-page-heading">
               <div>
-                <p className="credit">Bibliothèque locale<span>·</span><span>tout reste sur ton poste</span></p>
                 <h1 id="rf-titre">Références</h1>
-                <p>Capture un site, retrouve-le par ses mots, sa palette ou ses polices, et pose-le sur le Board. Chaque passage est cité avec sa source, jamais résumé. La recherche fonctionne sans aucun fournisseur d'IA.</p>
+                <p>Capture un site, retrouve-le par ses mots, sa palette ou ses polices, et pose-le sur le Board. Chaque passage est cité avec sa source, jamais résumé. La bibliothèque reste sur ton poste et la recherche fonctionne sans aucun fournisseur d'IA.</p>
               </div>
               {liste && <Moteur liste={liste} />}
             </div>
@@ -156,24 +155,24 @@ export default function ReferencesWorkspace({ source }: { source: Source }) {
                 aria-label="Rechercher dans les références" aria-controls="rf-resultats" autoComplete="off" spellCheck={false}
                 onChange={(e) => setQ(e.target.value)} onKeyDown={(e) => { if (e.key === "Escape" && q) { e.preventDefault(); setQ(""); } else fleches(e); }} />
               {enRecherche && <span className="rf-spinner" role="status" aria-label="Recherche en cours" />}
-              {q ? <button type="button" className="rf-clear" onClick={() => { setQ(""); champ.current?.focus(); }} aria-label="Effacer la recherche"><X size={15} /></button> : <kbd>/</kbd>}
+              {q ? <button type="button" className="rf-clear" onClick={() => { setQ(""); champ.current?.focus(); }} aria-label="Effacer la recherche"><X size={16} /></button> : <kbd>/</kbd>}
             </label>
 
             {liste && liste.total > 0 && <Facettes liste={liste} filtres={filtres} setFiltres={setFiltres} />}
-            {erreur && <div className="p-error" role="alert"><span>{erreur}</span><button className="p-button p-quiet" onClick={() => void charger()}><RefreshCw size={15} />Réessayer</button></div>}
+            {erreur && <div className="p-error" role="alert"><span>{erreur}</span><button className="p-button p-quiet" onClick={() => void charger()}><RefreshCw size={16} />Réessayer</button></div>}
 
             {enModeRecherche ? (
               <div id="rf-resultats" aria-busy={enRecherche} onKeyDown={fleches}>
                 <p className="rf-count" role="status" aria-live="polite">
-                  {erreurRecherche ? "" : recherche ? `${recherche.resultats.length} passage${recherche.resultats.length > 1 ? "s" : ""} pour « ${recherche.question} »${recherche.mode === "hybride" ? " · mots et vecteurs fusionnés" : recherche.vecteurs === "indisponible" ? " · vecteurs indisponibles, recherche par mots" : ""}` : "Recherche…"}
+                  {erreurRecherche ? "" : recherche ? `${recherche.resultats.length} passage${recherche.resultats.length > 1 ? "s" : ""} pour « ${recherche.question} »${recherche.mode === "hybride" ? " · mots et vecteurs fusionnés" : recherche.vecteurs === "indisponible" ? " · vecteurs indisponibles, recherche par mots" : ""}` : "Recherche"}
                 </p>
-                {erreurRecherche && <div className="p-error" role="alert"><span>{erreurRecherche}</span><button className="p-button p-quiet" onClick={rafraichir}><RefreshCw size={15} />Réessayer</button></div>}
+                {erreurRecherche && <div className="p-error" role="alert"><span>{erreurRecherche}</span><button className="p-button p-quiet" onClick={rafraichir}><RefreshCw size={16} />Réessayer</button></div>}
                 {recherche && !erreurRecherche && (recherche.resultats.length ? (
                   <ol className={`rf-results ${enRecherche ? "is-stale" : ""}`} ref={resultats}>
                     {recherche.resultats.map((p) => <ResultatPassage key={p.fragment_id} p={p} hybride={recherche.mode === "hybride"} ouvrir={() => ouvrir(p.reference_id, p.fragment_id, p.section)} copier={() => void copier(p)} />)}
                   </ol>
                 ) : (
-                  <div className="p-empty rf-empty"><Search size={28} /><h3>Aucun passage ne répond à cette question</h3>
+                  <div className="p-empty rf-empty"><h3>Aucun passage ne répond à cette question</h3>
                     <p>La recherche par mots trouve ce qui est écrit dans tes captures. Essaie un terme présent sur le site{filtres.collection !== null || filtres.etiquette ? ", ou retire le filtre actif" : ""}.</p>
                     {(filtres.collection !== null || filtres.etiquette) && <button className="p-button p-quiet" onClick={() => setFiltres({ collection: null, etiquette: null })}>Chercher partout</button>}
                   </div>
@@ -183,14 +182,14 @@ export default function ReferencesWorkspace({ source }: { source: Source }) {
             ) : (
               <>
                 <FormulaireAjout demo={demo} collections={liste?.collections.map((c) => c.nom).filter(Boolean) ?? []} captureDisponible={liste?.moteur.capture ?? true}
-                  apres={(r, deja) => { rafraichir(); setAvis({ texte: deja ? "Ce site est déjà dans cette collection." : r.type === "site" ? `Capture de ${hote(r.source)} lancée : bureau et mobile.` : `« ${r.titre} » indexé.` }); }} />
+                  apres={(r, deja) => { rafraichir(); setAvis({ texte: deja ? "Ce site est déjà dans cette collection" : r.type === "site" ? `Capture de ${hote(r.source)} lancée : bureau et mobile` : `« ${r.titre} » indexé` }); }} />
                 {!liste && !erreur && <SqueletteGrille />}
                 {vide && (
-                  <div className="p-empty rf-empty"><Library size={30} /><h3>Ta bibliothèque attend son premier site</h3>
-                    <p>Colle l'adresse d'un site que tu admires. Jarvis en garde les captures bureau et mobile, le texte par sections, la palette et les polices — sur ton poste, pour de bon.</p></div>
+                  <div className="p-empty rf-empty"><h3>Aucune référence dans la bibliothèque</h3>
+                    <p>Colle l'adresse d'un site que tu admires. Jarvis en garde les captures bureau et mobile, le texte par sections, la palette et les polices, sur ton poste.</p></div>
                 )}
                 {liste && !vide && !liste.references.length && (
-                  <div className="p-empty rf-empty"><Library size={28} /><h3>Rien dans ce filtre</h3><p>Aucune référence ne porte cette collection et cette étiquette à la fois.</p>
+                  <div className="p-empty rf-empty"><h3>Rien dans ce filtre</h3><p>Aucune référence ne porte cette collection et cette étiquette à la fois</p>
                     <button className="p-button p-quiet" onClick={() => setFiltres({ collection: null, etiquette: null })}>Tout afficher</button></div>
                 )}
                 {liste && liste.references.length > 0 && (
@@ -204,7 +203,7 @@ export default function ReferencesWorkspace({ source }: { source: Source }) {
         )}
       </main>
       {avis && (
-        <div className="p-feedback rf-feedback" role="status"><CheckCircle2 size={18} /><span>{avis.texte}</span>
+        <div className="p-feedback rf-feedback" role="status"><CheckCircle2 size={16} /><span>{avis.texte}</span>
           {avis.action && <button className="rf-feedback-action" onClick={avis.action.faire}>{avis.action.libelle}</button>}</div>
       )}
     </div>
@@ -268,8 +267,8 @@ function FormulaireAjout({ demo, collections, captureDisponible, apres }: { demo
   return (
     <form className="rf-add" onSubmit={soumettre} aria-label="Ajouter une référence">
       <div className="rf-add-mode" role="group" aria-label="Type de référence">
-        <button type="button" aria-pressed={mode === "site"} onClick={() => setMode("site")}><Globe size={14} />Site</button>
-        <button type="button" aria-pressed={mode === "texte"} onClick={() => setMode("texte")}><FileText size={14} />Texte</button>
+        <button type="button" aria-pressed={mode === "site"} onClick={() => setMode("site")}><Globe size={16} />Site</button>
+        <button type="button" aria-pressed={mode === "texte"} onClick={() => setMode("texte")}><FileText size={16} />Texte</button>
       </div>
       {mode === "site" ? (
         <input className="rf-add-url" name="url" inputMode="url" autoComplete="off" spellCheck={false} placeholder="https://exemple.com" aria-label="Adresse du site à capturer"
@@ -277,7 +276,7 @@ function FormulaireAjout({ demo, collections, captureDisponible, apres }: { demo
       ) : (
         <div className="rf-add-texte">
           <input name="titre" placeholder="Titre" aria-label="Titre du texte" value={titre} onChange={(e) => setTitre(e.target.value)} disabled={demo} />
-          <textarea name="texte" rows={4} placeholder="Colle un texte ou du Markdown : les titres #, ## et ### deviennent des sections." aria-label="Texte à indexer"
+          <textarea name="texte" rows={4} placeholder="Texte ou Markdown" aria-label="Texte à indexer"
             value={texte} onChange={(e) => setTexte(e.target.value)} disabled={demo} />
         </div>
       )}
@@ -285,8 +284,9 @@ function FormulaireAjout({ demo, collections, captureDisponible, apres }: { demo
       <datalist id="rf-collections">{collections.map((c) => <option key={c} value={c} />)}</datalist>
       <input name="etiquettes" placeholder="Étiquettes, séparées par des virgules" aria-label="Étiquettes, séparées par des virgules" value={etiquettes} onChange={(e) => setEtiquettes(e.target.value)} disabled={demo} />
       <button className="p-button p-primary" type="submit" disabled={demo || envoi || !pret}><Plus size={16} />{envoi ? "Envoi…" : mode === "site" ? "Capturer" : "Indexer"}</button>
-      {demo && <p className="rf-add-note">Démonstration : sites fictifs, la capture est désactivée.</p>}
-      {!demo && mode === "site" && !captureDisponible && <p className="rf-add-note is-warning"><AlertTriangle size={13} />Chromium n'est pas installé sur ce poste : <code>./install.sh --studio</code>. Les textes restent indexables.</p>}
+      {mode === "texte" && <p className="rf-add-note">Les titres #, ## et ### deviennent des sections</p>}
+      {demo && <p className="rf-add-note">Démonstration : sites fictifs, la capture est désactivée</p>}
+      {!demo && mode === "site" && !captureDisponible && <p className="rf-add-note is-warning"><AlertTriangle size={16} />Chromium n'est pas installé sur ce poste : <code>./install.sh --studio</code>. Les textes restent indexables.</p>}
       {erreur && <p className="rf-add-note is-error" role="alert">{erreur}</p>}
     </form>
   );
@@ -301,8 +301,8 @@ function Carte({ r, ouvrir, relancer, retirer, demo }: { r: Reference; ouvrir: (
         <div className="rf-card-preview">
           {r.vignette_url && !enCours ? <img src={r.vignette_url} alt="" loading="lazy" decoding="async" />
             : enCours ? <div className="rf-card-wait"><span className="rf-spinner" /><strong>{LIBELLES[r.statut]}</strong><small>{r.statut === "indexation" ? "Découpage et index des passages" : "Bureau 1440 px, puis mobile 390 px"}</small></div>
-            : r.statut === "echec" ? <div className="rf-card-wait is-error"><AlertTriangle size={22} /><strong>Capture impossible</strong><small>{r.raison}</small></div>
-            : <div className="rf-card-wait"><FileText size={26} /></div>}
+            : r.statut === "echec" ? <div className="rf-card-wait is-error"><AlertTriangle size={16} /><strong>Capture impossible</strong><small>{r.raison}</small></div>
+            : <div className="rf-card-wait"><FileText size={16} /></div>}
           {r.palette.length > 0 && !enCours && <div className="rf-strip" aria-hidden>{r.palette.slice(0, 6).map((c) => <i key={c.hex} style={{ background: c.hex, flexGrow: Math.max(c.part, 0.04) }} />)}</div>}
         </div>
         <div className="rf-card-body">
@@ -317,8 +317,8 @@ function Carte({ r, ouvrir, relancer, retirer, demo }: { r: Reference; ouvrir: (
       </button>
       {r.statut === "echec" && !demo && (
         <div className="rf-card-actions">
-          <button type="button" className="p-button p-quiet" onClick={relancer}><RefreshCw size={14} />Relancer</button>
-          <button type="button" className="p-button p-quiet" onClick={retirer} aria-label={`Retirer ${r.titre}`}><Trash2 size={14} />Retirer</button>
+          <button type="button" className="p-button p-quiet" onClick={relancer}><RefreshCw size={16} />Relancer</button>
+          <button type="button" className="p-button p-quiet" onClick={retirer} aria-label={`Retirer ${r.titre}`}><Trash2 size={16} />Retirer</button>
         </div>
       )}
     </article>
@@ -332,18 +332,18 @@ function ResultatPassage({ p, hybride, ouvrir, copier }: { p: Passage; hybride: 
     backgroundPosition: c.zone ? `0 ${-Math.max(0, c.zone.y - 12) * (220 / 1440)}px` : "0 0" } : undefined;
   return (
     <li className="rf-result">
-      <div className="rf-result-zone" style={cadre} aria-hidden>{!c.capture_url && <FileText size={22} />}</div>
+      <div className="rf-result-zone" style={cadre} aria-hidden>{!c.capture_url && <FileText size={16} />}</div>
       <div className="rf-result-body">
         <button type="button" className="rf-result-open" onClick={ouvrir}>
           <strong>{c.titre}</strong>{c.section && <span className="rf-section"><Surligne texte={c.section} plages={p.section_surlignages ?? []} /></span>}
         </button>
         <blockquote><Surligne texte={p.extrait.texte} plages={p.extrait.surlignages} /></blockquote>
         <footer>
-          {c.url ? <a href={c.url} target="_blank" rel="noopener noreferrer">{hote(c.url)}<ArrowUpRight size={12} /></a> : <span>{c.type === "carte" ? "Carte du Board" : "Texte déposé"}</span>}
+          {c.url ? <a href={c.url} target="_blank" rel="noopener noreferrer">{hote(c.url)}<ArrowUpRight size={16} /></a> : <span>{c.type === "carte" ? "Carte du Board" : "Texte déposé"}</span>}
           <span>capturé le {dateCapture(c.capture_le)}</span>
           {c.collection && <span className="rf-collection">{c.collection}</span>}
           {hybride && <span className="rf-ranks tab-num" title="Rang dans chaque moteur avant la fusion RRF">{p.rangs.mots ? `mots n° ${p.rangs.mots}` : "hors mots"} · {p.rangs.vecteurs ? `vecteurs n° ${p.rangs.vecteurs}` : "hors vecteurs"}</span>}
-          <button type="button" className="rf-copy" onClick={copier}><Copy size={13} />Copier la citation</button>
+          <button type="button" className="rf-copy" onClick={copier}><Copy size={16} />Copier la citation</button>
         </footer>
       </div>
     </li>
