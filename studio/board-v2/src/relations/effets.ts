@@ -137,7 +137,7 @@ export function libelleUtile(libelle: string, lecture: LectureFleche, nomDuType:
 export function phraseBlocage(r: RelationsCarte | undefined): string | null {
   if (!r?.bloquee || !r.bloquee_par.length) return null;
   const noms = r.bloquee_par.slice(0, 3).map((b) => `« ${b.titre} » (${b.etat})`).join(", ");
-  return `Bloquée par ${noms}${r.bloquee_par.length > 3 ? ` et ${r.bloquee_par.length - 3} autre(s)` : ""}`;
+  return `Bloquée par ${noms}${r.bloquee_par.length > 3 ? ` et ${r.bloquee_par.length - 3} ${r.bloquee_par.length - 3 > 1 ? "autres" : "autre"}` : ""}`;
 }
 
 /** Trajet de la boucle que fermerait la dépendance source → cible (« la source dépend de la cible »), ou null.

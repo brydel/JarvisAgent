@@ -1,5 +1,5 @@
 // Ajouter au Board : note, lien, fichiers, dossier, presse-papiers, mission. Mêmes actions que la barre d'ajout.
-import { ClipboardPaste, File, Folder, Image as IconeImage, Link2, Mic, NotebookPen, Sparkles, Upload, Video } from "lucide-react";
+import { ClipboardPaste, File, Folder, Image as IconeImage, Link2, Mic, NotebookPen, Target, Upload, Video } from "lucide-react";
 import { enLecture, raisonLecture, type ContexteBoard } from "../contexte";
 import type { Commande, Icone } from "../types";
 
@@ -34,6 +34,6 @@ export const commandesAjout: Commande<ContexteBoard>[] = [
     } },
   { id: "ajouter.pressePapiers", libelle: "Coller le presse-papiers", icone: ClipboardPaste, categorie: "Ajouter", niveau: "ecriture",
     motsCles: "image texte lien", disponible: (c) => !enLecture(c), raison: raisonLecture, executer: (c) => c.b.collerPressePapiers() },
-  { id: "mission.lancer", libelle: "Lancer une mission…", icone: Sparkles, raccourci: "mod+shift+m", categorie: "Ajouter", niveau: "ecriture",
+  { id: "mission.lancer", libelle: "Lancer une mission…", icone: Target, raccourci: "mod+shift+m", categorie: "Ajouter", niveau: "ecriture",
     motsCles: "agent objectif travail", disponible: (c) => !enLecture(c), raison: raisonLecture, executer: (c) => c.b.ouvrirMission() },
 ];

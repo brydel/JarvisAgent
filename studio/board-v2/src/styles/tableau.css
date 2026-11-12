@@ -10,7 +10,7 @@
 .teinte-vert { --teinte: var(--teinte-vert); --adhesif: var(--adhesif-vert); }
 .teinte-cyan { --teinte: var(--teinte-cyan); --adhesif: var(--adhesif-cyan); }
 .teinte-gris { --teinte: var(--teinte-gris); --adhesif: var(--adhesif-gris); }
-.pastille { width: 18px; height: 18px; border-radius: 50%; background: var(--teinte); border: 0; padding: 0; cursor: pointer; flex: none; box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--text-primary) 18%, transparent); }
+.pastille { width: 16px; height: 16px; border-radius: 50%; background: var(--teinte); border: 0; padding: 0; cursor: pointer; flex: none; box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--text-primary) 18%, transparent); }
 .pastille[aria-pressed="true"] { outline: 2px solid var(--text-primary); outline-offset: 2px; }
 
 /* --- objets ------------------------------------------------------------------------------------------- */
@@ -24,7 +24,7 @@
 .adhesif .indice, .texte-libre .indice { opacity: 0.45; font-weight: 400; }
 .texte-libre { width: 100%; height: 100%; color: var(--teinte); line-height: 1.25; font-weight: 500; white-space: pre-wrap; overflow-wrap: anywhere; }
 .texte-libre.teinte-neutre { color: var(--encre); }
-.texte-libre .trait-texte { display: block; height: 40%; margin-top: 12%; border-radius: 99px; background: currentColor; opacity: 0.5; }
+.texte-libre .trait-texte { display: block; height: 40%; margin-top: 12%; border-radius: var(--radius-pill); background: currentColor; opacity: 0.5; }
 .forme { position: relative; width: 100%; height: 100%; }
 .forme svg { display: block; overflow: visible; stroke: var(--teinte); fill: color-mix(in srgb, var(--teinte) 16%, transparent); stroke-linejoin: round; }
 .forme.sans-fond svg { fill: transparent; }
@@ -41,16 +41,16 @@
 .fleche-trait { stroke-linecap: round; pointer-events: none; }
 .fleche-prise { stroke: transparent; stroke-width: 18px; pointer-events: stroke; cursor: grab; }
 .fleche-pointe { stroke: none; pointer-events: none; }
-.fleche-libelle { stroke: var(--bg-canvas); stroke-width: 6px; paint-order: stroke; fill: var(--encre); font-size: 14px; font-weight: 500; pointer-events: none; }
+.fleche-libelle { stroke: var(--bg-canvas); stroke-width: 6px; paint-order: stroke; fill: var(--encre); font-size: 15px; font-weight: 500; pointer-events: none; }
 .fleche-bout { fill: var(--bg-canvas); stroke: var(--brand-indigo); stroke-width: 2px; pointer-events: all; cursor: crosshair; }
 .fleche-bout.ancre { fill: var(--brand-indigo); }
 
 .cadre { position: relative; width: 100%; height: 100%; }
-.cadre-bord { position: absolute; inset: 0; border: 1.5px solid var(--cadre-bord); border-radius: 10px; background: var(--cadre-fond); pointer-events: none;
+.cadre-bord { position: absolute; inset: 0; border: 1.5px solid var(--cadre-bord); border-radius: var(--radius-card); background: var(--cadre-fond); pointer-events: none;
   /* seul le liseré du cadre se saisit : l'intérieur laisse passer les clics vers le canevas et son contenu */ }
-.cadre::after { content: ""; position: absolute; inset: -6px; border: 12px solid transparent; border-radius: 14px; pointer-events: auto; cursor: grab;
+.cadre::after { content: ""; position: absolute; inset: -6px; border: 12px solid transparent; border-radius: var(--radius-panel); pointer-events: auto; cursor: grab;
   clip-path: polygon(evenodd, 0 0, 100% 0, 100% 100%, 0 100%, 0 0, 12px 12px, 12px calc(100% - 12px), calc(100% - 12px) calc(100% - 12px), calc(100% - 12px) 12px, 12px 12px); }
-.cadre-titre { position: absolute; left: 2px; bottom: calc(100% + 6px); max-width: 100%; height: 26px; padding: 0 8px; border-radius: 7px; display: inline-flex; align-items: center;
+.cadre-titre { position: absolute; left: 0; bottom: calc(100% + 8px); max-width: 100%; height: 28px; padding: 0 8px; border-radius: 6px; display: inline-flex; align-items: center;
   font-size: 15px; font-weight: 500; color: var(--text-secondary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; pointer-events: auto; cursor: grab; }
 .react-flow__node-cadre.selected .cadre-titre, .cadre.en-focus .cadre-titre { color: var(--on-brand); background: var(--brand-indigo); }
 .react-flow__node-cadre.selected .cadre-bord, .cadre.en-focus .cadre-bord { border-color: var(--brand-indigo); }
@@ -58,80 +58,91 @@
 .react-flow__node.estompe { opacity: 0.14; pointer-events: none !important; transition: opacity var(--dur-panel) var(--ease-standard); }
 .react-flow__edge.estompe { opacity: 0.12; }
 
-/* --- niveau de détail : sous 12 % de zoom, une carte n'est plus qu'un bloc de couleur --------------------- */
+/* --- niveau de détail : sous 12 % de zoom, une carte n'est plus qu'un bloc ; seule la mission (l'article de une)
+   et la couleur que tu as choisie pour une carte ressortent -------------------------------------------------- */
 .carte.carte-bloc { box-shadow: none; border-width: 0; background: var(--border-strong); border-radius: 24px; }
 .carte.carte-bloc.c-note { background: var(--note-border); }
 .carte.carte-bloc.c-mission { background: var(--brand-indigo); }
-.carte.carte-bloc.c-agents { background: var(--success); }
 .carte.carte-bloc.accent { background: var(--accent-carte); }
 
-/* --- état et provenance d'une carte ------------------------------------------------------------------ */
-.etats-carte { position: absolute; left: 10px; top: -13px; z-index: 4; display: flex; gap: 6px; pointer-events: auto; }
-.etat-carte { display: inline-flex; align-items: center; gap: 4px; height: 24px; padding: 0 8px; border-radius: 6px; font-size: 12px; font-weight: 500; white-space: nowrap; border: 1px solid var(--border-card); background: var(--surface-card-raised); }
-.etat-carte.bloquee { color: var(--text-danger); }
-.etat-carte.attente { color: var(--text-p2); }
-.etat-carte.perimee { color: var(--text-secondary); border-style: dashed; }
-.etat-carte.pret { color: var(--text-success); }
-/* une carte bloquée par une dépendance porte un liseré : l'état se lit même sans la pastille (zoom, vue d'ensemble) */
+/* --- hors du cadre de la carte : états dessus, effets des relations et ligne de crédit dessous -----------------
+   Rien de tout cela ne recouvre une carte voisine : la place libre est mesurée (board/degagement.ts). Ce qui tient
+   est posé dehors ; ce qui ne tient pas se replie en onglet DANS le cadre de la carte. Unités du canevas. */
+.etats-carte { position: absolute; left: 12px; bottom: calc(100% - 12px); z-index: 4; display: flex; gap: 4px; max-width: calc(100% - 24px); pointer-events: auto; }
+.etats-carte.dedans { bottom: auto; top: 0; left: 56px; max-width: calc(100% - 112px); }
+.etat-carte { display: inline-flex; align-items: center; gap: 8px; height: 24px; padding: 0 8px; border-radius: 6px; font-size: 15px; line-height: 20px; font-weight: 500; white-space: nowrap;
+  min-width: 0; overflow: hidden; text-overflow: ellipsis; color: var(--text-primary); border: 1px solid var(--border-strong); background: var(--surface-card-raised); }
+.etats-carte.dedans .etat-carte { border-top: 0; border-radius: 0 0 6px 6px; }
+/* l'état se dit par un point de couleur (le sens) et un mot */
+.etat-carte i { width: 8px; height: 8px; border-radius: 50%; flex: none; background: var(--text-muted); }
+.etat-carte.bloquee i { background: var(--danger); }
+.etat-carte.attente i { background: var(--warning); }
+.etat-carte.pret i { background: var(--success); }
+.etat-carte.perimee { border-style: dashed; color: var(--text-secondary); }
+/* une carte bloquée par une dépendance porte un liseré : l'état se lit même sans l'étiquette (zoom, vue d'ensemble) */
 .carte.bloquee-par-dependance { box-shadow: inset 3px 0 0 var(--edge-bloquante), var(--shadow-card); }
+.react-flow__node.selected .carte.bloquee-par-dependance { box-shadow: inset 3px 0 0 var(--edge-bloquante), var(--shadow-selection); }
 
-/* --- sous la carte : effets de ses relations (toujours visibles), puis provenance (au survol) --------- */
-.sous-carte { position: absolute; left: 4px; top: calc(100% + 8px); z-index: 3; display: grid; gap: 6px; justify-items: start; max-width: calc(100% - 8px); pointer-events: none; }
+.sous-carte { position: absolute; left: 0; top: calc(100% + 8px); z-index: 3; display: grid; gap: 4px; justify-items: start; max-width: 100%; pointer-events: none; }
 .sous-carte > * { pointer-events: auto; }
 .relations-carte { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; justify-items: start; max-width: 100%; }
 .relations-carte li { max-width: 100%; }
-.relations-carte button { display: inline-flex; align-items: center; gap: 8px; max-width: 100%; height: 24px; padding: 0 8px; border-radius: 6px; border: 1px solid var(--border-card);
-  background: var(--surface-status); color: var(--text-secondary); font: 400 13px var(--font-sans); cursor: pointer; white-space: nowrap; transition: background var(--dur-hover) var(--ease-standard), border-color var(--dur-hover) var(--ease-standard), color var(--dur-hover) var(--ease-standard); }
+.relations-carte button { display: inline-flex; align-items: center; gap: 8px; max-width: 100%; height: 28px; padding: 0 8px; border-radius: 6px; border: 1px solid var(--border-card);
+  background: var(--surface-status); color: var(--text-secondary); font: 400 15px/20px var(--font-sans); cursor: pointer; white-space: nowrap;
+  transition: background var(--dur-hover) var(--ease-standard), border-color var(--dur-hover) var(--ease-standard), color var(--dur-hover) var(--ease-standard); }
 .relations-carte button:hover { background: var(--surface-hover); color: var(--text-primary); border-color: var(--border-strong); }
 .relations-carte button:focus-visible { outline: 2px solid var(--brand-indigo-soft); outline-offset: 1px; }
 .relations-carte .verbe { font-weight: 500; flex: none; }
 .relations-carte .cible { color: var(--text-primary); overflow: hidden; text-overflow: ellipsis; min-width: 0; }
-.relations-carte .precision { color: var(--text-secondary); flex: none; }
-.relations-carte .precision::before { content: "· "; }
+.relations-carte .precision { color: var(--text-secondary); flex: none; font: 400 15px/20px var(--font-mono); }
+.relations-carte .precision::before { content: "· "; color: var(--text-muted); }
 .relations-carte svg { flex: none; }
-.relations-carte .bloquee button { border-color: var(--border-card); }
+/* la couleur dit l'effet, comme sur la flèche : rouge = bloque, vert = alimente ou libère, violet = cite, ambre = attend */
 .relations-carte .bloquee .verbe, .relations-carte .bloquee svg { color: var(--text-danger); }
 .relations-carte .alimentee .verbe, .relations-carte .alimentee svg, .relations-carte .libere .verbe, .relations-carte .libere svg { color: var(--text-success); }
 .relations-carte .citee .verbe, .relations-carte .citee svg { color: var(--edge-inspire); }
-.relations-carte .debloque .verbe, .relations-carte .debloque svg { color: var(--text-p2); }
+.relations-carte .debloque .verbe, .relations-carte .debloque svg, .relations-carte .attend .verbe, .relations-carte .attend svg { color: var(--text-p2); }
 .relations-carte .plus { color: var(--text-secondary); border-style: dashed; }
-/* la provenance reste discrète : SOUS la carte (elle ne couvre rien), visible au survol, à la sélection, au focus clavier */
-.react-flow__node:hover .provenance, .react-flow__node.selected .provenance, .react-flow__node:focus-visible .provenance { opacity: 0; transition: opacity var(--dur-hover) var(--ease-standard); display: inline-flex; align-items: center; gap: 8px; height: 20px;
-  font: 400 12px/16px var(--font-mono); color: var(--text-muted); max-width: 100%; overflow: hidden; white-space: nowrap; }
-.provenance::before { content: ""; width: 12px; height: 2px; background: var(--accent); flex: none; }
-.provenance { opacity: 0; transition: opacity var(--dur-hover); display: inline-flex; align-items: center; gap: 8px; height: 22px; padding: 0 8px; border-radius: var(--radius-pill);
-  font-size: 12px; color: var(--text-secondary); background: var(--surface-pill-2); border: 1px solid var(--border-card); max-width: 100%; overflow: hidden; white-space: nowrap; }
-.provenance span { display: inline-flex; align-items: center; gap: 4px; }
-.provenance .agent { color: var(--text-secondary); }
-.provenance .modele { color: var(--text-muted); max-width: 160px; overflow: hidden; text-overflow: ellipsis; }
+.relations-carte .plus svg { transition: transform var(--dur-hover) var(--ease-standard); }
+.relations-carte .plus svg.retourne { transform: rotate(180deg); }
+/* pas de place dessous : un onglet dans le coin bas droit de la carte, qui déplie les lignes à la demande */
+.sous-carte.repliee { top: auto; bottom: 0; left: auto; right: 12px; justify-items: end; }
+.sous-carte.repliee .relations-carte .plus { height: 24px; border-style: solid; border-bottom: 0; border-radius: 6px 6px 0 0; background: var(--surface-card-raised); }
+/* lignes dépliées à ta demande : un menu, au-dessus du reste, que Échap ou un clic ailleurs referme */
+.sous-carte.depliee { z-index: 20; padding: 4px; margin: -4px 0 0 -4px; border-radius: var(--radius-sm); border: 1px solid var(--border-strong); background: var(--surface-menu); box-shadow: var(--shadow-lift); max-width: none; }
+.sous-carte.depliee .relations-carte button { border-color: transparent; background: none; }
+.sous-carte.depliee .relations-carte button:hover { background: var(--surface-hover); }
+.react-flow__node:has(.sous-carte.depliee) { z-index: 1000 !important; }
+/* la ligne de crédit (qui, avec quoi, quand, quelle version) : SOUS la carte, au survol, à la sélection ou au focus clavier */
+.sous-carte .provenance { height: 20px; padding-left: 4px; font-size: 15px; line-height: 20px; opacity: 0; max-width: 100%; overflow: hidden; white-space: nowrap; transition: opacity var(--dur-hover) var(--ease-standard); }
+.sous-carte .provenance::before { width: 16px; height: 2.5px; }
+.sous-carte .provenance .modele { max-width: 160px; overflow: hidden; text-overflow: ellipsis; }
+.react-flow__node:hover .provenance, .react-flow__node.selected .provenance, .react-flow__node:focus-visible .provenance { opacity: 1; }
 
-/* --- barre des outils (modes) ------------------------------------------------------------------------- */
-.barre-modes { position: absolute; top: 14px; left: 0; right: 0; margin: 0 auto; width: fit-content; z-index: 8; display: flex; align-items: center; gap: 2px; padding: 4px;
-  border-radius: 12px; border: 1px solid var(--border-card); background: var(--surface-toolbar); box-shadow: var(--shadow-lift); max-width: calc(100% - 208px); }
+/* --- barre des outils (modes) : l'icône au centre de sa case, la lettre du raccourci dessous, en mono ------------ */
+.barre-modes { position: absolute; top: 12px; left: 0; right: 0; margin: 0 auto; width: fit-content; z-index: 8; display: flex; align-items: center; gap: 2px; padding: 4px;
+  border-radius: var(--radius-card); border: 1px solid var(--border-card); background: var(--surface-toolbar); box-shadow: var(--shadow-lift); max-width: calc(100% - 208px); }
 .barre-modes .groupe-mode { display: inline-flex; align-items: center; gap: 2px; flex: none; }
-.barre-modes .sep, .barre-flottante .sep { width: 1px; height: 22px; background: var(--border-strong); margin: 0 5px; flex: none; }
-.barre-modes .mode { position: relative; width: 40px; height: 40px; border: 0; border-radius: 8px; background: none; color: var(--text-secondary); cursor: pointer; display: grid; place-items: center; flex: none;
-  transition: background var(--dur-hover), color var(--dur-hover); }
+.barre-modes .sep, .barre-flottante .sep { width: 1px; height: 20px; background: var(--border-strong); margin: 0 4px; flex: none; }
+.barre-modes .mode { width: 36px; height: 44px; padding: 0; border: 0; border-radius: var(--radius-sm); background: none; color: var(--text-secondary); cursor: pointer; flex: none;
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px;
+  transition: background var(--dur-hover) var(--ease-standard), color var(--dur-hover) var(--ease-standard), transform var(--dur-lift) var(--ease-standard); }
 .barre-modes .mode:hover:not([aria-disabled="true"]) { background: var(--surface-hover); color: var(--text-primary); }
+.barre-modes .mode:active:not([aria-disabled="true"]) { transform: scale(0.97); }
 .barre-modes .mode[aria-pressed="true"] { background: var(--surface-more); color: var(--text-primary); box-shadow: inset 0 1px 0 var(--brand-highlight); }
-/* la lettre du raccourci : assez grande pour être lue (11 px, graisse 600), dans la couleur du texte secondaire */
-.barre-modes .mode svg { transform: translate(-3px, -3px); stroke-width: 1.5; }
-.barre-modes .mode kbd { position: absolute; right: 4px; bottom: 3px; font: 400 11px/1 var(--font-mono); color: var(--text-muted); }
-.barre-modes .mode:hover kbd { color: var(--text-primary); }
-.barre-modes .mode[aria-pressed="true"] kbd { color: var(--text-secondary); }
-.barre-modes .mode:not(:has(kbd)) svg, .barre-modes .palette-bouton svg { transform: none; }
-.barre-modes .palette-bouton { width: auto; padding: 0 8px; display: inline-flex; gap: 4px; align-items: center; font: 400 12px var(--font-mono); }
+.barre-modes .mode kbd { font: 400 12px/12px var(--font-mono); color: var(--text-muted); }
+.barre-modes .mode:hover kbd, .barre-modes .mode[aria-pressed="true"] kbd { color: var(--text-secondary); }
 .barre-modes button:focus-visible, .barre-flottante button:focus-visible, .menu-contextuel button:focus-visible, .barre-presentation button:focus-visible, .bandeau-mode button:focus-visible {
   outline: 2px solid var(--brand-indigo-soft); outline-offset: 1px; }
 .style-trace { position: relative; flex: none; }
-.bouton-style { width: 40px; height: 40px; border: 0; border-radius: 8px; background: none; cursor: pointer; display: grid; place-items: center; }
+.bouton-style { width: 36px; height: 44px; border: 0; border-radius: var(--radius-sm); background: none; cursor: pointer; display: grid; place-items: center; transition: background var(--dur-hover) var(--ease-standard); }
 .bouton-style:hover { background: var(--surface-hover); }
 .bouton-style .pastille { pointer-events: none; }
-.popover-style { position: absolute; top: calc(100% + 10px); left: 50%; z-index: 60; transform: translateX(-50%); padding: 12px; border-radius: 12px; border: 1px solid var(--border-strong); background: var(--surface-menu); box-shadow: var(--shadow-lift); display: grid; gap: 12px; }
-.popover-style .rangee { display: flex; gap: 10px; align-items: center; }
-.choix-epaisseur { width: 38px; height: 30px; border: 1px solid var(--border-card); border-radius: 8px; background: none; cursor: pointer; display: grid; place-items: center; }
-.choix-epaisseur span { display: block; width: 22px; border-radius: 99px; background: var(--text-primary); }
-.choix-epaisseur[aria-pressed="true"] { border-color: var(--brand-indigo); background: color-mix(in srgb, var(--brand-indigo) 14%, transparent); }
+.popover-style { position: absolute; top: calc(100% + 12px); left: 50%; z-index: 60; transform: translateX(-50%); padding: 12px; border-radius: var(--radius-card); border: 1px solid var(--border-strong); background: var(--surface-menu); box-shadow: var(--shadow-lift); display: grid; gap: 12px; }
+.popover-style .rangee { display: flex; gap: 12px; align-items: center; }
+.choix-epaisseur { width: 36px; height: 28px; border: 1px solid var(--border-card); border-radius: 6px; background: none; cursor: pointer; display: grid; place-items: center; }
+.choix-epaisseur span { display: block; width: 20px; border-radius: var(--radius-pill); background: var(--text-primary); }
+.choix-epaisseur[aria-pressed="true"] { border-color: var(--border-strong); background: var(--surface-pressed); box-shadow: inset 0 1px 0 var(--hover-veil); }
 
 /* --- couche des outils, aperçus, guides, éditeur de texte --------------------------------------------- */
 .couche-outils { position: absolute; inset: 0; z-index: 6; touch-action: none; cursor: crosshair; user-select: none; -webkit-user-select: none; }
@@ -160,28 +171,29 @@
 .editeur-texte.ed-fleche { text-align: center; }
 
 /* --- barre flottante de la sélection ------------------------------------------------------------------ */
-.selection.barre-flottante { top: 0; left: 0; transform: translateX(-50%); max-width: calc(100% - 16px); overflow-x: auto; scrollbar-width: none; animation: apparaitre var(--dur-appear) var(--ease-standard); }
+.selection.barre-flottante { top: 0; left: 0; transform: translateX(-50%); max-width: calc(100% - 16px); overflow-x: auto; scrollbar-width: none; animation: flottante-entree var(--dur-appear) var(--ease-standard); }
 .barre-flottante .groupe-flottant { display: inline-flex; align-items: center; gap: 2px; flex: none; }
-.barre-flottante button[aria-pressed="true"] { color: var(--brand-indigo-soft); background: color-mix(in srgb, var(--brand-indigo) 14%, transparent); }
+.barre-flottante button[aria-pressed="true"] { color: var(--text-primary); background: var(--surface-pressed); box-shadow: inset 0 1px 0 var(--hover-veil); }
 .barre-flottante button.danger:hover { color: var(--text-danger); }
-.barre-flottante .pastille { height: 18px; min-width: 18px; padding: 0; margin: 0 3px; border-radius: 50%; background: var(--teinte); }
+.barre-flottante .pastille { height: 16px; min-width: 16px; padding: 0; margin: 0 4px; border-radius: 50%; background: var(--teinte); }
 .barre-flottante .pastille:hover { background: var(--teinte); }
-.badge-p.mini { height: 20px; min-width: 26px; font-size: 12px; }
-@keyframes apparaitre { from { opacity: 0; } to { opacity: 1; } }
+.barre-flottante .pastille[aria-pressed="true"] { background: var(--teinte); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--text-primary) 18%, transparent); }
 
-/* --- menu contextuel ---------------------------------------------------------------------------------- */
-.menu-contextuel { position: fixed; z-index: 90; min-width: 248px; max-height: min(560px, calc(100vh - 16px)); overflow-y: auto; padding: 5px; border-radius: 12px;
+/* --- menu contextuel : rayon 12, marge 4, rangées de 32 au rayon 8 ------------------------------------------- */
+.menu-contextuel { position: fixed; z-index: 90; min-width: 248px; max-height: min(560px, calc(100vh - 16px)); overflow-y: auto; padding: 4px; border-radius: var(--radius-card);
   border: 1px solid var(--border-strong); background: var(--surface-menu); box-shadow: var(--shadow-lift); scrollbar-width: thin; }
-.menu-contextuel button { width: 100%; display: flex; align-items: center; gap: 10px; height: 32px; padding: 0 9px; border: 0; border-radius: 8px; background: none; color: var(--text-primary); font-size: 13px; cursor: pointer; text-align: left; }
+.menu-contextuel button { width: 100%; display: flex; align-items: center; gap: 8px; height: 32px; padding: 0 8px; border: 0; border-radius: var(--radius-sm); background: none; color: var(--text-primary); font-size: 13px; cursor: pointer; text-align: left;
+  transition: background var(--dur-hover) var(--ease-standard); }
 .menu-contextuel button:hover, .menu-contextuel button:focus-visible { background: var(--surface-hover); }
 .menu-contextuel button.danger { color: var(--text-danger); }
 .menu-contextuel .menu-icone { width: 16px; display: grid; place-items: center; color: var(--text-secondary); flex: none; }
+.menu-contextuel button.danger .menu-icone { color: inherit; }
 .menu-contextuel .menu-libelle { flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 /* seconde ligne d'une entrée : ce que le type de relation change, ou pourquoi la commande est indisponible */
-.menu-contextuel button.avec-aide { height: auto; min-height: 32px; padding-top: 6px; padding-bottom: 6px; align-items: flex-start; max-width: 380px; }
+.menu-contextuel button.avec-aide { height: auto; min-height: 32px; padding-top: 8px; padding-bottom: 8px; align-items: flex-start; max-width: 380px; }
 .menu-contextuel button.avec-aide .menu-libelle { white-space: normal; text-align: left; }
 .menu-contextuel button.avec-aide .menu-icone { margin-top: 2px; }
-.menu-aide { display: block; margin-top: 2px; font-size: 12px; line-height: 1.35; color: var(--text-secondary); font-weight: 400; }
+.menu-aide { display: block; margin-top: 2px; font-size: 12px; line-height: 16px; color: var(--text-secondary); font-weight: 400; }
 .menu-aide.raison { color: var(--text-p2); }
 
 /* --- commande indisponible : grisée, toujours focalisable, et sa raison est écrite ou en info-bulle -------- */
@@ -192,93 +204,92 @@ button[aria-disabled="true"] { cursor: not-allowed; }
 .menu-contextuel button[aria-disabled="true"] > .menu-icone, .menu-contextuel button[aria-disabled="true"] > kbd { opacity: 0.5; }
 .menu-contextuel button[aria-disabled="true"] { color: var(--text-secondary); }
 .menu-contextuel button[aria-disabled="true"]:hover { background: none; }
-.menu-deroulant > button.avec-raison { height: auto; padding: 7px 10px; align-items: flex-start; color: var(--text-secondary); max-width: 300px; }
+.menu-deroulant > button.avec-raison { height: auto; padding: 8px; align-items: flex-start; color: var(--text-secondary); max-width: 300px; }
 .menu-deroulant > button.avec-raison:hover { background: none; }
-.menu-deroulant > button.avec-raison svg { opacity: 0.5; flex: none; margin-top: 1px; }
-.menu-deroulant > button.avec-raison small { display: block; margin-top: 2px; font-size: 12px; line-height: 1.35; color: var(--text-p2); white-space: normal; }
-.palette-ligne.indisponible { height: auto; min-height: 38px; padding-top: 7px; padding-bottom: 7px; align-items: flex-start; cursor: not-allowed; color: var(--text-secondary); }
+.menu-deroulant > button.avec-raison svg { opacity: 0.5; flex: none; margin-top: 2px; }
+.menu-deroulant > button.avec-raison small { display: block; margin-top: 2px; font-size: 15px; line-height: 20px; color: var(--text-p2); white-space: normal; }
+.palette-ligne.indisponible { height: auto; min-height: 36px; padding-top: 8px; padding-bottom: 8px; align-items: flex-start; cursor: not-allowed; color: var(--text-secondary); }
 .palette-ligne.indisponible .palette-icone { opacity: 0.5; }
 .palette-ligne.indisponible .palette-libelle { white-space: normal; }
-.palette-raison { display: block; margin-top: 2px; font-size: 12px; line-height: 1.35; color: var(--text-p2); }
-.menu-separateur { height: 1px; margin: 5px 6px; background: var(--border-subtle); }
-kbd { font: 400 12px var(--font-mono); color: var(--text-secondary); }
-.menu-contextuel kbd, .palette kbd { padding: 2px 6px; border-radius: 5px; border: 1px solid var(--border-card); background: var(--surface-inset); white-space: nowrap; flex: none; }
+.palette-raison { display: block; margin-top: 2px; font-size: 12px; line-height: 16px; color: var(--text-p2); }
+.menu-separateur { height: 1px; margin: 4px 8px; background: var(--border-subtle); }
+/* touches de clavier : même dessin partout (mono 12, rayon 4, filet) */
+kbd { font: 400 12px/16px var(--font-mono); color: var(--text-secondary); }
+.menu-contextuel kbd, .palette kbd { min-width: 20px; padding: 0 4px; border-radius: 4px; border: 1px solid var(--border-card); background: var(--surface-inset); line-height: 18px; text-align: center; white-space: nowrap; flex: none; }
 
-/* --- palette de commandes ----------------------------------------------------------------------------- */
-.palette-fond { position: fixed; inset: 0; z-index: 120; background: var(--scrim); display: grid; justify-items: center; align-content: start; padding-top: min(16vh, 140px); }
-.palette { width: min(640px, calc(100vw - 32px)); border-radius: 16px; border: 1px solid var(--border-strong); background: var(--dialog-bg-1);
+/* --- palette de commandes : rayon 16, marge 8, rangées de 36 au rayon 8 ---------------------------------------- */
+.palette-fond { position: fixed; inset: 0; z-index: 120; background: var(--scrim); display: grid; justify-items: center; align-content: start; padding-top: min(16vh, 144px); }
+.palette { width: min(640px, calc(100vw - 32px)); border-radius: var(--radius-panel); border: 1px solid var(--border-strong); background: var(--dialog-bg-1);
   box-shadow: var(--shadow-lift); overflow: hidden; animation: palette-entree var(--dur-appear) var(--ease-standard); }
-@keyframes palette-entree { from { opacity: 0; transform: translateY(-8px) scale(0.985); } to { opacity: 1; transform: none; } }
-.palette-saisie { display: flex; align-items: center; gap: 12px; padding: 0 16px; height: 56px; border-bottom: 1px solid var(--border-subtle); color: var(--text-secondary); }
-.palette-saisie input { flex: 1; min-width: 0; height: 100%; border: 0; outline: none; background: none; color: var(--text-primary); font: 500 16px var(--font-sans); }
+@keyframes palette-entree { from { opacity: 0; transform: translateY(-8px); } to { opacity: 1; transform: none; } }
+.palette-saisie { display: flex; align-items: center; gap: 12px; padding: 0 16px 0 20px; height: 56px; border-bottom: 1px solid var(--border-subtle); color: var(--text-muted); }
+.palette-saisie input { flex: 1; min-width: 0; height: 100%; border: 0; outline: none; background: none; color: var(--text-primary); font: 400 16px var(--font-sans); }
 .palette-saisie input::placeholder { color: var(--text-muted); }
-.palette-liste { max-height: min(420px, 52vh); overflow-y: auto; padding: 6px; scrollbar-width: thin; scrollbar-color: var(--border-pressed) transparent; }
-.palette-groupe { padding: 12px 12px 4px; font-size: 12px; font-weight: 400; color: var(--text-muted); }
-.palette-ligne { display: flex; align-items: center; gap: 12px; height: 38px; padding: 0 10px; border-radius: 9px; font-size: 14px; color: var(--text-primary); cursor: pointer; }
+.palette-liste { max-height: min(420px, 52vh); overflow-y: auto; padding: 8px; scrollbar-width: thin; scrollbar-color: var(--border-pressed) transparent; }
+.palette-groupe { padding: 16px 12px 4px; font-size: 12px; line-height: 16px; font-weight: 400; color: var(--text-muted); }
+.palette-liste > div:first-child .palette-groupe { padding-top: 4px; }
+.palette-ligne { display: flex; align-items: center; gap: 12px; height: 36px; padding: 0 12px; border-radius: var(--radius-sm); font-size: 14px; color: var(--text-primary); cursor: pointer; }
 .palette-ligne[aria-selected="true"] { background: var(--surface-hover); box-shadow: inset 0 1px 0 var(--hover-veil); }
-.palette-icone { width: 18px; display: grid; place-items: center; color: var(--text-secondary); flex: none; }
+.palette-icone { width: 16px; display: grid; place-items: center; color: var(--text-secondary); flex: none; }
 .palette-ligne[aria-selected="true"] .palette-icone { color: var(--text-primary); }
 .palette-libelle { flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .palette-categorie { font-size: 12px; color: var(--text-muted); flex: none; }
-.palette-coche { color: var(--brand-indigo-soft); flex: none; }
-.palette-vide { padding: 28px 16px; text-align: center; color: var(--text-secondary); font-size: 14px; }
-.palette-pied { display: flex; align-items: center; gap: 18px; height: 38px; padding: 0 16px; border-top: 1px solid var(--border-subtle); font-size: 12px; color: var(--text-muted); }
+.palette-coche { color: var(--text-primary); flex: none; }
+.palette-vide { padding: 32px 16px; text-align: center; color: var(--text-secondary); font-size: 14px; }
+.palette-pied { display: flex; align-items: center; gap: 16px; height: 40px; padding: 0 20px; border-top: 1px solid var(--border-subtle); font-size: 12px; color: var(--text-muted); }
 .palette-pied kbd { margin-right: 4px; }
-.palette-compte { margin-left: auto; }
+.palette-compte { margin-left: auto; font: 400 12px/16px var(--font-mono); font-variant-numeric: tabular-nums; }
 
 /* --- modes d'affichage : zen, concentration, présentation --------------------------------------------- */
 .app.zen, .app.presentation { grid-template-rows: minmax(0, 1fr); }
 .app.zen .travail, .app.presentation .travail { grid-template-columns: 1fr; border-top: 0; }
-.app.zen .barre-modes { opacity: 0.25; transition: opacity var(--dur-panel); }
+.app.zen .barre-modes { opacity: 0.25; transition: opacity var(--dur-panel) var(--ease-standard); }
 .app.zen .barre-modes:hover, .app.zen .barre-modes:focus-within { opacity: 1; }
 .app.presentation .react-flow__attribution, .app.presentation .react-flow__handle, .app.presentation .react-flow__resize-control, .app.presentation .cadre-titre,
 .app.presentation .react-flow__background { display: none; }
 /* une diapositive : seul le cadre présenté et son contenu sont visibles */
 .app.presentation .react-flow__node.estompe, .app.presentation .react-flow__edge.estompe { opacity: 0; }
 .app.presentation .cadre-bord { border-color: transparent; background: none; }
-.bandeau-mode, .barre-presentation { position: absolute; left: 50%; transform: translateX(-50%); z-index: 12; display: flex; align-items: center; gap: 10px; padding: 6px 8px 6px 14px;
-  border-radius: 12px; border: 1px solid var(--border-strong); background: var(--surface-menu); box-shadow: var(--shadow-lift); font-size: 13px; color: var(--text-secondary); white-space: nowrap; }
-.bandeau-mode { top: 68px; }
-.barre-presentation { bottom: 20px; padding: 6px; }
-.bandeau-mode button, .barre-presentation button { height: 30px; min-width: 30px; padding: 0 8px; border: 0; border-radius: 8px; background: none; color: var(--text-secondary); cursor: pointer; display: inline-flex; align-items: center; gap: 6px; font-size: 13px; }
+.bandeau-mode, .barre-presentation { position: absolute; left: 50%; transform: translateX(-50%); z-index: 12; display: flex; align-items: center; gap: 8px; padding: 4px 4px 4px 12px;
+  border-radius: var(--radius-card); border: 1px solid var(--border-strong); background: var(--surface-menu); box-shadow: var(--shadow-lift); font-size: 13px; color: var(--text-secondary); white-space: nowrap; max-width: calc(100% - 32px); }
+.bandeau-mode { top: 76px; }
+.barre-presentation { bottom: 20px; padding: 4px; }
+.bandeau-mode button, .barre-presentation button { height: 32px; min-width: 32px; padding: 0 8px; border: 0; border-radius: var(--radius-sm); background: none; color: var(--text-secondary); cursor: pointer; display: inline-flex; align-items: center; justify-content: center; gap: 8px; font-size: 13px;
+  transition: background var(--dur-hover) var(--ease-standard), color var(--dur-hover) var(--ease-standard); }
 .bandeau-mode button:hover, .barre-presentation button:hover:not(:disabled) { background: var(--surface-hover); color: var(--text-primary); }
 .barre-presentation button:disabled { opacity: 0.35; cursor: default; }
-.barre-presentation output { min-width: 46px; text-align: center; font-weight: 500; color: var(--text-primary); }
-.barre-presentation .titre-diapo { max-width: 320px; overflow: hidden; text-overflow: ellipsis; padding-right: 6px; }
+.barre-presentation output { min-width: 48px; text-align: center; font: 400 12px/16px var(--font-mono); font-variant-numeric: tabular-nums; color: var(--text-primary); }
+.barre-presentation .titre-diapo { max-width: 320px; overflow: hidden; text-overflow: ellipsis; padding-right: 8px; color: var(--text-primary); }
 
 /* --- export PNG : substituts statiques des iframes et vidéos ------------------------------------------ */
-.substitut-export { display: grid; place-items: center; background: var(--media-bg) center / cover no-repeat; color: var(--on-media-2); font-size: 14px; border-radius: inherit; }
+.substitut-export { display: grid; place-items: center; background: var(--media-bg) center / cover no-repeat; color: var(--on-media-2); font-size: 15px; border-radius: inherit; }
 
 @media (max-width: 900px) {
   /* petit écran : une seule rangée, qui défile ; le sélecteur de style sort du défilement (position fixe) */
   .barre-modes { top: 8px; left: 8px; right: 8px; width: auto; max-width: none; overflow-x: auto; scrollbar-width: none; }
   .barre-modes .mode kbd { display: none; }
-  .popover-style { position: fixed; top: auto; left: 16px; transform: none; margin-top: 30px; }
-  .bandeau-mode { top: 60px; }
+  .popover-style { position: fixed; top: auto; left: 16px; transform: none; margin-top: 32px; }
+  .bandeau-mode { top: 64px; }
+  .barre-modes .mode, .bouton-style { height: 40px; }
 }
-/* --- mouvement : bref, utile, sur transform et opacity seulement ; jamais perpétuel ------------------- */
-/* un outil choisi « s'enfonce » ; un objet qu'on vient de poser se dépose ; un état qui change se signale une fois */
-.barre-modes .mode { transition: background var(--dur-hover), color var(--dur-hover), transform var(--dur-lift) var(--ease-standard); }
-.barre-modes .mode:active:not([aria-disabled="true"]) { transform: scale(0.97); }
-.barre-modes .mode[aria-pressed="true"] { animation: outil-choisi var(--dur-appear) var(--ease-standard); }
-@keyframes outil-choisi { from { transform: scale(0.97); } to { transform: none; } }
-.selection.barre-flottante { animation: flottante-entree var(--dur-appear) var(--ease-standard); }
+/* --- mouvement : bref, utile, sur transform et opacity seulement ; jamais perpétuel ; une seule courbe --------- */
+/* un menu se déplie d'où il s'ouvre ; un objet qu'on vient de poser se dépose ; un état qui change se signale une fois */
 @keyframes flottante-entree { from { opacity: 0; transform: translateX(-50%) translateY(6px); } to { opacity: 1; transform: translateX(-50%); } }
-.menu-contextuel { animation: menu-entree var(--dur-hover) var(--ease-standard); transform-origin: top left; }
-@keyframes menu-entree { from { opacity: 0; transform: scale(0.97); } to { opacity: 1; transform: none; } }
+.menu-contextuel, .menu-deroulant, .popover-style { animation: menu-entree var(--dur-appear) var(--ease-standard); }
+@keyframes menu-entree { from { opacity: 0; translate: 0 -6px; } to { opacity: 1; translate: 0 0; } }
 .vient-d-etre-pose { animation: pose var(--dur-panel) var(--ease-standard); }
 @keyframes pose { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
 .etat-carte, .relations-carte li { animation: etat-entree var(--dur-panel) var(--ease-standard); }
 @keyframes etat-entree { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
 /* la flèche change d'effet (bloque → débloquée) : son étiquette se signale une fois, puis ne bouge plus */
 .etiquette-lien.etat-debloquee .effet-lien, .etiquette-lien.etat-bloquante .effet-lien, .etiquette-lien.etat-jointe .effet-lien { animation: effet-change var(--dur-panel) var(--ease-standard); }
-@keyframes effet-change { 0% { opacity: 0; } 100% { opacity: 1; } }
+@keyframes effet-change { from { opacity: 0; } to { opacity: 1; } }
 .react-flow__edge .relation { transition: stroke var(--dur-panel) var(--ease-standard), opacity var(--dur-panel) var(--ease-standard); }
 .toast { animation: toast-entree var(--dur-panel) var(--ease-standard); }
 @keyframes toast-entree { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
 
 @media (prefers-reduced-motion: reduce) {
-  .barre-modes .mode, .barre-modes .mode[aria-pressed="true"], .menu-contextuel, .vient-d-etre-pose, .etat-carte, .relations-carte li, .etiquette-lien .effet-lien, .toast { animation: none; transition: none; }
+  .barre-modes .mode, .menu-contextuel, .menu-deroulant, .popover-style, .vient-d-etre-pose, .etat-carte, .relations-carte li, .etiquette-lien .effet-lien, .toast { animation: none; transition: none; }
   .barre-modes .mode:active { transform: none; }
   .react-flow__edge .relation { transition: none; }
   .selection.barre-flottante, .palette { animation: none; }

@@ -3,6 +3,7 @@
 // que s'il y a une sélection (aucun abonnement au zoom le reste du temps).
 import { useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useStore } from "@xyflow/react";
+import { ZONE_LIBRE } from "../board/detail";
 import { COULEURS } from "../etat/ui";
 import { TYPES_TABLEAU, boiteDe } from "../outils/espace";
 import { englobante } from "../outils/geometrie";
@@ -31,14 +32,18 @@ export function BarreFlottante({ selection }: { selection: ObjetBoard[] }) {
   const lMax = parent?.clientWidth ?? 1200, hMax = parent?.clientHeight ?? 800;
   const cx = (zone.x + zone.largeur / 2) * zoom + tx;
   const haut = zone.y * zoom + ty - 52;
-  // au-dessus de la sélection ; dessous si elle touche le haut du canevas ; toujours dans le cadre
-  const y = haut >= 8 ? haut : Math.min(hMax - 52, (zone.y + zone.hauteur) * zoom + ty + 12);
-  const x = Math.max(8 + largeur / 2, Math.min(lMax - 8 - largeur / 2, cx));
+  // au-dessus de la sélection ; dessous si elle touche le haut du canevas ; toujours dans le cadre (le bas est borné
+  // en CSS : la hauteur du canevas change quand le panneau s'ouvre, sans nouveau rendu de cette barre)
+  // sur un grand canevas, la barre ne passe ni sous la barre d'outils (en haut) ni sur la barre d'ajout (à gauche)
+  const large = lMax > 900;
+  const hautLibre = large ? ZONE_LIBRE.top : 8, gaucheLibre = large ? ZONE_LIBRE.left - 8 : 8;
+  const y = haut >= hautLibre ? haut : Math.min(hMax - 52, (zone.y + zone.hauteur) * zoom + ty + 12);
+  const x = Math.max(gaucheLibre + largeur / 2, Math.min(lMax - 8 - largeur / 2, cx));
   const actif = (id: string) => registre.obtenir(id)?.actif?.(c);
 
   return (
     <div ref={ref} className="selection barre-flottante nodrag nopan" role="toolbar" aria-label="Sélection"
-      style={{ left: x, top: Math.max(8, y), visibility: largeur ? "visible" : "hidden" }}>
+      style={{ left: x, top: `min(calc(100% - 52px), ${Math.max(hautLibre, y)}px)`, visibility: largeur ? "visible" : "hidden" }}>
       {selection.length > 1 && <span className="compte-sel tab-num">{selection.length} objets</span>}
       {proposees.map(({ cmd, etat }, i) => {
         const Icone = cmd.icone;

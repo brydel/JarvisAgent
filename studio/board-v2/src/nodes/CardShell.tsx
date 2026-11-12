@@ -1,11 +1,11 @@
 import { memo, useEffect, useRef, useState, type ReactNode } from "react";
 import { Handle, NodeResizer, Position } from "@xyflow/react";
-import { ArrowUpToLine, ClipboardList, Copy, FileText, Minimize2, Maximize2, Palette, Wrench, Image as IconeImage, Link2, Lock, LockOpen, MoreHorizontal, Music, PanelRight, Target, Trash2, Users, Video, Folder } from "lucide-react";
+import { ArrowUpToLine, ClipboardList, Copy, FileText, Minimize2, Maximize2, Palette, ScanSearch, Wrench, Image as IconeImage, Link2, Lock, LockOpen, MoreHorizontal, Music, PanelRight, Target, Trash2, Users, Video, Folder, FolderOutput } from "lucide-react";
 import type { ObjetBoard, Priorite } from "../types";
 import { CONTEXTUALISABLES, TAILLES, useActions } from "./contexte";
 import { Avatar } from "../components/Avatar";
 import { useCommandes } from "../commandes/react";
-import { EtatsCarte, PiedProvenance, RelationsCarte } from "../cartes/Provenance";
+import { EtatsCarte, SousCarte } from "../cartes/Provenance";
 import { useNiveauDetail, vientDEtrePose } from "../board/detail";
 
 interface Props {
@@ -50,7 +50,7 @@ export const CardShell = memo(function CardShell({ objet, selected, classe, chil
         {COTES.map((p) => <Handle key={p} id={p} type="source" position={p} />)}
         <article className={`carte carte-compacte ${classe}${accent}${verrou ? " verrouillee" : ""}`}
           aria-label={`${objet.meta.titre || objet.type} (vignette)`}>
-          <Icone size={18} aria-hidden />
+          <Icone size={20} aria-hidden />
           <span className="titre-compact">{objet.meta.titre || objet.mission?.objectif || objet.asset?.nom || objet.contenu.slice(0, 60) || objet.type}</span>
           {objet.priorite && <span className={`badge-p ${objet.priorite}`}>{objet.priorite}</span>}
           <MenuCarte objet={objet} />
@@ -90,12 +90,9 @@ export const CardShell = memo(function CardShell({ objet, selected, classe, chil
         )}
         <BandeauJarvis objet={objet} />
       </article>
-      {/* hors de la carte (jamais rognés, ne couvrent rien) : état réel et provenance */}
+      {/* hors de la carte, dans la place libre mesurée (jamais sur une carte voisine) : états, effets des relations, crédit */}
       <EtatsCarte objet={objet} />
-      <div className="sous-carte">
-        <RelationsCarte objet={objet} />
-        <PiedProvenance objet={objet} sources={sources} />
-      </div>
+      <SousCarte objet={objet} sources={sources} />
     </>
   );
 });
@@ -116,7 +113,7 @@ export function etatJarvis(o: ObjetBoard): { etat: "analyse" | "attente" | "pret
   if (t && ["FAILED", "CANCELLED", "EXPIRED"].includes(t.statut)) return { etat: "echec", texte: "Analyse impossible" };
   if (t && ["WAITING_PROVIDER", "WAITING_APPROVAL"].includes(t.statut)) return { etat: "attente", texte: "En attente d'un exécutant" };
   if (t && TERMINAUX.has(t.statut)) return null;
-  return { etat: "analyse", texte: "Jarvis analyse…" };
+  return { etat: "analyse", texte: "Analyse en cours" };
 }
 
 function BandeauJarvis({ objet }: { objet: ObjetBoard }) {
@@ -128,7 +125,7 @@ function BandeauJarvis({ objet }: { objet: ObjetBoard }) {
     <button type="button" className={`bandeau-jarvis nodrag ${e.etat}`} onClick={() => a.inspecter(objet.id)}
       aria-label={`Jarvis : ${e.texte}. Ouvrir les détails`}
       title={outils.length ? `Outils : ${outils.map((o) => `${o.outil} ${o.detail}`).join(" · ")}` : undefined}>
-      <Avatar id="chef" role="chef" taille={20} /> <b>Jarvis</b> <span>{e.texte}</span>
+      <Avatar id="chef" role="chef" taille={20} /><b>Jarvis</b><span>{e.texte}</span>
     </button>
   );
 }
@@ -161,7 +158,7 @@ export function MenuCarte({ objet }: { objet: ObjetBoard }) {
     setOuvert(false);
   };
   return (
-    <div ref={ref} className="nodrag nopan" style={{ position: "relative" }}>
+    <div ref={ref} className="ancre-menu nodrag nopan">
       <button type="button" className="menu-carte" aria-label="Actions de la carte" aria-haspopup="menu" aria-expanded={ouvert}
         onClick={() => setOuvert((v) => !v)}>
         <MoreHorizontal size={20} />
@@ -171,7 +168,7 @@ export function MenuCarte({ objet }: { objet: ObjetBoard }) {
           <div className="menu-priorites" role="group" aria-label="Priorité">
             {(["P1", "P2", "P3", ""] as Priorite[]).map((p) => (
               <button key={p || "aucune"} role="menuitemradio" aria-checked={objet.priorite === p} className={p ? `badge-p ${p}` : "badge-p aucune"}
-                onClick={faire(() => lancer(`carte.priorite.${p || "aucune"}`))}>{p || "—"}</button>
+                onClick={faire(() => lancer(`carte.priorite.${p || "aucune"}`))}>{p || "Aucune"}</button>
             ))}
           </div>
           <button role="menuitem" onClick={faire(() => lancer("carte.ouvrir"))}><PanelRight size={16} /> Détails</button>
@@ -179,8 +176,8 @@ export function MenuCarte({ objet }: { objet: ObjetBoard }) {
             // même source que partout : le registre dit si la commande est possible, et sinon pourquoi
             const e = registre.etat("carte.analyser", contexte({ selection: [objet] }));
             return e.disponible
-              ? <button role="menuitem" onClick={faire(() => lancer("carte.analyser"))}><ClipboardList size={16} /> Analyser avec Jarvis</button>
-              : <button role="menuitem" aria-disabled="true" className="avec-raison" title={e.raison ?? undefined}><ClipboardList size={16} />
+              ? <button role="menuitem" onClick={faire(() => lancer("carte.analyser"))}><ScanSearch size={16} /> Analyser avec Jarvis</button>
+              : <button role="menuitem" aria-disabled="true" className="avec-raison" title={e.raison ?? undefined}><ScanSearch size={16} />
                 <span>Analyser avec Jarvis<small>{e.raison}</small></span></button>;
           })()}
           <button role="menuitem" onClick={faire(() => lancer("edition.dupliquer"))}><Copy size={16} /> Dupliquer</button>
@@ -189,7 +186,7 @@ export function MenuCarte({ objet }: { objet: ObjetBoard }) {
             {objet.meta.compact ? <><Maximize2 size={16} /> Taille normale</> : <><Minimize2 size={16} /> Vignette compacte</>}
           </button>
           <div className="menu-couleurs" role="group" aria-label="Couleur de la carte">
-            <Palette size={15} aria-hidden />
+            <Palette size={16} aria-hidden />
             {COULEURS.map((c) => (
               <button key={c || "aucune"} role="menuitemradio" aria-checked={(objet.meta.couleur ?? "") === c}
                 aria-label={c ? `Couleur ${c}` : "Sans couleur"} className={`pastille-couleur ${c ? `accent-${c}` : "aucune"}`}
@@ -199,7 +196,7 @@ export function MenuCarte({ objet }: { objet: ObjetBoard }) {
           <button role="menuitem" onClick={faire(() => lancer("edition.verrouiller"))}>
             {objet.verrouille ? <><LockOpen size={16} /> Déverrouiller</> : <><Lock size={16} /> Verrouiller</>}
           </button>
-          {objet.parent_id && <button role="menuitem" onClick={faire(() => lancer("carte.sortirDuDossier"))}>Sortir du dossier</button>}
+          {objet.parent_id && <button role="menuitem" onClick={faire(() => lancer("carte.sortirDuDossier"))}><FolderOutput size={16} /> Sortir du dossier</button>}
           <button role="menuitem" className="danger" onClick={faire(() => lancer("edition.supprimer"))}><Trash2 size={16} /> Supprimer</button>
         </div>
       )}
@@ -211,7 +208,7 @@ export function Tags({ tags, max = 3 }: { tags?: string[]; max?: number }) {
   if (!tags?.length) return null;
   return (
     <div className="tags">
-      {tags.slice(0, max).map((t, i) => <span key={t} className={`tag c${i % 3}`}>#{t}</span>)}
+      {tags.slice(0, max).map((t) => <span key={t} className="tag">#{t}</span>)}
       {tags.length > max && <span className="tag plus">+{tags.length - max}</span>}
     </div>
   );

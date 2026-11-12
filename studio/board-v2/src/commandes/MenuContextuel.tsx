@@ -73,7 +73,7 @@ export function MenuContextuel({ menu, extra, fermer }: {
                 fermer();
                 executer(cmd.id, "menu", extra);
               }}>
-              <span className="menu-icone">{coche ? <Check size={15} aria-hidden /> : Icone ? <Icone size={15} aria-hidden /> : null}</span>
+              <span className="menu-icone">{coche ? <Check size={16} aria-hidden /> : Icone ? <Icone size={16} aria-hidden /> : null}</span>
               <span className="menu-libelle">{libelleDe(cmd, c)}
                 {aide && <small id={`aide-${cmd.id}`} className={etat.disponible ? "menu-aide" : "menu-aide raison"}>{aide}</small>}</span>
               {r && <kbd>{afficher(r)}</kbd>}

@@ -23,7 +23,7 @@ export const ImageNode = memo(function ImageNode({ data, selected }: P) {
           <img src={src} alt={o.meta.titre || o.asset?.nom || "image"} loading="lazy" decoding="async" draggable={false}
             onError={() => setErreur(true)} />
         ) : (
-          <div className="erreur-media" role="alert">Image illisible ou introuvable.</div>
+          <div className="erreur-media" role="alert">Image illisible ou introuvable</div>
         )}
       </div>
       <div className="pied">
@@ -34,7 +34,7 @@ export const ImageNode = memo(function ImageNode({ data, selected }: P) {
         </div>
         {src && (
           <button type="button" className="menu-carte nodrag" aria-label="Agrandir l'image" onClick={() => a.agrandir(src, o.meta.titre || "")}>
-            <Maximize2 size={17} />
+            <Maximize2 size={20} />
           </button>
         )}
       </div>
@@ -53,14 +53,14 @@ export const LienNode = memo(function LienNode({ data, selected }: P) {
         {image ? <img src={image} alt="" loading="lazy" decoding="async" draggable={false} /> : <Link2 size={36} />}
         {url && /^https?:/.test(url) && (
           <a className="ouvrir-site nodrag" href={url} target="_blank" rel="noopener noreferrer nofollow" aria-label="Ouvrir le site"
-            title="Ouvrir le site"><ExternalLink size={17} /></a>
+            title="Ouvrir le site"><ExternalLink size={20} /></a>
         )}
       </div>
       <div className="corps">
         <span className="lien-favicon" aria-hidden="true">
           {m.favicon?.url ? <img src={m.favicon.url} alt="" /> : m.marque === "claude"
             ? <svg viewBox="0 0 24 24" width="24" height="24"><path d={siClaude.path} fill={`#${siClaude.hex}`} /></svg>
-            : <Link2 size={22} />}
+            : <Link2 size={20} />}
         </span>
         <div style={{ minWidth: 0 }}>
           <div className="titre-carte">{m.titre || m.hote || url}</div>
@@ -126,16 +126,16 @@ export const PdfNode = memo(function PdfNode({ data, selected }: P) {
         <div style={{ minWidth: 0 }}>
           <div className="titre-carte">{o.meta.titre || a?.nom || "Document"}</div>
           <div className="meta-carte tab-num">{[a && extension(a.mime, a.nom), a && taille(a.taille)].filter(Boolean).join(" · ")}</div>
-          {o.meta.description && <div className="meta-carte" style={{ marginTop: 6, lineHeight: 1.35 }}>{o.meta.description}</div>}
+          {o.meta.description && <div className="meta-carte" style={{ marginTop: 4 }}>{o.meta.description}</div>}
         </div>
       </div>
       {a && <PagesPdf url={a.url} demo={o.meta.demo_pages} />}
-      <div className="tags" style={{ padding: "14px 18px 0" }}>
-        {(o.meta.tags ?? []).slice(0, 2).map((t, i) => <span key={t} className={`tag c${i % 2}`}>#{t}</span>)}
+      <div className="tags">
+        {(o.meta.tags ?? []).slice(0, 2).map((t) => <span key={t} className="tag">#{t}</span>)}
         {(o.meta.tags?.length ?? 0) > 2 && <span className="tag plus">+{(o.meta.tags?.length ?? 0) - 2}</span>}
         {a && (
           <a className="ouvrir-site nodrag" href={a.url} target="_blank" rel="noopener noreferrer" aria-label="Ouvrir le PDF"
-            style={{ marginLeft: "auto" }}><ExternalLink size={17} /></a>
+            style={{ marginLeft: "auto" }}><ExternalLink size={20} /></a>
         )}
       </div>
     </CardShell>
@@ -166,7 +166,7 @@ export const DossierNode = memo(function DossierNode({ data, selected }: P) {
         <div className="vignettes">
           {vignettes.slice(0, 3).map((s) => <span key={s}><img src={s} alt="" loading="lazy" /></span>)}
           {total > 3 && <span className="plus">+{total - 3}</span>}
-          {!vignettes.length && !total && <span className="meta-carte" style={{ width: "auto", background: "none" }}>Glisse des cartes ici</span>}
+          {!vignettes.length && !total && <span className="meta-carte vide-dossier">Glisse des cartes ici</span>}
         </div>
       </div>
     </CardShell>
