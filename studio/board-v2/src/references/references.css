@@ -34,7 +34,7 @@
 .rf-chips button { display: inline-flex; align-items: center; gap: 8px; height: 32px; padding: 0 12px; border: 1px solid var(--border-card); border-radius: var(--radius-sm);
   background: transparent; color: var(--text-secondary); font-size: 13px; transition: background var(--dur-hover) var(--ease-standard), color var(--dur-hover) var(--ease-standard), border-color var(--dur-hover) var(--ease-standard); }
 .rf-chips button:hover { color: var(--text-primary); background: var(--surface-hover); }
-.rf-chips button[aria-pressed="true"] { background: var(--surface-pressed); border-color: var(--border-pressed); color: var(--text-primary); box-shadow: inset 0 1px 0 var(--hover-veil); }
+.rf-chips button[aria-pressed="true"] { background: var(--surface-hover); border-color: var(--border-strong); color: var(--text-primary); box-shadow: inset 0 1px 0 var(--hover-veil); }
 .rf-chips button span { color: var(--text-muted); font: 400 12px/16px var(--font-mono); font-variant-numeric: tabular-nums; }
 .rf-tags button { border-color: transparent; padding: 0 8px; color: var(--text-muted); }
 
@@ -44,7 +44,6 @@
 .rf-add input, .rf-add textarea { width: 100%; min-height: 36px; padding: 8px 12px; border: 1px solid var(--border-card); border-radius: var(--radius-sm); background: var(--surface-inset);
   color: var(--text-primary); font: inherit; font-size: 13px; line-height: 20px; transition: border-color var(--dur-hover) var(--ease-standard); }
 .rf-add input:focus, .rf-add textarea:focus { border-color: var(--text-secondary); }
-.rf-add .p-button:disabled { background: var(--surface-hover); border-color: var(--border-card); color: var(--text-muted); box-shadow: none; opacity: 1; }
 .rf-add textarea { resize: vertical; }
 .rf-add input::placeholder, .rf-add textarea::placeholder { color: var(--text-muted); }
 .rf-add input:disabled, .rf-add textarea:disabled { opacity: .5; }
@@ -94,8 +93,8 @@
 .rf-skeleton .rf-card-body i + i, .rf-skeleton .rf-result-body i + i { width: 45%; }
 /* état vide : le fait, puis l'action utile ; ni cadre ni icône */
 .rf-empty { padding: 24px 0; border-top: 1px solid var(--border-subtle); margin-top: 8px; text-align: left; }
-.rf-empty h3 { font-size: 15px; line-height: 20px; font-weight: 500; }
-.rf-empty p { max-width: 560px; margin: 4px 0 0; font-size: 13px; line-height: 20px; }
+/* tailles de l'état vide : celles de .p-empty (product.css), comme sur les autres pages */
+.rf-empty p { max-width: 560px; }
 .rf-empty .p-button { margin-top: 16px; }
 
 /* --- passages cités --- */
@@ -131,8 +130,8 @@
 /* source de la fiche : ligne de crédit (d'où, quand, dans quel état) */
 .rf-fiche-source { flex-wrap: wrap; gap: 4px 12px; margin-top: 12px !important; overflow-wrap: anywhere; }
 .rf-fiche-description { margin-top: 12px !important; max-width: 720px; font-size: 14px; line-height: 22px; color: var(--text-secondary); }
-.rf-fiche-source .rf-statut { gap: 8px; padding: 0; border: 0; border-radius: 0; background: none; font: inherit; color: var(--text-secondary); }
-.rf-statut::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: var(--text-muted); flex: none; }
+/* dans la ligne de crédit, l'état garde le mono de la ligne ; le point est celui de .p-status */
+.rf-fiche-source .rf-statut { font: inherit; }
 .rf-statut.is-prete::before { background: var(--success); }
 .rf-statut.is-echec::before { background: var(--danger); }
 .rf-fiche-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; flex: none; max-width: 560px; }

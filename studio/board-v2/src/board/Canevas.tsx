@@ -44,8 +44,8 @@ const TYPES_NOEUDS = {
 const TYPES_LIENS = { relation: RelationEdge };
 // la mini-carte reste neutre : seule la mission (l'article de une) et les notes adhésives (leur vraie couleur) ressortent
 const COULEUR_MINICARTE: Record<string, string> = {
-  mission: "var(--brand-indigo)", adhesif: "var(--adhesif-jaune)", cadre: "transparent", fleche: "transparent",
-  trait: "var(--teinte-neutre)", texte_libre: "var(--teinte-neutre)",
+  mission: "var(--encre)", adhesif: "var(--adhesif-jaune)", cadre: "transparent", fleche: "transparent",
+  trait: "var(--text-secondary)", texte_libre: "var(--text-secondary)",
 };
 const OUTILS_DIRECTS = new Set(["selection", "main"]);
 /** sous 12 % de zoom, les relations ne sont plus tracées (illisibles, et les blocs n'ont plus de poignée) */

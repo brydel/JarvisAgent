@@ -26,7 +26,6 @@
 .runtime-intro.avec-action { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: flex-start; gap: 16px; }
 .runtime-intro.avec-action > div { flex: 1; min-width: 240px; }
 .runtime-dialog .bouton { height: 36px; padding: 0 12px; gap: 8px; text-decoration: none; }
-.runtime-dialog .bouton.primaire:disabled { background: var(--surface-hover); border-color: var(--border-card); color: var(--text-muted); opacity: 1; }
 
 .runtime-form { display: grid; gap: 16px; padding: 20px; margin-bottom: 24px; border: 1px solid var(--border-card); border-radius: var(--radius-card); background: var(--surface-card-raised); }
 .runtime-form label { display: grid; gap: 8px; min-width: 0; font-size: 13px; line-height: 20px; font-weight: 500; color: var(--text-secondary); }
@@ -42,7 +41,7 @@
 .runtime-grille.trois { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 .runtime-aide { display: flex; align-items: flex-start; gap: 8px; margin: 0; font-size: 13px; line-height: 20px; color: var(--text-secondary); }
 .runtime-aide > svg { margin-top: 2px; color: var(--text-muted); }
-.runtime-lien { padding: 0; border: 0; background: transparent; color: var(--link); text-decoration: underline; text-underline-offset: 2px; cursor: pointer; font: inherit; }
+.runtime-lien { padding: 0; border: 0; background: transparent; color: var(--text-primary); text-decoration: underline; text-underline-offset: 2px; cursor: pointer; font: inherit; }
 
 /* préalable et autorisation en attente : surface neutre, l'ambre reste sur l'icône */
 .runtime-prealable, .runtime-autorisation { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; padding: 16px 20px; margin-bottom: 24px; border: 1px solid var(--border-card); border-radius: var(--radius-card); background: var(--surface-card-raised); }
@@ -54,7 +53,7 @@
 .runtime-outils { min-width: 0; margin: 0; padding: 12px 16px; border: 1px solid var(--border-card); border-radius: var(--radius-sm); }
 .runtime-outils legend { padding: 0 4px; font-size: 13px; line-height: 20px; font-weight: 500; color: var(--text-secondary); }
 .runtime-outils label { display: flex; align-items: flex-start; gap: 12px; padding: 4px 0; cursor: pointer; font-weight: 400; color: var(--text-primary); }
-.runtime-outils input { flex: none; width: 16px; height: 16px; margin: 2px 0 0; padding: 0; accent-color: var(--brand-indigo); }
+.runtime-outils input { flex: none; width: 16px; height: 16px; margin: 2px 0 0; padding: 0; accent-color: var(--encre); }
 .runtime-outils span { font-size: 13px; line-height: 20px; overflow-wrap: anywhere; }
 .runtime-outils small { display: block; font: 400 12px/16px var(--font-mono); color: var(--text-muted); }
 .runtime-outils > p { margin: 0; font-size: 13px; line-height: 20px; color: var(--text-secondary); }
@@ -69,8 +68,7 @@
 .runtime-liste > button:focus-visible { outline-offset: -2px; }
 .runtime-liste > button strong { font-size: 14px; line-height: 20px; font-weight: 500; overflow-wrap: anywhere; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
 .runtime-liste > button small { font: 400 12px/16px var(--font-mono); font-variant-numeric: tabular-nums; color: var(--text-muted); overflow-wrap: anywhere; }
-.runtime-etat { display: inline-flex; align-items: center; gap: 8px; min-height: 20px; font: 400 12px/16px var(--font-mono); color: var(--text-secondary); white-space: nowrap; }
-.runtime-etat::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: var(--text-muted); flex: none; }
+/* dessin commun de l'état dans app.css ; ici, la couleur du point */
 .runtime-etat.succeeded::before, .runtime-etat.connectee::before { background: var(--success); }
 .runtime-etat.blocked::before, .runtime-etat.awaiting_review::before, .runtime-etat.paused::before, .runtime-etat.expiree::before { background: var(--warning); }
 .runtime-etat.failed::before, .runtime-etat.cancelled::before, .runtime-etat.revoquee::before { background: var(--danger); }

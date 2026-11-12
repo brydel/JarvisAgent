@@ -9,7 +9,7 @@
   --fw-medium: 500;
   --fw-strong: 600;
 
-  /* taille — Échelle de l'interface (pixels écran) : taille et interligne vont par paire. Rien sous 12 px (11 px au plus petit en mobile). Deux graisses, 400 et 500 ; 600 pour le mot-symbole seul. La hiérarchie vient de la taille et du rôle de texte. Interlettrage 0 sous 40 px. Chiffres : font-variant-numeric: tabular-nums. */
+  /* taille — Échelle de l'interface (pixels écran) : taille et interligne vont par paire. Rien sous 12 px (11 px au plus petit en mobile). Deux graisses, 400 et 500 ; 600 pour le mot-symbole et la lettre de raccourci de la barre d'outils, rien d'autre. La hiérarchie vient de la taille et du rôle de texte. Interlettrage 0 sous 40 px. Chiffres : font-variant-numeric: tabular-nums. */
   --fs-meta: 12px;
   --lh-meta: 16px;
   --fs-sm: 13px;
@@ -83,6 +83,10 @@
   --icon-size: 16px;
   --icon-stroke: 1.5;
   --icon-gap: var(--space-2);
+
+  /* statut — Un état se lit par un point de couleur de sens (vert, ambre, rouge, encre pour « en cours », --statut-neutre sinon) suivi du mot, en Instrument Sans, sans boîte ni pilule. Même point dans les pages, les dialogues et Références. */
+  --status-dot: 8px;
+  --status-gap: var(--space-2);
 
   /* mouvement — Une seule courbe et cinq durées. Survol, appui, bascule : --dur-hover (--dur-lift pour la prise d'une carte). Menus, infobulles : --dur-appear. Panneaux, dialogues : --dur-panel. Entrée d'un contenu : --dur-enter, montée de --rise, décalage de --stagger entre six éléments au plus. Appui : scale(var(--press-scale)). Ne transiter que color, background-color, border-color, opacity et transform, nommés ; jamais « all », ni largeur, hauteur ou position. Aucune boucle hors indicateur d'attente. */
   --ease-standard: cubic-bezier(0.22, 1, 0.36, 1);

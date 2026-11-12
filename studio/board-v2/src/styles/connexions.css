@@ -24,9 +24,8 @@
 .integrations-intro h3 { margin: 0 0 4px; font-size: 15px; line-height: 20px; font-weight: 500; }
 .integrations-intro p { margin: 0; max-width: 560px; font-size: 13px; line-height: 20px; color: var(--text-secondary); }
 .integrations-dialog .bouton { height: 36px; padding: 0 12px; gap: 8px; }
-.integrations-dialog .bouton.primaire:disabled { background: var(--surface-hover); border-color: var(--border-card); color: var(--text-muted); opacity: 1; }
 .integrations-filtre { display: flex; align-items: center; gap: 8px; min-height: 36px; font-size: 13px; color: var(--text-secondary); cursor: pointer; }
-.integrations-filtre input, .integration-outils input { width: 16px; height: 16px; margin: 0; flex: none; accent-color: var(--brand-indigo); }
+.integrations-filtre input, .integration-outils input { width: 16px; height: 16px; margin: 0; flex: none; accent-color: var(--encre); }
 
 .integrations-formulaire { display: grid; gap: 16px; padding: 20px; margin-bottom: 24px; border: 1px solid var(--border-card); border-radius: var(--radius-card); background: var(--surface-card-raised); }
 .integrations-formulaire label { display: grid; gap: 8px; font-size: 13px; line-height: 20px; font-weight: 500; color: var(--text-secondary); }
@@ -47,8 +46,7 @@
 .integration-carte > header > div { flex: 1; min-width: 0; }
 .integration-carte h4 { margin: 0; font-size: 15px; line-height: 20px; font-weight: 500; overflow-wrap: anywhere; }
 .integration-carte > header .credit { margin-top: 8px; flex-wrap: wrap; row-gap: 4px; overflow-wrap: anywhere; }
-.integration-etat { display: inline-flex; align-items: center; gap: 8px; min-height: 20px; font: 400 12px/16px var(--font-mono); color: var(--text-secondary); white-space: nowrap; }
-.integration-etat::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: var(--text-muted); flex: none; }
+/* dessin commun de l'état dans app.css ; ici, la couleur du point */
 .integration-etat.decouverte_verifiee::before, .integration-etat.verifie::before, .integration-etat.succeeded::before { background: var(--success); }
 .integration-etat.inconnu::before, .integration-etat.unknown::before, .integration-etat.configuree_non_verifiee::before { background: var(--warning); }
 .integration-etat.failed::before, .integration-etat.degrade::before, .integration-etat.revoquee::before { background: var(--danger); }

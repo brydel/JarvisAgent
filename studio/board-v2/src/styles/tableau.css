@@ -1,7 +1,7 @@
 /* Tableau blanc, commandes et modes d'affichage du Board. Jetons seulement (themes.css) : aucune couleur en dur. */
 
 /* --- teintes : une classe pose la couleur du trait, du fond adhésif et du fond de forme --------------------- */
-.teinte-neutre { --teinte: var(--teinte-neutre); --adhesif: var(--adhesif-neutre); }
+.teinte-neutre { --teinte: var(--text-secondary); --adhesif: var(--adhesif-neutre); }
 .teinte-indigo { --teinte: var(--teinte-indigo); --adhesif: var(--adhesif-indigo); }
 .teinte-violet { --teinte: var(--teinte-violet); --adhesif: var(--adhesif-violet); }
 .teinte-rose { --teinte: var(--teinte-rose); --adhesif: var(--adhesif-rose); }
@@ -9,15 +9,15 @@
 .teinte-jaune { --teinte: var(--teinte-jaune); --adhesif: var(--adhesif-jaune); }
 .teinte-vert { --teinte: var(--teinte-vert); --adhesif: var(--adhesif-vert); }
 .teinte-cyan { --teinte: var(--teinte-cyan); --adhesif: var(--adhesif-cyan); }
-.teinte-gris { --teinte: var(--teinte-gris); --adhesif: var(--adhesif-gris); }
+.teinte-gris { --teinte: var(--text-muted); --adhesif: var(--adhesif-gris); }
 .pastille { width: 16px; height: 16px; border-radius: 50%; background: var(--teinte); border: 0; padding: 0; cursor: pointer; flex: none; box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--text-primary) 18%, transparent); }
 .pastille[aria-pressed="true"] { outline: 2px solid var(--text-primary); outline-offset: 2px; }
 
 /* --- objets ------------------------------------------------------------------------------------------- */
 .react-flow__node-adhesif, .react-flow__node-texte_libre, .react-flow__node-forme { border-radius: 4px; }
-.react-flow__node:focus-visible { outline: 2px solid var(--brand-indigo-soft); outline-offset: 3px; }
+.react-flow__node:focus-visible { outline: 2px solid var(--focus); outline-offset: 3px; }
 .react-flow__node-adhesif.selected, .react-flow__node-forme.selected, .react-flow__node-texte_libre.selected, .react-flow__node-trait.selected, .react-flow__node-cadre.selected {
-  outline: 1.5px solid var(--brand-indigo); outline-offset: 2px;
+  outline: 1.5px solid var(--encre); outline-offset: 2px;
 }
 .adhesif { width: 100%; height: 100%; background: var(--adhesif); color: var(--sur-adhesif); border-radius: 3px; box-shadow: var(--shadow-adhesif); overflow: hidden; }
 .adhesif-texte { padding: 16px; height: 100%; line-height: 1.3; font-weight: 500; white-space: pre-wrap; overflow-wrap: anywhere; overflow: hidden; }
@@ -42,8 +42,8 @@
 .fleche-prise { stroke: transparent; stroke-width: 18px; pointer-events: stroke; cursor: grab; }
 .fleche-pointe { stroke: none; pointer-events: none; }
 .fleche-libelle { stroke: var(--bg-canvas); stroke-width: 6px; paint-order: stroke; fill: var(--encre); font-size: 15px; font-weight: 500; pointer-events: none; }
-.fleche-bout { fill: var(--bg-canvas); stroke: var(--brand-indigo); stroke-width: 2px; pointer-events: all; cursor: crosshair; }
-.fleche-bout.ancre { fill: var(--brand-indigo); }
+.fleche-bout { fill: var(--bg-canvas); stroke: var(--encre); stroke-width: 2px; pointer-events: all; cursor: crosshair; }
+.fleche-bout.ancre { fill: var(--encre); }
 
 .cadre { position: relative; width: 100%; height: 100%; }
 .cadre-bord { position: absolute; inset: 0; border: 1.5px solid var(--cadre-bord); border-radius: var(--radius-card); background: var(--cadre-fond); pointer-events: none;
@@ -52,8 +52,8 @@
   clip-path: polygon(evenodd, 0 0, 100% 0, 100% 100%, 0 100%, 0 0, 12px 12px, 12px calc(100% - 12px), calc(100% - 12px) calc(100% - 12px), calc(100% - 12px) 12px, 12px 12px); }
 .cadre-titre { position: absolute; left: 0; bottom: calc(100% + 8px); max-width: 100%; height: 28px; padding: 0 8px; border-radius: 6px; display: inline-flex; align-items: center;
   font-size: 15px; font-weight: 500; color: var(--text-secondary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; pointer-events: auto; cursor: grab; }
-.react-flow__node-cadre.selected .cadre-titre, .cadre.en-focus .cadre-titre { color: var(--on-brand); background: var(--brand-indigo); }
-.react-flow__node-cadre.selected .cadre-bord, .cadre.en-focus .cadre-bord { border-color: var(--brand-indigo); }
+.react-flow__node-cadre.selected .cadre-titre, .cadre.en-focus .cadre-titre { color: var(--sur-encre); background: var(--encre); }
+.react-flow__node-cadre.selected .cadre-bord, .cadre.en-focus .cadre-bord { border-color: var(--encre); }
 .react-flow__node.a-effacer { opacity: 0.25; }
 .react-flow__node.estompe { opacity: 0.14; pointer-events: none !important; transition: opacity var(--dur-panel) var(--ease-standard); }
 .react-flow__edge.estompe { opacity: 0.12; }
@@ -61,8 +61,8 @@
 /* --- niveau de détail : sous 12 % de zoom, une carte n'est plus qu'un bloc ; seule la mission (l'article de une)
    et la couleur que tu as choisie pour une carte ressortent -------------------------------------------------- */
 .carte.carte-bloc { box-shadow: none; border-width: 0; background: var(--border-strong); border-radius: 24px; }
-.carte.carte-bloc.c-note { background: var(--note-border); }
-.carte.carte-bloc.c-mission { background: var(--brand-indigo); }
+.carte.carte-bloc.c-note { background: var(--border-card); }
+.carte.carte-bloc.c-mission { background: var(--encre); }
 .carte.carte-bloc.accent { background: var(--accent-carte); }
 
 /* --- hors du cadre de la carte : états dessus, effets des relations et ligne de crédit dessous -----------------
@@ -88,10 +88,10 @@
 .relations-carte { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; justify-items: start; max-width: 100%; }
 .relations-carte li { max-width: 100%; }
 .relations-carte button { display: inline-flex; align-items: center; gap: 8px; max-width: 100%; height: 28px; padding: 0 8px; border-radius: 6px; border: 1px solid var(--border-card);
-  background: var(--surface-status); color: var(--text-secondary); font: 400 15px/20px var(--font-sans); cursor: pointer; white-space: nowrap;
+  background: var(--surface-card); color: var(--text-secondary); font: 400 15px/20px var(--font-sans); cursor: pointer; white-space: nowrap;
   transition: background var(--dur-hover) var(--ease-standard), border-color var(--dur-hover) var(--ease-standard), color var(--dur-hover) var(--ease-standard); }
 .relations-carte button:hover { background: var(--surface-hover); color: var(--text-primary); border-color: var(--border-strong); }
-.relations-carte button:focus-visible { outline: 2px solid var(--brand-indigo-soft); outline-offset: 1px; }
+.relations-carte button:focus-visible { outline: 2px solid var(--focus); outline-offset: 1px; }
 .relations-carte .verbe { font-weight: 500; flex: none; }
 .relations-carte .cible { color: var(--text-primary); overflow: hidden; text-overflow: ellipsis; min-width: 0; }
 .relations-carte .precision { color: var(--text-secondary); flex: none; font: 400 15px/20px var(--font-mono); }
@@ -101,7 +101,7 @@
 .relations-carte .bloquee .verbe, .relations-carte .bloquee svg { color: var(--text-danger); }
 .relations-carte .alimentee .verbe, .relations-carte .alimentee svg, .relations-carte .libere .verbe, .relations-carte .libere svg { color: var(--text-success); }
 .relations-carte .citee .verbe, .relations-carte .citee svg { color: var(--edge-inspire); }
-.relations-carte .debloque .verbe, .relations-carte .debloque svg, .relations-carte .attend .verbe, .relations-carte .attend svg { color: var(--text-p2); }
+.relations-carte .debloque .verbe, .relations-carte .debloque svg, .relations-carte .attend .verbe, .relations-carte .attend svg { color: var(--text-warning); }
 .relations-carte .plus { color: var(--text-secondary); border-style: dashed; }
 .relations-carte .plus svg { transition: transform var(--dur-hover) var(--ease-standard); }
 .relations-carte .plus svg.retourne { transform: rotate(180deg); }
@@ -109,7 +109,7 @@
 .sous-carte.repliee { top: auto; bottom: 0; left: auto; right: 12px; justify-items: end; }
 .sous-carte.repliee .relations-carte .plus { height: 24px; border-style: solid; border-bottom: 0; border-radius: 6px 6px 0 0; background: var(--surface-card-raised); }
 /* lignes dépliées à ta demande : un menu, au-dessus du reste, que Échap ou un clic ailleurs referme */
-.sous-carte.depliee { z-index: 20; padding: 4px; margin: -4px 0 0 -4px; border-radius: var(--radius-sm); border: 1px solid var(--border-strong); background: var(--surface-menu); box-shadow: var(--shadow-lift); max-width: none; }
+.sous-carte.depliee { z-index: 20; padding: 4px; margin: -4px 0 0 -4px; border-radius: var(--radius-sm); border: 1px solid var(--border-strong); background: var(--surface-card-raised); box-shadow: var(--shadow-lift); max-width: none; }
 .sous-carte.depliee .relations-carte button { border-color: transparent; background: none; }
 .sous-carte.depliee .relations-carte button:hover { background: var(--surface-hover); }
 .react-flow__node:has(.sous-carte.depliee) { z-index: 1000 !important; }
@@ -121,7 +121,7 @@
 
 /* --- barre des outils (modes) : l'icône au centre de sa case, la lettre du raccourci dessous, en mono ------------ */
 .barre-modes { position: absolute; top: 12px; left: 0; right: 0; margin: 0 auto; width: fit-content; z-index: 8; display: flex; align-items: center; gap: 2px; padding: 4px;
-  border-radius: var(--radius-card); border: 1px solid var(--border-card); background: var(--surface-toolbar); box-shadow: var(--shadow-lift); max-width: calc(100% - 208px); }
+  border-radius: var(--radius-card); border: 1px solid var(--border-card); background: var(--surface-card); box-shadow: var(--shadow-lift); max-width: calc(100% - 208px); }
 .barre-modes .groupe-mode { display: inline-flex; align-items: center; gap: 2px; flex: none; }
 .barre-modes .sep, .barre-flottante .sep { width: 1px; height: 20px; background: var(--border-strong); margin: 0 4px; flex: none; }
 .barre-modes .mode { width: 36px; height: 44px; padding: 0; border: 0; border-radius: var(--radius-sm); background: none; color: var(--text-secondary); cursor: pointer; flex: none;
@@ -130,19 +130,20 @@
 .barre-modes .mode:hover:not([aria-disabled="true"]) { background: var(--surface-hover); color: var(--text-primary); }
 .barre-modes .mode:active:not([aria-disabled="true"]) { transform: scale(0.97); }
 .barre-modes .mode[aria-pressed="true"] { background: var(--surface-more); color: var(--text-primary); box-shadow: inset 0 1px 0 var(--brand-highlight); }
-.barre-modes .mode kbd { font: 400 12px/12px var(--font-mono); color: var(--text-muted); }
+/* la lettre du raccourci reste en 600 : seule graisse forte hors mot-symbole, exigée pour sa lisibilité à 12 px (tests/e2e/intelligence.spec.ts) */
+.barre-modes .mode kbd { font: var(--fw-strong) 12px/12px var(--font-mono); color: var(--text-muted); }
 .barre-modes .mode:hover kbd, .barre-modes .mode[aria-pressed="true"] kbd { color: var(--text-secondary); }
 .barre-modes button:focus-visible, .barre-flottante button:focus-visible, .menu-contextuel button:focus-visible, .barre-presentation button:focus-visible, .bandeau-mode button:focus-visible {
-  outline: 2px solid var(--brand-indigo-soft); outline-offset: 1px; }
+  outline: 2px solid var(--focus); outline-offset: 1px; }
 .style-trace { position: relative; flex: none; }
 .bouton-style { width: 36px; height: 44px; border: 0; border-radius: var(--radius-sm); background: none; cursor: pointer; display: grid; place-items: center; transition: background var(--dur-hover) var(--ease-standard); }
 .bouton-style:hover { background: var(--surface-hover); }
 .bouton-style .pastille { pointer-events: none; }
-.popover-style { position: absolute; top: calc(100% + 12px); left: 50%; z-index: 60; transform: translateX(-50%); padding: 12px; border-radius: var(--radius-card); border: 1px solid var(--border-strong); background: var(--surface-menu); box-shadow: var(--shadow-lift); display: grid; gap: 12px; }
+.popover-style { position: absolute; top: calc(100% + 12px); left: 50%; z-index: 60; transform: translateX(-50%); padding: 12px; border-radius: var(--radius-card); border: 1px solid var(--border-strong); background: var(--surface-card-raised); box-shadow: var(--shadow-lift); display: grid; gap: 12px; }
 .popover-style .rangee { display: flex; gap: 12px; align-items: center; }
 .choix-epaisseur { width: 36px; height: 28px; border: 1px solid var(--border-card); border-radius: 6px; background: none; cursor: pointer; display: grid; place-items: center; }
 .choix-epaisseur span { display: block; width: 20px; border-radius: var(--radius-pill); background: var(--text-primary); }
-.choix-epaisseur[aria-pressed="true"] { border-color: var(--border-strong); background: var(--surface-pressed); box-shadow: inset 0 1px 0 var(--hover-veil); }
+.choix-epaisseur[aria-pressed="true"] { border-color: var(--border-strong); background: var(--surface-hover); box-shadow: inset 0 1px 0 var(--hover-veil); }
 
 /* --- couche des outils, aperçus, guides, éditeur de texte --------------------------------------------- */
 .couche-outils { position: absolute; inset: 0; z-index: 6; touch-action: none; cursor: crosshair; user-select: none; -webkit-user-select: none; }
@@ -153,27 +154,27 @@
 .apercu-trace { fill: var(--teinte); stroke: none; }
 .apercu-trace.teinte-neutre { fill: var(--encre); }
 .apercu-trace.surligneur, .apercu-trace.surligneur.teinte-neutre { fill: var(--adhesif); opacity: 0.5; }
-.apercu-trace.lasso { fill: color-mix(in srgb, var(--lasso) 10%, transparent); stroke: var(--lasso); stroke-width: 1.5px; stroke-dasharray: 6 5; vector-effect: non-scaling-stroke; }
+.apercu-trace.lasso { fill: color-mix(in srgb, var(--text-secondary) 10%, transparent); stroke: var(--text-secondary); stroke-width: 1.5px; stroke-dasharray: 6 5; vector-effect: non-scaling-stroke; }
 .apercu-forme { fill: color-mix(in srgb, var(--teinte) 14%, transparent); stroke: var(--teinte); stroke-width: 2px; vector-effect: non-scaling-stroke; }
-.apercu-forme.cadre { fill: var(--cadre-fond); stroke: var(--brand-indigo); stroke-dasharray: 8 6; }
+.apercu-forme.cadre { fill: var(--cadre-fond); stroke: var(--encre); stroke-dasharray: 8 6; }
 .apercu-forme.fleche { fill: none; stroke-linecap: round; stroke-width: 3px; }
 .guides { z-index: 6; }
-.guides line { stroke: var(--guide); stroke-width: 1px; shape-rendering: crispEdges; }
+.guides line { stroke: var(--accent); stroke-width: 1px; shape-rendering: crispEdges; }
 .canevas.outil-main .react-flow__pane, .canevas.outil-main .react-flow__node { cursor: grab; }
 .canevas.en-liaison .react-flow__node { cursor: alias; }
-.editeur-texte { position: absolute; z-index: 9; margin: 0; border: 0; outline: 2px solid var(--brand-indigo); outline-offset: 2px; border-radius: 3px; resize: none; overflow: hidden;
-  font-family: var(--font-sans); line-height: 1.3; background: transparent; color: var(--encre); caret-color: var(--brand-indigo); box-sizing: border-box; }
+.editeur-texte { position: absolute; z-index: 9; margin: 0; border: 0; outline: 2px solid var(--encre); outline-offset: 2px; border-radius: 3px; resize: none; overflow: hidden;
+  font-family: var(--font-sans); line-height: 1.3; background: transparent; color: var(--encre); caret-color: var(--encre); box-sizing: border-box; }
 .editeur-texte.ed-adhesif { background: var(--adhesif); color: var(--sur-adhesif); font-weight: 500; caret-color: var(--sur-adhesif); }
 .editeur-texte.ed-texte { line-height: 1.25; font-weight: 500; color: var(--teinte); white-space: pre; }
 .editeur-texte.ed-texte.teinte-neutre { color: var(--encre); }
 .editeur-texte.ed-forme { text-align: center; font-weight: 500; align-content: center; }
-.editeur-texte.ed-cadre, .editeur-texte.ed-fleche { font-weight: 500; background: var(--surface-menu); padding: 0 8px; white-space: nowrap; line-height: 1.9; }
+.editeur-texte.ed-cadre, .editeur-texte.ed-fleche { font-weight: 500; background: var(--surface-card-raised); padding: 0 8px; white-space: nowrap; line-height: 1.9; }
 .editeur-texte.ed-fleche { text-align: center; }
 
 /* --- barre flottante de la sélection ------------------------------------------------------------------ */
 .selection.barre-flottante { top: 0; left: 0; transform: translateX(-50%); max-width: calc(100% - 16px); overflow-x: auto; scrollbar-width: none; animation: flottante-entree var(--dur-appear) var(--ease-standard); }
 .barre-flottante .groupe-flottant { display: inline-flex; align-items: center; gap: 2px; flex: none; }
-.barre-flottante button[aria-pressed="true"] { color: var(--text-primary); background: var(--surface-pressed); box-shadow: inset 0 1px 0 var(--hover-veil); }
+.barre-flottante button[aria-pressed="true"] { color: var(--text-primary); background: var(--surface-hover); box-shadow: inset 0 1px 0 var(--hover-veil); }
 .barre-flottante button.danger:hover { color: var(--text-danger); }
 .barre-flottante .pastille { height: 16px; min-width: 16px; padding: 0; margin: 0 4px; border-radius: 50%; background: var(--teinte); }
 .barre-flottante .pastille:hover { background: var(--teinte); }
@@ -181,7 +182,7 @@
 
 /* --- menu contextuel : rayon 12, marge 4, rangées de 32 au rayon 8 ------------------------------------------- */
 .menu-contextuel { position: fixed; z-index: 90; min-width: 248px; max-height: min(560px, calc(100vh - 16px)); overflow-y: auto; padding: 4px; border-radius: var(--radius-card);
-  border: 1px solid var(--border-strong); background: var(--surface-menu); box-shadow: var(--shadow-lift); scrollbar-width: thin; }
+  border: 1px solid var(--border-strong); background: var(--surface-card-raised); box-shadow: var(--shadow-lift); scrollbar-width: thin; }
 .menu-contextuel button { width: 100%; display: flex; align-items: center; gap: 8px; height: 32px; padding: 0 8px; border: 0; border-radius: var(--radius-sm); background: none; color: var(--text-primary); font-size: 13px; cursor: pointer; text-align: left;
   transition: background var(--dur-hover) var(--ease-standard); }
 .menu-contextuel button:hover, .menu-contextuel button:focus-visible { background: var(--surface-hover); }
@@ -194,7 +195,7 @@
 .menu-contextuel button.avec-aide .menu-libelle { white-space: normal; text-align: left; }
 .menu-contextuel button.avec-aide .menu-icone { margin-top: 2px; }
 .menu-aide { display: block; margin-top: 2px; font-size: 12px; line-height: 16px; color: var(--text-secondary); font-weight: 400; }
-.menu-aide.raison { color: var(--text-p2); }
+.menu-aide.raison { color: var(--text-warning); }
 
 /* --- commande indisponible : grisée, toujours focalisable, et sa raison est écrite ou en info-bulle -------- */
 button[aria-disabled="true"] { cursor: not-allowed; }
@@ -207,11 +208,11 @@ button[aria-disabled="true"] { cursor: not-allowed; }
 .menu-deroulant > button.avec-raison { height: auto; padding: 8px; align-items: flex-start; color: var(--text-secondary); max-width: 300px; }
 .menu-deroulant > button.avec-raison:hover { background: none; }
 .menu-deroulant > button.avec-raison svg { opacity: 0.5; flex: none; margin-top: 2px; }
-.menu-deroulant > button.avec-raison small { display: block; margin-top: 2px; font-size: 15px; line-height: 20px; color: var(--text-p2); white-space: normal; }
+.menu-deroulant > button.avec-raison small { display: block; margin-top: 2px; font-size: 15px; line-height: 20px; color: var(--text-warning); white-space: normal; }
 .palette-ligne.indisponible { height: auto; min-height: 36px; padding-top: 8px; padding-bottom: 8px; align-items: flex-start; cursor: not-allowed; color: var(--text-secondary); }
 .palette-ligne.indisponible .palette-icone { opacity: 0.5; }
 .palette-ligne.indisponible .palette-libelle { white-space: normal; }
-.palette-raison { display: block; margin-top: 2px; font-size: 12px; line-height: 16px; color: var(--text-p2); }
+.palette-raison { display: block; margin-top: 2px; font-size: 12px; line-height: 16px; color: var(--text-warning); }
 .menu-separateur { height: 1px; margin: 4px 8px; background: var(--border-subtle); }
 /* touches de clavier : même dessin partout (mono 12, rayon 4, filet) */
 kbd { font: 400 12px/16px var(--font-mono); color: var(--text-secondary); }
@@ -219,13 +220,13 @@ kbd { font: 400 12px/16px var(--font-mono); color: var(--text-secondary); }
 
 /* --- palette de commandes : rayon 16, marge 8, rangées de 36 au rayon 8 ---------------------------------------- */
 .palette-fond { position: fixed; inset: 0; z-index: 120; background: var(--scrim); display: grid; justify-items: center; align-content: start; padding-top: min(16vh, 144px); }
-.palette { width: min(640px, calc(100vw - 32px)); border-radius: var(--radius-panel); border: 1px solid var(--border-strong); background: var(--dialog-bg-1);
+.palette { width: min(640px, calc(100vw - 32px)); border-radius: var(--radius-panel); border: 1px solid var(--border-strong); background: var(--surface-card-raised);
   box-shadow: var(--shadow-lift); overflow: hidden; animation: palette-entree var(--dur-appear) var(--ease-standard); }
 @keyframes palette-entree { from { opacity: 0; transform: translateY(-8px); } to { opacity: 1; transform: none; } }
 .palette-saisie { display: flex; align-items: center; gap: 12px; padding: 0 16px 0 20px; height: 56px; border-bottom: 1px solid var(--border-subtle); color: var(--text-muted); }
 .palette-saisie input { flex: 1; min-width: 0; height: 100%; border: 0; outline: none; background: none; color: var(--text-primary); font: 400 16px var(--font-sans); }
 .palette-saisie input::placeholder { color: var(--text-muted); }
-.palette-liste { max-height: min(420px, 52vh); overflow-y: auto; padding: 8px; scrollbar-width: thin; scrollbar-color: var(--border-pressed) transparent; }
+.palette-liste { max-height: min(420px, 52vh); overflow-y: auto; padding: 8px; scrollbar-width: thin; scrollbar-color: var(--border-strong) transparent; }
 .palette-groupe { padding: 16px 12px 4px; font-size: 12px; line-height: 16px; font-weight: 400; color: var(--text-muted); }
 .palette-liste > div:first-child .palette-groupe { padding-top: 4px; }
 .palette-ligne { display: flex; align-items: center; gap: 12px; height: 36px; padding: 0 12px; border-radius: var(--radius-sm); font-size: 14px; color: var(--text-primary); cursor: pointer; }
@@ -251,7 +252,7 @@ kbd { font: 400 12px/16px var(--font-mono); color: var(--text-secondary); }
 .app.presentation .react-flow__node.estompe, .app.presentation .react-flow__edge.estompe { opacity: 0; }
 .app.presentation .cadre-bord { border-color: transparent; background: none; }
 .bandeau-mode, .barre-presentation { position: absolute; left: 50%; transform: translateX(-50%); z-index: 12; display: flex; align-items: center; gap: 8px; padding: 4px 4px 4px 12px;
-  border-radius: var(--radius-card); border: 1px solid var(--border-strong); background: var(--surface-menu); box-shadow: var(--shadow-lift); font-size: 13px; color: var(--text-secondary); white-space: nowrap; max-width: calc(100% - 32px); }
+  border-radius: var(--radius-card); border: 1px solid var(--border-strong); background: var(--surface-card-raised); box-shadow: var(--shadow-lift); font-size: 13px; color: var(--text-secondary); white-space: nowrap; max-width: calc(100% - 32px); }
 .bandeau-mode { top: 76px; }
 .barre-presentation { bottom: 20px; padding: 4px; }
 .bandeau-mode button, .barre-presentation button { height: 32px; min-width: 32px; padding: 0 8px; border: 0; border-radius: var(--radius-sm); background: none; color: var(--text-secondary); cursor: pointer; display: inline-flex; align-items: center; justify-content: center; gap: 8px; font-size: 13px;

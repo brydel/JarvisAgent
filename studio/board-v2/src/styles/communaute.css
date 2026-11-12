@@ -38,7 +38,7 @@
 
 .reseau-perimetre { font-size: 13px; color: var(--text-secondary); }
 .reseau-perimetre label { display: flex; align-items: center; gap: 8px; min-height: 32px; padding: 0 8px; cursor: pointer; }
-.reseau-perimetre input { width: 16px; height: 16px; margin: 0; flex: none; accent-color: var(--brand-indigo); }
+.reseau-perimetre input { width: 16px; height: 16px; margin: 0; flex: none; accent-color: var(--encre); }
 .reseau-perimetre p { margin: 0; padding: 0 8px; font: 400 12px/16px var(--font-mono); color: var(--text-muted); overflow-wrap: anywhere; }
 
 /* colonne des fils */
@@ -107,7 +107,6 @@
 .reseau-conversation.en-creation .reseau-composition { max-height: none; flex: 1; align-content: start; border-top: 0; }
 
 /* messages de service */
-.reseau-dialog .bouton.primaire:disabled { background: var(--surface-hover); border-color: var(--border-card); color: var(--text-muted); opacity: 1; }
 .reseau-erreur { margin: 8px; padding: 8px 12px; border-radius: var(--radius-sm); background: var(--danger-bg); color: var(--text-danger-soft); font-size: 13px; line-height: 20px; }
 .reseau-composition .reseau-erreur { margin: 0; }
 .reseau-attente { display: flex; align-items: center; gap: 8px; margin: 0; padding: 16px 12px; color: var(--text-secondary); font-size: 13px; }

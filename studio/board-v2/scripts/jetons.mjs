@@ -47,7 +47,8 @@ export function cssDesThemes(jetons) {
   const bloc = (selecteur, theme, schema) => `${selecteur} {\n  color-scheme: ${schema};\n${lignes(valeurs(jetons.themes[theme]))}\n}\n`;
   const renvois = (titre, table) => `  /* ${titre} */\n${lignes(Object.entries(table).map(([nom, cible]) => [nom, `var(--${cible})`]))}`;
   return ENTETE + bloc(":root", "nuit", "dark") + "\n" + bloc(":root[data-theme=\"jour\"]", "jour", "light")
-    + `\n:root {\n${renvois("rôles de la direction", jetons.synonymes.roles)}\n${renvois("anciens noms : à remplacer par leur cible quand une feuille est retouchée", jetons.synonymes.herites)}\n}\n`;
+    + `\n:root {\n${renvois("rôles de la direction", jetons.synonymes.roles)}`
+    + (Object.keys(jetons.synonymes.herites).length ? `\n${renvois("anciens noms : à remplacer par leur cible quand une feuille est retouchée", jetons.synonymes.herites)}` : "") + "\n}\n";
 }
 
 /** Feuille des jetons fixes : typographie, espacement, rayons, icônes, mouvement, gabarit, et leurs remplacements. */

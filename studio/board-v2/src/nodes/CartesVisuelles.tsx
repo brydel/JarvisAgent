@@ -155,7 +155,7 @@ export const DossierNode = memo(function DossierNode({ data, selected }: P) {
       <div className="haut-dossier">
         <svg className="icone-dossier" viewBox="0 0 42 34" aria-hidden="true">
           <path d="M2 6a4 4 0 0 1 4-4h10l4 4h16a4 4 0 0 1 4 4v18a4 4 0 0 1-4 4H6a4 4 0 0 1-4-4Z" style={{ fill: "var(--folder)" }} />
-          <path d="M2 12h38v16a4 4 0 0 1-4 4H6a4 4 0 0 1-4-4Z" style={{ fill: "color-mix(in srgb, var(--folder) 82%, var(--on-brand))" }} />
+          <path d="M2 12h38v16a4 4 0 0 1-4 4H6a4 4 0 0 1-4-4Z" style={{ fill: "color-mix(in srgb, var(--folder) 82%, var(--sur-encre))" }} />
         </svg>
         <div style={{ minWidth: 0 }}>
           <div className="titre-carte">{o.meta.titre || "Dossier"}</div>

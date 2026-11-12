@@ -1,35 +1,46 @@
-/* Dialogue « Lancer une mission » — réglages de la passe de finition, chargés par DialogueMission.tsx.
-   Les sélecteurs sont préfixés par « dialog.dialogue » pour primer sur le bloc d'origine de app.css sans y toucher
-   (une fois les branches fusionnées, ce bloc d'origine peut être retiré de app.css). */
-dialog.dialogue { max-width: min(624px, calc(100vw - 32px)); }
-dialog.dialogue .dialogue-carte { border-radius: var(--radius-panel); border-color: var(--border-card); background: var(--surface-card); }
-dialog.dialogue .dialogue-tete { grid-template-columns: minmax(0, 1fr) auto; gap: 12px; padding: 20px 16px 0 24px; }
-dialog.dialogue .dialogue-tete h2 { font-size: 18px; line-height: 24px; font-weight: 500; }
-dialog.dialogue .dialogue-tete p { margin: 4px 0 0; font-size: 13px; line-height: 20px; }
-dialog.dialogue .dialogue-corps { gap: 16px; padding: 20px 24px 0; }
-dialog.dialogue .champ-groupe { gap: 8px; }
-dialog.dialogue .champ { padding: 0 12px; border-radius: var(--radius-sm); background: var(--surface-field); font-size: 14px; transition: border-color var(--dur-hover) var(--ease-standard); }
-dialog.dialogue .champ:focus { border-color: var(--text-secondary); }
-dialog.dialogue .champ::placeholder { color: var(--text-muted); }
-dialog.dialogue .champ.zone { min-height: 112px; padding: 8px 12px; line-height: 20px; }
-dialog.dialogue .champ-pied { display: flex; justify-content: space-between; align-items: baseline; gap: 16px; }
-dialog.dialogue .champ-aide { justify-self: end; font-size: 12px; line-height: 16px; color: var(--text-muted); }
-dialog.dialogue .champ-aide.compte { flex: none; font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
-dialog.dialogue .facultatif { margin-left: 8px; }
-dialog.dialogue .dialogue-ligne { gap: 16px 32px; }
-dialog.dialogue .segments legend { margin-bottom: 8px; }
-dialog.dialogue .segments label { gap: 8px; height: 36px; border-radius: var(--radius-sm); transition: border-color var(--dur-hover) var(--ease-standard), color var(--dur-hover) var(--ease-standard), background var(--dur-hover) var(--ease-standard); }
-dialog.dialogue .dialogue-politique { gap: 12px; padding: 12px; border-radius: var(--radius-sm); line-height: 20px; }
-dialog.dialogue .dialogue-politique svg { margin-top: 2px; }
-dialog.dialogue .dialogue-demo { font: 400 12px/16px var(--font-mono); color: var(--text-muted); }
-dialog.dialogue .dialogue-erreur { border-radius: var(--radius-sm); line-height: 20px; }
-dialog.dialogue .dialogue-pied { gap: 8px; padding: 20px 24px; }
-dialog.dialogue .dialogue-pied .raccourci { display: inline-flex; align-items: center; gap: 4px; }
-dialog.dialogue .dialogue-pied .bouton { height: 36px; padding: 0 16px; gap: 8px; }
-dialog.dialogue .bouton.primaire:disabled { background: var(--surface-hover); border-color: var(--border-card); color: var(--text-muted); opacity: 1; }
+/* Dialogue « Lancer une mission » : une seule définition, chargée par DialogueMission.tsx. */
+.dialogue { padding: 0; border: 0; background: transparent; color: var(--text-primary); max-width: min(624px, calc(100vw - 32px)); width: 100%; overflow: visible; }
+.dialogue::backdrop { background: var(--scrim); }
+@media (prefers-reduced-motion: no-preference) { .dialogue[open]::backdrop { animation: voile var(--dur-panel) var(--ease-standard); } }
+@keyframes voile { from { opacity: 0; } }
+.dialogue-carte { border-radius: var(--radius-panel); border: 1px solid var(--border-card); background: var(--surface-card); box-shadow: var(--shadow-lift); overflow: hidden; }
+.dialogue-tete { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 12px; align-items: start; padding: 20px 16px 0 24px; }
+.dialogue-tete h2 { margin: 0; font-size: 18px; line-height: 24px; font-weight: 500; }
+.dialogue-tete p { margin: 4px 0 0; color: var(--text-secondary); font-size: 13px; line-height: 20px; }
+.dialogue-corps { display: grid; gap: 16px; padding: 20px 24px 0; }
+.champ-groupe { display: grid; gap: 8px; }
+.champ-libelle { font-size: 13px; font-weight: 500; color: var(--text-secondary); padding: 0; }
+.requis { color: var(--danger); }
+.facultatif { margin-left: 8px; font-weight: 400; color: var(--text-muted); }
+.champ-pied { display: flex; justify-content: space-between; align-items: baseline; gap: 16px; }
+.champ-aide { justify-self: end; font-size: 12px; line-height: 16px; color: var(--text-muted); }
+.champ-aide.compte { flex: none; font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
+.dialogue .champ { padding: 0 12px; border-radius: var(--radius-sm); background: var(--surface-field); font-size: 14px; transition: border-color var(--dur-hover) var(--ease-standard); }
+.dialogue .champ:focus { border-color: var(--text-secondary); }
+.dialogue .champ::placeholder { color: var(--text-muted); }
+.dialogue .champ.zone { min-height: 112px; padding: 8px 12px; line-height: 20px; }
+.dialogue-ligne { display: flex; flex-wrap: wrap; gap: 16px 32px; }
+.segments { border: 0; margin: 0; padding: 0; display: flex; gap: 4px; flex-wrap: wrap; }
+.segments legend { margin-bottom: 8px; }
+.segments label { position: relative; display: inline-flex; align-items: center; gap: 8px; height: 36px; padding: 0 12px; border-radius: var(--radius-sm);
+  border: 1px solid var(--border-card); background: var(--surface-inset); color: var(--text-secondary); font-size: 13px; cursor: pointer;
+  transition: border-color var(--dur-hover) var(--ease-standard), color var(--dur-hover) var(--ease-standard), background var(--dur-hover) var(--ease-standard); }
+.segments label:hover { color: var(--text-primary); }
+.segments label.actif { color: var(--text-primary); border-color: var(--border-strong); background: var(--surface-hover); box-shadow: inset 0 1px 0 var(--hover-veil); }
+.segments input { position: absolute; opacity: 0; inset: 0; margin: 0; cursor: pointer; }
+.segments label:focus-within { outline: 2px solid var(--focus); outline-offset: 2px; }
+.dialogue-politique { display: flex; gap: 12px; align-items: flex-start; margin: 0; padding: 12px; border-radius: var(--radius-sm);
+  background: var(--surface-inset); border: 1px solid var(--border-subtle); color: var(--text-secondary); font-size: 13px; line-height: 20px; }
+.dialogue-politique svg { color: var(--success); flex: none; margin-top: 2px; }
+.dialogue-politique b { color: var(--text-primary); font-weight: 500; }
+.dialogue-demo { margin: 0; font: 400 12px/16px var(--font-mono); color: var(--text-muted); }
+.dialogue-erreur { margin: 0; padding: 8px 12px; border-radius: var(--radius-sm); background: var(--danger-bg); color: var(--text-danger-soft); font-size: 13px; line-height: 20px; }
+.dialogue-pied { display: flex; align-items: center; justify-content: flex-end; gap: 8px; padding: 20px 24px; }
+.dialogue-pied .raccourci { display: inline-flex; align-items: center; gap: 4px; margin-right: auto; font-size: 12px; color: var(--text-muted); }
+.dialogue-pied .bouton { height: 36px; padding: 0 16px; gap: 8px; }
 @media (max-width: 600px) {
-  dialog.dialogue .dialogue-tete { padding: 16px 8px 0 16px; }
-  dialog.dialogue .dialogue-corps { padding: 16px 16px 0; }
-  dialog.dialogue .dialogue-pied { padding: 16px; }
-  dialog.dialogue .dialogue-pied .raccourci { display: none; }
+  .dialogue-tete { padding: 16px 8px 0 16px; }
+  .dialogue-corps { padding: 16px 16px 0; }
+  .dialogue-pied { padding: 16px; }
+  .dialogue-pied .raccourci { display: none; }
 }

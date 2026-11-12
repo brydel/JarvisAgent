@@ -120,7 +120,7 @@ Les cartes du Board sont dessinées en unités du canevas (0,8 px écran au zoom
 Règles :
 
 - Rien sous 12 px à l'écran (11 px au plus petit en mobile) ; sur le canevas, rien sous 15 unités.
-- Deux graisses : `--fw-regular` (400) et `--fw-medium` (500). `--fw-strong` (600) pour le mot-symbole seul. La hiérarchie vient de la taille et du rôle de texte.
+- Deux graisses : `--fw-regular` (400) et `--fw-medium` (500). `--fw-strong` (600) pour le mot-symbole et la lettre de raccourci de la barre d'outils, rien d'autre. La hiérarchie vient de la taille et du rôle de texte.
 - Casse de phrase partout, pas de capitales espacées, pas d'italique d'emphase.
 - Interlettrage 0 ; seul le titre d'accueil prend `--tracking-display`.
 - Chiffres : `font-variant-numeric: tabular-nums`, un seul format par écran.
@@ -204,9 +204,9 @@ Règles :
 
 Un anneau ouvert et son point, à plat, d'une seule couleur : l'encre du thème. Le composant `src/components/Marque.tsx` suit `currentColor` ; `public/jarvis-mark.svg` (favicon) suit le thème du système. Le mot-symbole « Jarvis Studio » est en Instrument Sans, 16 px, graisse 600. Ni dégradé, ni lueur, ni tuile.
 
-## Synonymes hérités
+## Synonymes
 
-`tokens.json` garde sous `synonymes.herites` les anciens noms (`brand-indigo`, `text-accent-soft`, `surface-menu`…). Ils ne portent plus de valeur : chacun renvoie à un jeton de la palette ci-dessus (`--brand-indigo: var(--encre)`). Une feuille retouchée remplace l'ancien nom par sa cible ; un synonyme qui n'a plus d'emploi se supprime de `tokens.json`.
+`tokens.json` porte sous `synonymes.roles` les noms d'usage de la direction (`selection`, `focus`, `credit`, `credit-filet`, `statut-neutre`) : chacun renvoie à un jeton de la palette. `synonymes.herites` est vide : les anciens noms (`brand-indigo`, `text-p2`, `surface-menu`…) ont été remplacés par leur cible dans toutes les feuilles à la réunion des zones. Un nom n'y revient que le temps d'une migration.
 
 ## Crédit
 
