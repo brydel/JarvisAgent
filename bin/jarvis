@@ -78,8 +78,10 @@ ${C_CYAN}Agents${C_OFF}
   jarvis stockage etat|migrer|revenir   État en JSON (défaut) ou SQLite, migration vérifiée
   jarvis mission liste|voir|board|executer  Jarvis Next (M1) : missions durables, Board, exécutant local
   jarvis executant liste                Exécutants déclarés et bail d'orchestrateur (un seul démon)
+  jarvis verdict <projet> <ISSUE> [--pr N] [--stdin] [résumé]
+                                        Verdict d'une contre-relecture, lu sur la PR du relecteur
   jarvis verdict <projet> <ISSUE> pret|corrections [note]
-                                        Verdict d'une contre-relecture
+                                        Le même, saisi à la main (relecteur sans verdict sur la PR)
   jarvis board · jarvis status          Tableau de bord workmux · tâches du projet courant
   jarvis board voir|deposer|lier|retirer|restaurer …  Le Board partagé du Studio (un par projet)
 

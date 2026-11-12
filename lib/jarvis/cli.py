@@ -1633,8 +1633,17 @@ def cmd_eval(a) -> int:
                 print("Aucune évaluation réelle lancée (jarvis eval lancer <rôle>/<cas> --agent claude --confirmer).")
             for r in res:
                 quand = time.strftime("%d/%m %H:%M", time.localtime(r["ts"]))
+                cr = r.get("compte_rendu")  # absent des résultats enregistrés avant ce champ
+                if not isinstance(cr, dict):
+                    rendu = "compte rendu non analysé"
+                elif cr.get("conforme"):
+                    rendu = "compte rendu conforme"
+                else:
+                    n = len(cr.get("anomalies") or [])
+                    rendu = ("compte rendu absent" if cr.get("type") == "inconnu" else
+                             f"compte rendu non conforme ({n} anomalie{'s' if n > 1 else ''})")
                 print(f"{quand} {'✔' if r['ok'] else '✘'} {r['cas']:<34} {r['agent']}/{r['modele']:<12} brief {r['brief']} "
-                      f"· {r['duree_s']:.0f} s")
+                      f"· {r['duree_s']:.0f} s · {rendu}")
             return 0
         if a.action == "promptfoo":
             print(evaluation.promptfoo_config())

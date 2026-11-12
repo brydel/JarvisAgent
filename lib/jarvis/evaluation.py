@@ -204,12 +204,17 @@ def structure_brief(corps: str) -> list[str]:
 def analyser_sortie(sortie: str) -> dict:
     """Compte rendu rendu par un agent évalué : {"type", "conforme", "anomalies"}.
 
-    La sortie d'un CLI peut recopier le prompt, donc le gabarit : on relit le DERNIER bloc « ✅ TERMINÉ », et un
-    bloc qui porte encore les « <…> » du gabarit ne compte pas comme un compte rendu."""
+    La sortie d'un CLI peut recopier le prompt, donc le gabarit : on relit le DERNIER bloc « ✅ TERMINÉ » (ou, sans
+    lui, le dernier bloc « VERDICT : … » d'un relecteur), et un bloc qui porte encore les « <…> » du gabarit ne
+    compte pas comme un compte rendu."""
     lignes = str(sortie or "").splitlines()
     debuts = [i for i, ln in enumerate(lignes) if "✅" in ln and re.search(r"TERMIN[ÉE]", ln, re.I)]
+    marque = "<ton rôle>"
+    if not debuts:
+        debuts = [i for i, ln in enumerate(lignes) if re.match(r"\W*VERDICT\s*:", ln, re.I)]
+        marque = "<amélioration non bloquante>"
     texte = "\n".join(lignes[debuts[-1]:]) if debuts else str(sortie or "")
-    if debuts and "<ton rôle>" in texte:
+    if debuts and marque in texte:
         return {"type": "inconnu", "conforme": False, "anomalies": ["seul le gabarit du prompt a été recopié"]}
     a = comptes_rendus.analyser(texte)
     return {"type": a["type"], "conforme": bool(a["conforme"]), "anomalies": list(a["anomalies"])[:8]}

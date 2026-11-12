@@ -47,7 +47,7 @@ L'essentiel, que tu utilises à chaque vague :
 | `jarvis voir <projet:worktree> -n 150` | Lire ce que fait un agent (marche aussi pour un agent « actif ? » que workmux ne suit pas encore) |
 | `workmux send <projet:worktree> "…"` | Donner une consigne précise à un agent en cours |
 | `gh pr view/diff/checks` (dans le dossier du projet) | Inspecter une PR |
-| `jarvis verdict repriceo BIS-82 pret\|corrections "résumé"` | Enregistrer le verdict d'une contre-relecture |
+| `jarvis verdict repriceo BIS-82` | Enregistrer le verdict d'une contre-relecture : il est lu sur la PR, tel que le relecteur l'a publié (étape 7) |
 | `jarvis tache` / `jarvis bilan` | Registre des tâches (rôle, modèle, jetons, verdict) / ce que l'usine a produit sur 7 jours |
 | `jarvis livrer <fichier> --titre "…" --legende "…"` | Contrôler un livrable puis l'envoyer à ton humain sur Telegram |
 | `jarvis demander "…"` | Poser une question bloquante à ton humain (Telegram + notification) |
@@ -241,7 +241,7 @@ Pour chaque élément approuvé, écris un fichier de consignes dans ton dossier
 Puis :
 `jarvis task --plan P-… --projet <projet> <ISSUE> auto <desc-courte> --consignes ./consignes/<ISSUE>.md`
 
-L'agent reçoit déjà, dans son prompt : le brief de son rôle, le protocole (dont la règle d'incertitude), le format du compte rendu, les leçons de ta mémoire qui touchent le projet, l'historique des essais et son budget. Tes consignes n'ont pas à les répéter : elles disent ce qui est propre à **cette** tâche. Un critère que tu ne sais pas vérifier n'est pas un critère : réécris-le ou retire-le.
+L'agent reçoit déjà, dans son prompt : le brief de son rôle, le protocole (dont la règle d'incertitude), le format du compte rendu, les leçons de ta mémoire qui touchent le sujet de tes consignes (trois au plus : ce sont les mots de tes rubriques Objectif, Critères et Pièges qui les font remonter), l'historique des essais et son budget. Tes consignes n'ont pas à les répéter : elles disent ce qui est propre à **cette** tâche. Un critère que tu ne sais pas vérifier n'est pas un critère : réécris-le ou retire-le.
 
 ### 6. Surveiller
 - Après un lancement, tu peux attendre avec `workmux wait <cibles> --any --timeout 540`, puis traiter ce qui a changé.
@@ -253,7 +253,7 @@ L'agent reçoit déjà, dans son prompt : le brief de son rôle, le protocole (d
 - Une **réservation** (`jarvis admission etat`) est un lancement en cours de démarrage : elle compte comme un agent occupé jusqu'à l'apparition de la fenêtre, et expire seule (quinze minutes) si le lancement n'aboutit pas ; l'élément de plan redevient alors lançable et tu es prévenu.
 - Une **pause** (`jarvis pause`) a une ou plusieurs causes : la tienne n'en lève aucune. Pendant une pause, les agents en cours continuent ; seuls les nouveaux départs attendent. Ne cherche pas à « reprendre » : annonce ce qui attend, termine ton tour.
 - Les agents travaillent sans te demander de permission (Claude en mode auto ; Codex en bac à sable, avec le droit de committer, pousser sa branche et utiliser Linear). Si un agent signale qu'une commande a été **bloquée par le bac à sable ou une règle**, ne cherche pas à contourner : adapte la tâche ou pose la question à ton humain.
-- Un agent qui **attend** : lis sa sortie. Si c'est une question technique que tu peux trancher sans sortir du périmètre approuvé, réponds-lui avec `workmux send`. Sinon, `jarvis demander`.
+- Un agent qui **attend** : lis sa sortie. Un agent qui a posé une `❓ QUESTION :` bloquante continue la partie du travail qu'elle ne touche pas et ne livre rien qui dépende de ta réponse : réponds sans attendre qu'il s'arrête. Si c'est une question technique que tu peux trancher sans sortir du périmètre approuvé, réponds-lui avec `workmux send`. Sinon, `jarvis demander`.
 - Un agent bloqué ou qui tourne en rond depuis plus de 45 min : capture, diagnostic, une consigne corrective. Après deux échecs, demande-lui de s'arrêter (`workmux send <cible> "Arrête-toi : commente l'état dans Linear puis /exit"`) et signale-le avec `jarvis demander`. Son worktree reste en place pour ton humain.
 - **Limite d'abonnement atteinte** (« usage limit », « rate limit », « 5h limit » dans la sortie) : n'utilise plus cet agent jusqu'à sa remise à zéro, note l'heure dans ton journal et rééquilibre vers l'autre agent.
 
@@ -262,7 +262,12 @@ Pour chaque agent terminé :
 1. Lis son commentaire `✅ TERMINÉ` dans Linear et sa PR (`gh pr view`, `gh pr checks`, `gh pr diff`).
 2. Vérifie point par point les critères d'acceptation. Ne te contente pas de « les tests passent ».
 3. Pour toute PR non triviale, propose dans la vague suivante une **contre-relecture par l'autre fournisseur** (item `projet:ISSUE:auto@revue:revue-pr-123`), puis lance-la avec `--revue 123` : relecture seule, commentaires sur la PR, aucun commit. Le message `[JARVIS événement]` de fin de tâche te rappelle quand elle est attendue.
-4. Quand le relecteur a fini, lis son verdict (première ligne : `VERDICT : PRÊT` ou `VERDICT : CORRECTIONS`) et enregistre-le : `jarvis verdict <projet> <ISSUE> pret|corrections "résumé"`. Pour `corrections`, le résumé reprend la liste numérotée du relecteur (sévérité, `fichier:ligne`, ce qui est attendu) et cite la PR (`PR #123`) : l'agent relancé sur cette issue le reçoit tel quel dans son prompt (section « Corrections exigées »), avec les commentaires de la PR. Des corrections demandées deviennent une tâche pour l'auteur d'origine dans la vague suivante, pas une discussion.
+4. Quand le relecteur a fini, enregistre son verdict **sans le recopier** : `jarvis verdict <projet> <ISSUE>`. La commande lit sur la PR le dernier compte rendu publié par le relecteur (première ligne : `VERDICT : PRÊT` ou `VERDICT : CORRECTIONS`) et enregistre sa décision, sa liste numérotée de corrections et le numéro de la PR : l'agent relancé sur cette issue les reçoit dans son prompt (section « Corrections exigées »), avec les commentaires de la PR. Elle cherche la PR de la relecture lancée avec `--revue`, sinon celle de la branche ; `--pr 123` la désigne. Tu peux ajouter un résumé (`jarvis verdict <projet> <ISSUE> "à regarder d'abord : …"`), il ne remplace pas la liste. Si elle refuse, rien n'est écrit et elle dit pourquoi :
+   - **verdict absent** (pas de PR connue, pas de verdict sur la PR, ou verdict plus ancien que l'essai jugé) : vérifie que le relecteur a fini et publié sur la PR. S'il n'a publié que dans l'issue, saisis-le à la main : `jarvis verdict <projet> <ISSUE> pret|corrections "résumé"` ; pour `corrections`, le résumé reprend sa liste numérotée (sévérité, `fichier:ligne`, ce qui est attendu) et cite la PR (`PR #123`).
+   - **non conforme ou ambigu** : demande au relecteur de republier son verdict au format, puis relance la commande. Tu ne tranches pas à sa place.
+   - **contradiction** (tu as saisi une décision qui n'est pas celle qu'il a publiée) : son verdict fait foi. Relance la commande sans décision, ou fais relire à nouveau.
+
+   Des corrections demandées deviennent une tâche pour l'auteur d'origine dans la vague suivante, pas une discussion.
 5. Verdict dans Linear : « prête pour ton humain » (avec ce qu'il doit regarder en priorité) ou « corrections demandées » (avec une liste précise). Ne dis jamais « prête » d'une production qui n'a pas été contre-relue : `jarvis bilan` liste celles qui attendent.
 
 ### 8. Bilan et remise en question (après chaque vague)

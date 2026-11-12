@@ -12,7 +12,7 @@ relancé après « corrections » qui ne recevait pas les remarques du relecteur
 | Vie sociale des personas en mode `calme` par défaut | `off` par défaut (`lib/jarvis/vie_sociale.py`, `MODE_DEFAUT`) |
 | Le chef réveillé par toute persona qui « propose une idée » | Réveillé par ton humain, ou par un agent en tâche (`agent:T-…`) qui pose une question, demande de l'aide ou propose une idée |
 | Prompt terminé par un JSON de contrat et des extraits du forum | Prompt terminé par la définition de « fini » et le format du compte rendu |
-| Mémoire long terme lue par le chef seulement | 3 à 5 entrées pertinentes dans le prompt de chaque agent |
+| Mémoire long terme lue par le chef seulement | 3 entrées au plus, au-dessus d'un score minimal, dans le prompt de chaque agent |
 | Protocole seulement dans `CLAUDE.md` / `AGENTS.md` du projet | Protocole minimal dans le prompt, règles du projet en plus |
 | « ✅ REVUE / ❓ REVUE » (mission) contre « VERDICT : … » (brief) | Un seul format, relu par `lib/jarvis/comptes_rendus.py` |
 | Relance après « corrections » sans les remarques | Section « Corrections exigées » : résumé du verdict + commentaires de la PR |
@@ -30,8 +30,9 @@ dans l'ordre :
 4. **Ton poste** — projet, branche, dossier des livrables.
 5. **Consignes du chef d'orchestre** — le fichier `--consignes` (gabarit dans `chef/CLAUDE.md`, étape 5).
 6. **Contexte utile** :
-   - *Mémoire de l'usine* : `memoire.chercher(projet + issue + rôle + mots des consignes, projet=…, limite=5)`,
-     une ligne par entrée (420 caractères au plus), puis les leçons **retenues** du réseau (relues, avec preuve) ;
+   - *Mémoire de l'usine* : `memoire.pertinentes` sur le sujet des consignes (3 entrées au plus, score minimal ;
+     détail dans « Lot 2 — volet prompt »), une ligne par entrée (420 caractères au plus), puis les leçons
+     **retenues** du réseau (relues, avec preuve) ;
    - *Historique de cette tâche* : les essais de l'unité (projet, issue, rôle) — statut, classe d'échec et sa note,
      verdict et son résumé, jetons (`taches.historique`) ; pour une relecture, l'historique de la production relue ;
    - *Moyens* : taille S/M/L, plafond de jetons de la tâche (celui du plan ou de l'admission, sinon
@@ -40,6 +41,10 @@ dans l'ordre :
 7. **Protocole** — démarrage (« In Progress », plan), incertitude graduée, vérifications, fin (PR, « In Review »),
    interdits.
 8. **Fini et compte rendu** — la définition de « fini » et le gabarit exact. C'est la dernière chose lue.
+
+Le lot 2 ajoute deux sections : **Critères d'acceptation** juste après la Mission, et **Outils de cette session**
+après « Ton poste » (voir « Lot 2 — volet prompt »). Les briefs renvoient à cette dernière au lieu d'affirmer
+qu'un outil existe.
 
 Ce qui n'y est plus : le JSON « Contrat commun de la session » (`specifications.pour_prompt` existe toujours,
 pour la vue des sessions et le préflight) et le bloc « Réseau libre de l'usine » avec ses extraits du forum.
@@ -58,7 +63,8 @@ illisible, mémoire corrompue, `gh` absent), la section est plus courte ou absen
   décide, continue, et note l'hypothèse dans « Hypothèses » de son compte rendu.
 - **Bloquante** (périmètre, critères contradictoires, données ou schéma, sécurité, dépense, accès manquant,
   irréversible) : `❓ QUESTION :` avec options A/B, coût de chacune, recommandation, ce qui a déjà été vérifié ;
-  puis il s'arrête et attend.
+  puis il continue la partie du travail que la question ne touche pas, en le disant ; il ne s'arrête que si elle
+  touche tout, et ne livre rien qui dépende de la réponse (lot 2).
 
 ### Projet sans fichier de règles
 
@@ -140,21 +146,18 @@ résumé du verdict ; `gh pr list --head <branche de l'essai corrigé>`. Chaque 
 et le premier échec arrête la recherche : sans `gh`, sans réseau ou hors d'un dépôt GitHub, le prompt contient le
 résumé du verdict et la commande à lancer pour lire les commentaires.
 
-Conséquence pour le chef : le résumé passé à `jarvis verdict` est ce que l'agent relancé lira en premier. Il
-reprend la liste numérotée du relecteur et cite la PR.
+Conséquence pour le chef : la note enregistrée par `jarvis verdict` est ce que l'agent relancé lira en premier.
+Depuis le lot 2, `jarvis verdict <projet> <ISSUE>` la tire du compte rendu publié par le relecteur (« PR #N » et
+liste numérotée) ; en saisie à la main, le résumé du chef reprend cette liste et cite la PR.
 
 Un relecteur relancé sur une issue déjà en « corrections » reçoit la même liste sous « Corrections exigées à la
 relecture précédente », avec la consigne de vérifier chaque point.
 
 ## Briefs de rôle
 
-- Réécrits : `generaliste` (rôle par défaut), `redaction`, `securite` — objectif, procédure, 5 choses à ne pas
-  faire, critères de « fini » vérifiables, extrait d'un bon compte rendu. `securite` cite OWASP Top 10 et ASVS,
-  donne le format du rapport (`$JARVIS_LIVRABLES/securite.md`) et les outils d'audit de dépendances.
-- Complétés d'une ligne : `frontend`, `qa`, `design` (Playwright sous `jarvis lourd exec navigateur`), `video`
-  (où trouver `scenario-video.md`), `recherche` (pas de recherche web : le dire), `revue` (format unique).
-- Inchangés : `architecte`, `backend`, `data`, `devops`, `ia-produit`, `marketing`.
-- Chaque brief tient en 60 lignes au plus (test).
+Les quinze briefs suivent depuis le lot 2 un seul gabarit (objectif, procédure, interdits, « Fini quand », exemple
+et contre-exemple de compte rendu) : voir « Volet briefs et évaluation » ci-dessous, qui remplace l'ancienne
+répartition réécrits / complétés / inchangés. Chaque brief tient en 60 lignes au plus (test).
 
 `evaluation.consigne_complete` construit désormais le prompt d'un cas avec `prompt_agent.pour_evaluation` :
 même brief, même protocole d'incertitude, même définition de « fini » et même format de compte rendu qu'une vraie
@@ -258,12 +261,12 @@ Limites de ce volet :
 
 ## Limites connues
 
-- La pertinence de la mémoire est celle de `memoire.chercher` (plein texte) : une entrée du projet remonte dès
-  qu'elle partage un mot avec la requête. Le prompt en montre cinq au plus.
+- La pertinence de la mémoire est celle de `memoire.pertinentes` (lot 2) : rapprochement de mots grossier, seuils
+  réglés sur des cas de test. Des consignes pauvres ne font remonter aucune entrée.
 - Le numéro de PR d'une production n'est pas stocké dans sa fiche : il est déduit (relecture lancée, résumé du
   verdict, branche). Si rien ne le donne, les commentaires ne sont pas joints.
-- L'analyseur n'est branché que sur la boucle de correction (extraction du verdict d'une revue de PR) et sur sa
-  ligne de commande. `jarvis verdict` prend toujours son résumé du chef.
+- L'analyseur est branché sur la boucle de correction, sur sa ligne de commande et, depuis le lot 2, sur
+  `jarvis verdict` (voir « Volet aq2-verdict »).
 - Aucune évaluation réelle de rôle n'a été lancée par ce lot (elle consomme les abonnements) : seul le contrôle
   gratuit des cas (`tests/goldens`) a été exécuté.
 
@@ -516,3 +519,26 @@ permission.
   pas dans une session Codex réelle (`--moteur codex` reste disponible).
 - L'effet de la table raccourcie sur le chef Claude : il doit maintenant appeler `jarvis aide chef` pour les
   commandes rares (rollback, skills, Board en écriture).
+
+## Lot 2 — intégration des quatre volets (branche `feat/agents-qualite-2`)
+
+Les branches `feat/aq2-briefs`, `feat/aq2-prompt`, `feat/aq2-verdict` et `feat/aq2-chef` sont fusionnées ici. Ce
+que la fusion a ajouté pour que les volets se répondent :
+
+- **Briefs et bloc d'outils** : `recherche`, `frontend`, `qa` et `design` renvoient à la section « Outils de cette
+  session » du prompt pour la recherche web et Playwright, au lieu de supposer l'outil présent ou absent. Le prompt
+  d'évaluation n'a pas ce bloc : la consigne « fais un essai réel » y reste la seule vérification.
+- **Verdict automatique dans le rôle du chef** : l'étape 7 de `chef/CLAUDE.md`, la table « L'essentiel »,
+  `jarvis aide chef` et l'aide de `bin/jarvis` décrivent `jarvis verdict <projet> <ISSUE>` tel qu'il est codé —
+  lecture sur la PR, trois refus (absent, non conforme ou ambigu, contradiction) et ce que le chef fait de
+  chacun, saisie à la main en repli. Le rôle Codex est généré à partir de ce texte : il suit.
+- **Incertitude bloquante** : `templates/CLAUDE.md`, `templates/AGENTS.md`, le `CLAUDE.md` du dépôt et l'étape 6
+  du rôle du chef disent comme le prompt : question, puis poursuite de la partie non touchée.
+- **Mémoire** : l'étape 5 du rôle du chef dit que les leçons remontent d'après le sujet des consignes.
+- **Évaluation d'un relecteur** : `prompt_agent.pour_evaluation` donne au rôle `revue` le gabarit du verdict et
+  non plus « ✅ TERMINÉ » ; `evaluation.analyser_sortie` relit alors le dernier bloc « VERDICT : … » de la sortie.
+- **`jarvis eval resultats`** affiche l'état du compte rendu (conforme, non conforme avec le nombre d'anomalies,
+  absent, ou non analysé pour un résultat antérieur au champ).
+
+Non vérifié par cette fusion : aucun agent, chef ou modèle réel n'a été lancé ; la note visée de 9/10 n'est pas
+mesurée. Les limites de chaque volet (sections ci-dessus) restent entières.

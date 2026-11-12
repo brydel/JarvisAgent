@@ -49,6 +49,7 @@ GH_DELAI_S = 8           # par appel à gh ; au premier échec, on n'insiste pas
 PR_ELEMENTS_MAX = 8      # commentaires de revue repris
 PR_ELEMENT_CAR = 700
 PR_TOTAL_CAR = 4000
+ROLE_RELECTURE = "revue"  # seul rôle dont le compte rendu est un verdict, y compris en évaluation
 TAILLES = {"S": "correction ciblée, un ou deux fichiers", "M": "fonctionnalité bornée",
            "L": "transversal ou ambigu : l'erreur coûte cher"}
 
@@ -516,6 +517,15 @@ def fini_et_compte_rendu(*, issue: str, role: dict, mode: str, revue: str = "", 
                 "", "```", comptes_rendus.GABARIT_VERDICT, "```", "",
                 comptes_rendus.REGLES_VERDICT, publier]
     fin_role = ("le « Fini quand » de ton rôle est atteint" if role.get("corps") else "le travail est vérifiable par un relecteur")
+    if mode == "evaluation" and role.get("nom") == ROLE_RELECTURE:
+        # Un relecteur évalué rend un verdict, comme en vraie relecture : lui donner le gabarit « ✅ TERMINÉ »
+        # contredirait son brief et obligerait chaque cas à redire le format dans sa consigne.
+        return ["## Fini et compte rendu", "",
+                "Ta relecture est finie quand : (1) chaque point de la tâche ci-dessus a été vérifié par toi, preuve à "
+                "l'appui ; (2) tu as lancé toi-même les vérifications que le dossier permet ; (3) ton verdict est écrit "
+                "là où la tâche le demande et termine ta réponse, au format exact ci-dessous. Ce format est relu par "
+                "une machine : n'en change ni les intitulés ni l'ordre, et n'utilise aucun autre marqueur de verdict.",
+                "", "```", comptes_rendus.GABARIT_VERDICT, "```", "", comptes_rendus.REGLES_VERDICT]
     if mode == "evaluation":
         ou = ("Termine ta réponse par ce compte rendu, au format exact (ici : « Tâche : évaluation », "
               "« Branche : aucune · PR : aucune ») :")

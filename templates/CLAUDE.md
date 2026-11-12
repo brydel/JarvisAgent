@@ -15,7 +15,7 @@ Ce fichier est lu par Codex (`AGENTS.md`) et par Claude Code (`CLAUDE.md`). Les 
 1. Ta tâche est l'issue Linear citée dans ton prompt (ex. BIS-82). Lis-la en entier avec l'outil Linear avant d'écrire du code.
 2. **Au démarrage** : passe l'issue à « In Progress » et commente :
    `🤖 [claude|codex] Démarré — plan :` suivi de 3 à 5 étapes.
-3. **Incertitude** : une ambiguïté mineure (détail que l'issue ne tranche pas, choix facile à défaire) se décide et se note dans « Hypothèses » du compte rendu. Un point **bloquant** (périmètre, données, sécurité, dépense, irréversible) : commente `❓ QUESTION :` avec les options A/B et ce que tu recommandes, puis **arrête-toi et attends** une réponse.
+3. **Incertitude** : une ambiguïté mineure (détail que l'issue ne tranche pas, choix facile à défaire) se décide et se note dans « Hypothèses » du compte rendu. Un point **bloquant** (périmètre, données, sécurité, dépense, irréversible) : commente `❓ QUESTION :` avec les options A/B et ce que tu recommandes, puis continue la partie du travail que la question ne touche pas, en disant laquelle ; si elle touche tout, **arrête-toi et attends** une réponse. Ne livre rien qui dépende de la réponse.
 4. **À la fin** : ouvre une PR avec `gh pr create` (titre préfixé par l'ID de l'issue), passe l'issue à « In Review », et commente `✅ TERMINÉ` au format donné à la fin de ton prompt (critère → preuve, commande → résultat, hypothèses, risques, fichiers, branche et PR). Une relecture rend à la place `VERDICT : PRÊT` ou `VERDICT : CORRECTIONS`, au format du prompt.
 
 ## Ton rôle dans l'usine
