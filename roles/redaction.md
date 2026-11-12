@@ -42,3 +42,11 @@ Vérifications :
 Hypothèses :
 - Python 3.11 minimum : lu dans pyproject.toml, l'issue ne le disait pas.
 ```
+
+**Contre-exemple (refusé : commandes recopiées sans être lancées, aucun renvoi au texte)**
+```
+Critères :
+1. README mis à jour avec l'installation
+Vérifications :
+- commandes reprises de l'ancien wiki
+```
