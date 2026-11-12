@@ -1,16 +1,10 @@
 titre = "Relire un travail défectueux et rendre un verdict exploitable"
 role = "revue"
 duree_max_min = 20
-exigences_brief = ["VERDICT : CORRECTIONS", "fichier:ligne", "Tu ne modifies aucun fichier|Modifier un fichier", "Une relecture qui ne lance rien"]
+exigences_brief = ["VERDICT : CORRECTIONS", "fichier:ligne", "Tu ne modifies aucun fichier|Modifier un fichier", "Une relecture qui ne lance rien", "une correction vague est une correction perdue"]
 exigences_compte_rendu = ["exemple", "contre_exemple"]
 consigne = """
 Un agent a traité ISSUE.md ; son travail est dans app/remise.py et tests/test_remise.py, et son compte rendu dans
 COMPTE_RENDU.md. Relis ce travail contre les critères de l'issue et écris ton verdict dans verdict.md, au format
-de l'usine :
-- première ligne : exactement « VERDICT : PRÊT » ou « VERDICT : CORRECTIONS » ;
-- « Corrections exigées : » puis une liste numérotée, une correction par ligne :
-  « 1. [bloquant] chemin/fichier.py:12 — ce qui est faux, et ce qui est attendu » (sévérités : bloquant, majeur, mineur) ;
-- « Suggestions : » puis des puces (ou « aucune ») ;
-- « Vérifications : » puis des puces « - `commande lancée` → résultat observé ».
-Tu ne modifies aucun autre fichier et tu ne corriges rien toi-même.
+donné à la fin de ce prompt. Tu ne modifies aucun autre fichier et tu ne corriges rien toi-même.
 """

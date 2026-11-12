@@ -403,6 +403,17 @@ class JarvisTest(unittest.TestCase):
         self.assertIn("Brief : ajouter la 2FA", brief)
         self.assertIn("RELECTURE uniquement", review)
         self.assertEqual(adds[-1][1], "bis-93-revue-pr-12")
+        # Jeton de verdict : en clair dans le seul prompt du relecteur, en empreinte sur la seule fiche de relecture.
+        import hashlib
+        import re as _re
+        from jarvis import taches as _taches
+        jeton = _re.search(r"VERDICT : CORRECTIONS \[(R-[0-9a-f]{12})\]", review)
+        self.assertIsNotNone(jeton, "le gabarit du relecteur porte son jeton")
+        self.assertNotIn("[R-", brief)
+        fiches = [t for t in _taches.toutes() if t["issue"] == "BIS-93"]
+        self.assertEqual([bool(t.get("jeton_verdict")) for t in fiches], [False, True])
+        self.assertEqual(fiches[-1]["jeton_verdict"], hashlib.sha256(jeton.group(1).encode()).hexdigest())
+        self.assertNotIn(jeton.group(1), json.dumps(fiches))
         # Plan épuisé : plus rien ne passe.
         res = self.run_jarvis("task", "--plan", p["id"], "--projet", "repriceo", "BIS-93", "claude", cwd=str(chef_dir))
         self.assertNotEqual(res.returncode, 0)

@@ -84,12 +84,13 @@ SECTIONS: tuple[tuple[str, str, tuple], ...] = (
         (("gh pr view <n°>", "gh pr diff <n°>", "gh pr checks <n°>", "gh pr list --head <branche>"),
          "Inspecter une PR (dans le dossier du projet)"),
         (("jarvis verdict repriceo BIS-82", "jarvis verdict repriceo BIS-82 --pr 123"),
-         "Enregistrer le verdict d'une contre-relecture : lu sur la PR tel que le relecteur l'a publié (décision, "
-         "corrections numérotées, PR), sans recopie. Refusé, sans rien écrire, s'il est absent, hors format, ambigu, "
-         "ou contraire à la décision que tu saisis"),
+         "Enregistrer le verdict d'une contre-relecture : lu sur la PR de l'issue, tel que le relecteur de cette "
+         "relecture l'a publié avec son jeton (décision, corrections numérotées, PR), sans recopie. Refusé, sans rien "
+         "écrire, s'il est absent, hors format, ambigu, sans vérification lancée, ou si `--pr` n'est pas une PR de l'issue"),
         (('jarvis verdict repriceo BIS-82 pret|corrections "résumé"',),
          "Saisie à la main, quand le relecteur n'a publié que dans l'issue : le résumé reprend sa liste numérotée "
-         "et cite la PR"),
+         "et cite la PR. `corrections` passe toujours ; `pret` est refusé contre un texte de l'usine qui demande des "
+         "corrections, ou quand la PR ne peut pas être consultée"),
         (("jarvis tache voir T-00042", 'jarvis tache echec T-00042 erreur_outil|hors_perimetre|regression "note"'),
          "Détail d'un essai (classe d'échec, essais comptés, jetons face au plafond) / classer un échec que tu "
          "constates"),

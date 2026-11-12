@@ -34,7 +34,10 @@ done < <(type -ap codex 2>/dev/null || true)
 
 options=(--sandbox workspace-write --ask-for-approval never --no-daemon --search
          -c "projects.\"$PWD\".trust_level=\"trusted\""
-         -c sandbox_workspace_write.network_access=false)
+         -c sandbox_workspace_write.network_access=false
+         # Codex ne lit par défaut que 32 Kio d'AGENTS.md (project_doc_max_bytes) : le rôle du chef en pèse plus de 50.
+         # Sans ce réglage, il serait coupé au milieu de l'étape 6. Un test borne la taille du rôle à cette valeur.
+         -c project_doc_max_bytes=131072)
 
 modele="$(py reglage-lire general.chef_modele_codex 2>/dev/null || true)"
 [[ -n "$modele" ]] && options+=(-m "$modele")

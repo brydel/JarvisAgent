@@ -101,6 +101,9 @@ INTERDIT = (
     "Bash(jarvis stockage migrer*)", "Bash(jarvis stockage revenir*)", "Bash(jarvis executant declarer *)",
     "Bash(jarvis executant retirer *)",
     "Bash(jarvis board relire *)",  # demander, rendre ou retirer une relecture : l'humain seul
+    # Verdict d'une contre-relecture : le chef ne fournit pas lui-même le compte rendu qu'il enregistre.
+    "Bash(jarvis verdict * --stdin*)", "Bash(jarvis verdict --stdin*)",
+    "Bash(jarvis noeud config*)",  # réglages du noeud GPU : l'humain seul
     # Contournements de « jarvis task » et accès directs au noyau.
     "Bash(workmux add *)", "Bash(workmux run *)", "Bash(python *)", "Bash(python3 *)",
     "Bash(env *)", "Bash(script *)",
@@ -277,7 +280,8 @@ Toute commande `jarvis`, `workmux` ou `gh` s'écrit donc **précédée de `jarvi
 
 Pas de `;`, `&&`, `|`, de redirection ni de variable devant : `jarvis-chef` applique tes permissions de chef et
 refuse le reste. Un refus est une information, jamais un obstacle à contourner. Les exemples ci-dessous sont déjà
-écrits ainsi.
+écrits ainsi. Une commande citée **sans** `jarvis-chef` n'est pas à toi : c'est celle d'un agent
+(`jarvis lourd exec`, qu'il lance tel quel) ou de ton humain ; tu la cites, tu ne la lances pas.
 
 ## Ce que tu as, ce que tu n'as pas
 
@@ -344,16 +348,36 @@ _OUTILS_CHEF = ("jarvis ", "workmux ", "gh pr ")
 _BLOC_BASH = re.compile(r"(?ms)^```(?:bash|sh)\n(.*?)^```")
 
 
+_CITEE = re.compile(r"`((?:" + "|".join(re.escape(o) for o in _OUTILS_CHEF) + r")[^`\n]*)")
+
+
+def reservee(commande: str) -> bool:
+    """Vrai si la commande citée dans le rôle est interdite au chef (INTERDIT) : celle d'un agent ou de l'humain.
+
+    « a|b|c » dans un mot vaut pour chacune des variantes : la commande n'est réservée que si toutes le sont."""
+    mots = commande.strip().split()
+    variantes = [mots]
+    for i, mot in enumerate(mots):
+        if re.fullmatch(r"\w[\w-]*(?:\|\w[\w-]*)+", mot):
+            variantes = [mots[:i] + [v] + mots[i + 1:] for v in mot.split("|") if v]
+            break
+
+    def interdite(cmd: str) -> bool:
+        return any(_correspond(m, cmd) for m in map(_motif, INTERDIT) if m)
+    return all(interdite(" ".join(v)) for v in variantes)
+
+
 def prefixer_codex(texte: str) -> str:
     """Écrit les commandes du chef pour la porte : `jarvis …` → `jarvis-chef jarvis …`.
 
-    Deux formes : la commande entre accents graves, et la ligne de commande d'un bloc ```bash.
+    Deux formes : la commande entre accents graves, et la ligne de commande d'un bloc ```bash. Une commande que la
+    porte refuse au titre d'INTERDIT n'est pas préfixée : le rôle la cite (elle est à un agent ou à l'humain), le
+    chef ne la lance pas, et il ne doit pas la recopier préfixée dans ses consignes.
     """
-    for outil in _OUTILS_CHEF:
-        texte = texte.replace("`" + outil, "`jarvis-chef " + outil)
+    texte = _CITEE.sub(lambda m: "`" + ("" if reservee(m.group(1)) else "jarvis-chef ") + m.group(1), texte)
 
     def bloc(m: re.Match) -> str:
-        lignes = [("jarvis-chef " + ligne if ligne.startswith(_OUTILS_CHEF) else ligne)
+        lignes = [("jarvis-chef " + ligne if ligne.startswith(_OUTILS_CHEF) and not reservee(ligne) else ligne)
                   for ligne in m.group(1).split("\n")]
         return m.group(0).replace(m.group(1), "\n".join(lignes))
     return _BLOC_BASH.sub(bloc, texte)

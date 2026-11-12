@@ -14,6 +14,6 @@ Preuve : README.md:9
 
 ## Angle 3 : démarrer sans payer
 Titre : Gratuit jusqu'à 5 clients
-Texte : Crée tes factures à partir de 3 modèles. Gratuit jusqu'à 5 clients, puis 9 € par mois.
+Texte : Carnet est gratuit jusqu'à 5 clients ; au-delà, c'est 9 € par mois.
 Action : Commencer
 Preuve : README.md:10

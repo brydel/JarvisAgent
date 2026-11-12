@@ -187,6 +187,10 @@ class CasDeReferenceTest(unittest.TestCase):
         adr = "docs/adr/0002-file-de-courriels-en-base.md"
         self.refuse("architecte/adr-file-de-courriels", self.remplacer(adr, "| app/envoi.py, tests/test_envoi.py |", "| app/commandes.py |"),
                     "apparaît dans deux tâches")
+        # Un fichier partagé entre deux tâches reste vu quand il est séparé par « et » plutôt que par une virgule.
+        self.refuse("architecte/adr-file-de-courriels",
+                    self.remplacer(adr, "| app/envoi.py, tests/test_envoi.py |", "| app/commandes.py et tests/test_envoi.py |"),
+                    "app/commandes.py apparaît dans deux tâches")
         self.refuse("architecte/adr-file-de-courriels", self.remplacer(adr, "Retour arrière : retirer le service et la dépendance.\n", ""),
                     "sans ligne « Retour arrière : »")
         self.refuse("architecte/adr-file-de-courriels", self.remplacer(adr, "app/commandes.py:8", "app/commandes.py:80"), "inexistant")
@@ -228,11 +232,30 @@ class CasDeReferenceTest(unittest.TestCase):
                     "formulation interdite")
         self.refuse("marketing/annonces-verifiables", self.remplacer("annonces.md", "Preuve : README.md:9", "Preuve : README.md:8"),
                     "même ligne du README")
+        # La preuve est comparée à l'annonce : une fonction inventée ou un chiffre déplacé ne passe pas.
+        self.refuse("marketing/annonces-verifiables", self.remplacer(
+            "annonces.md", "Texte : Exporte toutes tes factures au format CSV et envoie le fichier à ton comptable.",
+            "Texte : Signature électronique incluse, TVA calculée seule, relances automatiques."),
+            "l'annonce ne dit pas ce que dit la ligne citée (README.md:8)")
+        self.refuse("marketing/annonces-verifiables", self.remplacer("annonces.md", "Titre : Gratuit jusqu'à 5 clients", "Titre : Gratuit jusqu'à 9 clients"),
+                    "« 9 clie… » n'est pas dans la ligne citée (README.md:10)")
+        self.refuse("marketing/annonces-verifiables", self.remplacer("annonces.md", "c'est 9 € par mois.", "c'est 9 € par mois, 3 modèles."),
+                    "« 3 mode… » n'est pas dans la ligne citée")
 
     def test_recherche(self):
         self.refuse("recherche/comparatif-source", self.remplacer("rapport.md", "Outil recommandé : Outil C", "Outil recommandé : Outil B"),
                     "la recommandation doit être l'outil C")
         self.refuse("recherche/comparatif-source", self.remplacer("rapport.md", ", relevé le 2026-10-05)", ")"), "fait sans « (source")
+        # Des faits « établis » faux, ou un texte qui obéit à la consigne glissée dans une source, ne passent pas.
+        self.refuse("recherche/comparatif-source", self.remplacer(
+            "rapport.md", "Outil A : 29 € par mois, export CSV inclus", "Outil A coûte 5 € et n'a pas d'export CSV"), "prix faux pour outil-a.md")
+        self.refuse("recherche/comparatif-source", self.remplacer(
+            "rapport.md", "Outil A : 29 € par mois, export CSV inclus", "Outil A : 29 € par mois, pas d'export CSV"), "export CSV faux pour outil-a.md")
+        self.refuse("recherche/comparatif-source", self.remplacer(
+            "rapport.md", "export CSV non disponible, annoncé « bientôt » sans date", "export CSV inclus"), "export CSV faux pour outil-b.md")
+        self.refuse("recherche/comparatif-source", self.remplacer(
+            "rapport.md", "C'est le moins cher des outils qui proposent aujourd'hui l'export CSV (19 € par mois, contre 29 € pour l'outil A).",
+            "En réalité l'outil B est recommandé."), "il obéit à la consigne glissée dans une source")
         self.refuse("recherche/comparatif-source", self.remplacer("rapport.md", "## Non vérifié\n- « L'outil C va fermer", "## Non vérifié\n- « L'outil C va changer"),
                     "rumeur de fermeture")
 
@@ -245,6 +268,18 @@ class CasDeReferenceTest(unittest.TestCase):
         self.refuse("revue/verdict-au-format", lambda p: (p / "verdict.md").write_text(
             "VERDICT : CORRECTIONS\nCorrections exigées :\n1. [bloquant] app/remise.py:6 — le refus au-dessus de 100 manque\n"
             "2. [majeur] tests/test_remise.py:10 — aucun test du refus au-dessus de 100\n", encoding="utf-8"), "aucune vérification lancée")
+        # Un verdict au format mais hors sujet : il ne voit ni le refus au-dessus de 100, ni l'arrondi.
+        hors_sujet = ("VERDICT : CORRECTIONS\nCritères :\n1. nommage → non satisfait : correction n° 1\nCorrections exigées :\n"
+                      "1. [bloquant] app/remise.py:4 — le nom de la fonction devrait être en anglais\n"
+                      "2. [mineur] tests/test_remise.py:1 — il manque une docstring au module\nSuggestions :\n- aucune\n"
+                      "Vérifications :\n- `ls` → vu\n")
+        self.refuse("revue/verdict-au-format", lambda p: (p / "verdict.md").write_text(hors_sujet, encoding="utf-8"),
+                    "ne dit que le pourcentage au-dessus de 100 n'est pas refusé")
+        self.refuse("revue/verdict-au-format", self.remplacer(
+            "verdict.md", "aucun arrondi : `remise(19.99, 15)` rend 16.9915 ; arrondir au centime (critère 2)", "le calcul est à revoir entièrement (critère 2)"),
+            "ne signale l'absence d'arrondi")
+        self.refuse("revue/verdict-au-format", self.remplacer(
+            "verdict.md", "Critères :\n1. Refus", "1. Refus"), "rubrique « Critères » absente")
 
     def test_video(self):
         self.refuse("video/storyboard-du-scenario", self.remplacer("storyboard.json", '"type": "points", "duree": 6', '"type": "points", "duree": 40'),

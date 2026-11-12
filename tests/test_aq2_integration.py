@@ -29,7 +29,7 @@ class EvaluationDuRelecteurTest(unittest.TestCase):
 
     def test_le_dernier_verdict_de_la_sortie_est_relu(self):
         prompt = prompt_agent.pour_evaluation(roles.get("revue"), "Relis le travail.")
-        verdict = ("VERDICT : CORRECTIONS\nCorrections exigées :\n"
+        verdict = ("VERDICT : CORRECTIONS\nCritères :\n1. remise plafonnée → non satisfait : correction n° 1\nCorrections exigées :\n"
                    "1. [bloquant] app/remise.py:5 — la remise dépasse 100 % ; attendu : plafonnée à 100\n"
                    "Suggestions :\n- aucune\nVérifications :\n- `python3 -m unittest` → OK, 2 tests\n")
         r = evaluation.analyser_sortie(prompt + "\njournal du CLI…\n" + verdict)

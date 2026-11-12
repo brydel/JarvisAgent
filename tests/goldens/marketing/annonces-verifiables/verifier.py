@@ -24,7 +24,15 @@ def fin():
     print(f"VERDICT: OK {JETON}".rstrip())
     sys.exit(0)
 
-import hashlib, re
+import hashlib, re, unicodedata
+def mots(texte):
+    """Mots porteurs (5 lettres au moins, sans accent, hors nom du produit), ramenés à leurs 4 premières lettres."""
+    brut = unicodedata.normalize("NFD", texte.lower()).encode("ascii", "ignore").decode()
+    return [m[:4] for m in re.findall(r"[a-z]+", brut) if len(m) >= 5 and m != "carnet"]
+def chiffres(texte):
+    """(nombre, début du mot qui le suit) : « 9 € » et « 9 clients » ne disent pas la même chose."""
+    brut = unicodedata.normalize("NFD", texte.lower()).encode("ascii", "ignore").decode().replace("€", " euro ")
+    return {(n, suite[:4]) for n, suite in re.findall(r"(\d+)\s*([a-z]+)?", brut)}
 verifier(hashlib.sha256(Path("README.md").read_bytes()).hexdigest() == "93869440f30c54ec21513121f8b74e250bc8a5baf3ee2f402c3e599f66eaa75d", "README.md a été modifié")
 readme = "# Carnet — facturation pour indépendants\n\nCarnet est une application web de facturation.\n\n## Ce que fait Carnet aujourd'hui\n\n- Création d'une facture à partir de 3 modèles.\n- Export des factures au format CSV, pour le comptable.\n- Rappel de paiement envoyé par courriel quand une facture est en retard.\n- Gratuit jusqu'à 5 clients ; au-delà, 9 € par mois.\n\n## Ce que Carnet ne fait pas\n\n- Pas d'application mobile.\n- Pas de paiement en ligne.\n- Pas de connexion bancaire.\n".splitlines()
 f = Path("annonces.md")
@@ -55,6 +63,17 @@ if f.is_file():
         ligne = int(m.group(1)) if m else 0
         verifier(m is not None and 7 <= ligne <= 10, f"angle {i} : la preuve doit désigner une ligne « Ce que fait Carnet » du README")
         preuves.append(ligne)
+        if m is not None and 7 <= ligne <= 10:
+            # La preuve est comparée à l'annonce : mêmes chiffres avec la même unité, et un texte qui parle bien
+            # de cette ligne-là. Une fonction inventée ou un chiffre déplacé ne passe pas.
+            citee = readme[ligne - 1]
+            for n, suite in sorted(chiffres(annonce) - chiffres(citee)):
+                verifier(False, f"angle {i} : « {n} {suite}… » n'est pas dans la ligne citée (README.md:{ligne})")
+            porteurs = mots(champs["Titre"] + " " + champs["Texte"])
+            communs = [x for x in porteurs if x in set(mots(citee))]
+            verifier(bool(porteurs) and 2 * len(communs) >= len(porteurs),
+                     f"angle {i} : l'annonce ne dit pas ce que dit la ligne citée (README.md:{ligne}) : "
+                     f"{len(communs)} mot(s) porteur(s) en commun sur {len(porteurs)}")
     verifier(len(set(preuves)) == len(preuves), "deux angles s'appuient sur la même ligne du README")
     verifier(len(set(titres)) == len(titres), "deux angles ont le même titre")
 fin()

@@ -51,12 +51,14 @@ def enregistrer(*, projet: str, issue: str, agent: str, worktree: str, chemin: s
                 modele: str = "", modele_id: str = "", effort: str = "", repli: str = "", taille: str = "M",
                 plan: str = "", revue: str = "", raison: str = "", secours: bool = False, classe: str = "",
                 reservation: str = "", jetons_max: int = 0, consignes_empreinte: str = "", base: str = "",
-                brief: str = "") -> dict:
+                brief: str = "", jeton_verdict: str = "") -> dict:
     """Crée la fiche d'un lancement. `chemin` : dossier du worktree (clé des lanceurs).
 
     `jetons_max` : plafond de jetons de l'unité de travail (projet, issue, rôle), toutes relances comprises.
     `consignes_empreinte` : empreinte du fichier de consignes, pour savoir si un nouvel essai change d'approche.
     `base` : commit du dépôt principal au lancement (point de départ de la branche), pour le rollback.
+    `jeton_verdict` : pour une relecture, EMPREINTE du jeton écrit dans le prompt du relecteur (verdicts.py) ;
+    le jeton lui-même n'est jamais gardé ici.
     """
     chemin = str(Path(chemin).resolve()) if chemin else ""
     role_nom = roles.ou_defaut(role)["nom"]
@@ -76,6 +78,8 @@ def enregistrer(*, projet: str, issue: str, agent: str, worktree: str, chemin: s
             "consignes_empreinte": consignes_empreinte, "base": base, "brief": brief, "essai": len(precedents) + 1, "echec": None,
             "cree": time.time(), "debut": None, "fin": None, "jetons": None, "verdict": "", "verdict_note": "",
         }
+        if jeton_verdict and (fiche["revue"] or fiche["role"] == "revue"):
+            fiche["jeton_verdict"] = str(jeton_verdict)[:64]
         data["taches"].append(fiche)
         data["taches"] = data["taches"][-MAX:]
         return dict(fiche)

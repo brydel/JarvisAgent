@@ -129,11 +129,12 @@ class RoleCodexTest(unittest.TestCase):
     def test_toutes_les_commandes_passent_par_la_garde(self):
         for ligne in self.codex.splitlines():
             for m in re.finditer(r"`((?:jarvis|workmux|gh pr) [^`]*)`", ligne):
-                self.fail(f"commande hors de la garde : {m.group(1)}")
+                # Seules les commandes interdites au chef (celles d'un agent ou de l'humain) restent sans préfixe.
+                self.assertTrue(chef_moteur.reservee(m.group(1)), f"commande hors de la garde : {m.group(1)}")
         lignes = blocs_bash(self.codex)
         self.assertTrue(lignes)
         for ligne in lignes:
-            self.assertTrue(ligne.startswith("jarvis-chef "), ligne[:80])
+            self.assertTrue(ligne.startswith("jarvis-chef ") or chef_moteur.reservee(ligne), ligne[:80])
         self.assertNotIn("jarvis-chef jarvis-chef", self.codex)
         self.assertTrue(self.codex.startswith("# Moteur : Codex"))
         self.assertIn("`jarvis-chef jarvis aide chef`", chef_moteur.PREAMBULE_CODEX)

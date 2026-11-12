@@ -9,7 +9,9 @@ illisible, absente ou hors de portée du lanceur. Une ligne inconnue est écrite
 avoir un outil qu'il n'a pas perd sa tâche, un agent qui sait qu'il doit vérifier perd une minute.
 
 Seuls des noms sortent d'ici (serveurs, skills, classes) : jamais une valeur de configuration, une URL, une
-variable d'environnement ni un chemin personnel.
+variable d'environnement ni un chemin personnel. Un nom choisi par le dépôt du projet (`.mcp.json`) n'est pas un
+constat du lanceur : il est repris sous une forme stricte ou pas du tout, marqué « déclaré par le dépôt », et ne
+sert jamais à conclure qu'un outil est présent.
 """
 
 from __future__ import annotations
@@ -29,6 +31,9 @@ DELAI_AIDE_S = 5          # « codex --help » : une aide locale, pas un appel d
 TAILLE_CONFIG_MAX = 2_000_000
 NOMS_MAX = 12             # serveurs ou skills listés ; au-delà, le nombre restant est indiqué
 _NOM = re.compile(r"[A-Za-z0-9_.-]{1,64}\Z")
+# Un nom choisi par le dépôt du projet (`.mcp.json`) est un contenu non fiable : forme plus stricte, et dès qu'un
+# nom n'y entre pas, seul le nombre de serveurs est repris.
+_NOM_DEPOT = re.compile(r"[a-z0-9][a-z0-9_-]{0,31}\Z")
 _SKILL_CITEE = re.compile(r"skills/([a-z0-9][a-z0-9._-]{0,39})/")
 MOTEURS = {"claude": "Claude Code", "codex": "Codex"}
 INCONNU = "inconnu"
@@ -175,11 +180,13 @@ def mcp_codex() -> tuple[str, list[str]]:
     return detail, actifs
 
 
-def mcp_claude(racine: Path | None) -> tuple[str, list[str]]:
-    """(ligne, noms) : serveurs de portée utilisateur, puis ceux que le projet déclare dans son `.mcp.json`."""
+def mcp_claude(racine: Path | None) -> tuple[str, list[str], list[str]]:
+    """(ligne, noms de portée utilisateur, noms déclarés par le dépôt). Les premiers sont un constat sur ce poste ;
+    les seconds viennent du `.mcp.json` du projet, contenu non fiable : repris seulement s'ils ont tous la forme
+    stricte `_NOM_DEPOT`, sinon seul leur nombre est écrit."""
     base = os.environ.get("CLAUDE_CONFIG_DIR")
     chemin = (Path(base) / ".claude.json") if base else _home() / ".claude.json"
-    morceaux, noms, inconnu = [], [], False
+    morceaux, noms, depot, inconnu = [], [], [], False
     try:
         data = _lire(chemin, "json")
         utilisateur = [n for n, actif in _serveurs(data or {}, "mcpServers") if actif]
@@ -190,25 +197,53 @@ def mcp_claude(racine: Path | None) -> tuple[str, list[str]]:
         inconnu = True
     if racine:
         try:
-            projet = [n for n, actif in _serveurs(_lire(racine / ".mcp.json", "json") or {}, "mcpServers") if actif]
-            if projet:
-                morceaux.append(f"{_noms(projet)} (déclaré par `.mcp.json` du projet ; activation non vérifiée)")
-                noms += projet
+            bloc = (_lire(racine / ".mcp.json", "json") or {}).get("mcpServers")
+            declares = [n for n, v in sorted(bloc.items()) if isinstance(v, dict) and v.get("enabled") is not False] \
+                if isinstance(bloc, dict) else []
+            if declares and all(isinstance(n, str) and _NOM_DEPOT.fullmatch(n) for n in declares):
+                depot = declares
+                morceaux.append(f"{_noms(depot)} (déclaré par `.mcp.json` du projet : contenu du dépôt, activation non vérifiée)")
+            elif declares:
+                morceaux.append(f"{len(declares)} serveur(s) déclaré(s) par `.mcp.json` du projet, noms non repris "
+                                "(contenu du dépôt, activation non vérifiée)")
         except ValueError:
             inconnu = True
     reste = ("Les connecteurs du compte et les serveurs apportés par un plugin ne sont pas visibles du lanceur : "
              f"pour eux, {INCONNU}.")
     if inconnu and not morceaux:
-        return f"{INCONNU} — configuration de Claude Code illisible. {reste}", noms
+        return f"{INCONNU} — configuration de Claude Code illisible. {reste}", noms, depot
     if not morceaux:
-        return f"aucun dans les fichiers lus. {reste}", noms
-    return " ; ".join(morceaux) + (f" ; une configuration est illisible ({INCONNU} pour elle)" if inconnu else "") + f". {reste}", noms
+        return f"aucun dans les fichiers lus. {reste}", noms, depot
+    return (" ; ".join(morceaux) + (f" ; une configuration est illisible ({INCONNU} pour elle)" if inconnu else "")
+            + f". {reste}", noms, depot)
+
+
+def linear(moteur: str, serveurs_mcp: list[str] | None) -> str:
+    """Le protocole demande Linear : dit si un serveur de ce nom est configuré sur ce poste (pas s'il répond)."""
+    if serveurs_mcp is None:
+        return f"{INCONNU} — configuration illisible ; essaie, et suis le repli du Protocole s'il manque"
+    trouves = [n for n in serveurs_mcp if "linear" in n.lower()]
+    if trouves:
+        return f"serveur MCP `{trouves[0]}` configuré (non testé au lancement)"
+    if moteur == "claude":
+        return (f"aucun serveur de ce nom dans les fichiers lus ; un connecteur du compte reste possible ({INCONNU}) : "
+                "essaie, et suis le repli du Protocole s'il manque")
+    return "aucun serveur de ce nom dans la configuration de Codex : suis le repli du Protocole"
+
+
+def gh() -> str:
+    """`gh` sert à ouvrir la PR et à publier une relecture : présence dans le PATH du lanceur, connexion non testée."""
+    if shutil.which("gh"):
+        return "commande `gh` dans le PATH du lanceur (connexion non testée : `gh auth status` le dit)"
+    return ("commande `gh` non trouvée dans le PATH du lanceur : si elle manque aussi dans ta session, tu ne peux ni "
+            "ouvrir une PR ni y publier ; dis-le dans ton compte rendu")
 
 
 # --- Playwright ----------------------------------------------------------------------------------------------------
 
-def playwright(racine: Path | None, serveurs_mcp: list[str]) -> str:
-    """Où Playwright a été trouvé, sans rien lancer (pas de `npx`, qui téléchargerait)."""
+def playwright(racine: Path | None, serveurs_mcp: list[str], serveurs_depot: list[str] | None = None) -> str:
+    """Où Playwright a été trouvé, sans rien lancer (pas de `npx`, qui téléchargerait). Un serveur MCP déclaré par
+    le dépôt du projet est signalé, jamais compté comme « présent » : son nom n'est pas un constat."""
     trouve = []
     if shutil.which("playwright"):
         trouve.append("commande `playwright` dans le PATH")
@@ -233,13 +268,15 @@ def playwright(racine: Path | None, serveurs_mcp: list[str]) -> str:
     if mcp:
         trouve.append(f"serveur MCP `{mcp[0]}` configuré")
     navigateurs = (_home() / ".cache" / "ms-playwright").is_dir()
+    du_depot = (" Le `.mcp.json` du projet déclare un serveur MCP de ce nom : déclaré par le dépôt, non vérifié."
+                if any("playwright" in n.lower() for n in serveurs_depot or []) else "")
     if trouve:
         return ("présent — " + " ; ".join(trouve) + ". Navigateurs téléchargés (`~/.cache/ms-playwright`) : "
-                + ("oui" if navigateurs else "non trouvés, `playwright install chromium` sera nécessaire") + ".")
+                + ("oui" if navigateurs else "non trouvés, `playwright install chromium` sera nécessaire") + "." + du_depot)
     cherche = "PATH, " + ("`node_modules` et `package.json` du projet, " if racine else "") + "module Python, serveurs MCP"
     return (f"non trouvé ({cherche})" + ("" if racine else f" ; dossier du projet {INCONNU} du lanceur : son `node_modules` n'a pas été regardé")
             + ". Ne suppose pas qu'il est installé : vérifie, et si tu ne peux pas piloter de navigateur, dis-le "
-              "dans ton compte rendu au lieu de valider à la lecture du code.")
+              "dans ton compte rendu au lieu de valider à la lecture du code." + du_depot)
 
 
 # --- Skills et opérations lourdes ----------------------------------------------------------------------------------
@@ -294,7 +331,8 @@ def bloc(*, agent: str, projet: str, brief: str = "") -> list[str]:
            "Constaté au lancement sur ce poste (réglages, fichiers de configuration, PATH), sans rien connecter. "
            f"« {INCONNU} » veut dire non vérifié : teste avant de compter dessus. Un outil annoncé qui ne répond pas "
            "se signale dans ton compte rendu."]
-    serveurs: list[str] = []
+    serveurs: list[str] | None = []
+    depot: list[str] = []
     if moteur == "codex":
         out.append("- Moteur : Codex (lancé par `jarvis-codex`).")
         out.append("- Recherche web : " + (sur(recherche_web_codex) or INCONNU) + ".")
@@ -309,10 +347,15 @@ def bloc(*, agent: str, projet: str, brief: str = "") -> list[str]:
         out.append(f"- Moteur : {INCONNU} (lancement hors routeur) ; recherche web et serveurs MCP : {INCONNU}.")
         mcp, etiquette = None, ""
     if etiquette:
-        ligne, serveurs = mcp if mcp else (INCONNU, [])
+        ligne, serveurs, *plus = mcp if mcp else (INCONNU, None)
+        depot = plus[0] if plus else []
+        if ligne.startswith(INCONNU):
+            serveurs = None
         ligne = ligne.rstrip(".")
         out.append(f"- {etiquette} (déclarés, pas testés) : {ligne}.")
-    out.append("- Playwright : " + (sur(playwright, racine, serveurs) or f"{INCONNU}."))
+        out.append("- Linear : " + (sur(linear, moteur, serveurs) or INCONNU) + ".")
+    out.append("- `gh` : " + (sur(gh) or INCONNU) + ".")
+    out.append("- Playwright : " + (sur(playwright, racine, serveurs or [], depot) or f"{INCONNU}."))
     skills = sur(skills_du_role, brief, moteur)
     if skills:
         out.append(f"- Skills citées par ton rôle : {skills}.")

@@ -98,7 +98,14 @@ def verifier(c: dict, dossier: Path, timeout: int = 180) -> tuple[bool, str]:
 # --- Contrôles exécutables sur le brief : son exemple et son contre-exemple de compte rendu --------------------------
 
 _BLOC = re.compile(r"^\*\*(Exemple de bon compte rendu|Contre-exemple)[^\n]*\*\*[^\n]*\n```[^\n]*\n(.*?)\n```", re.M | re.S)
-_TEST = re.compile(r"\btests?\b|test_|\.test\.|_test\.", re.I)
+# Une preuve par test désigne un test : son nom (`test_refus`, `::test_x`), son fichier (`tests/…`, `x.test.ts`,
+# `x_test.go`). Le mot « test » seul ne prouve rien, et une preuve qui commence par une négation dit le contraire.
+_TEST = re.compile(r"\btest_\w+|::\s*test\w*|\btests?/[\w./-]+|[\w-]+\.(?:test|spec)\.\w+|[\w-]+_test\.\w+", re.I)
+_NEGATION = re.compile(r"^\W*(aucune?|pas d[e']|sans|non)\b", re.I)
+
+
+def _prouve_par_test(preuve: str) -> bool:
+    return bool(_TEST.search(preuve or "")) and not _NEGATION.match(preuve or "")
 
 
 def blocs_brief(corps: str) -> dict:
@@ -149,7 +156,7 @@ def _c_contre_exemple(corps: str) -> str:
 def _c_preuve_par_test(corps: str) -> str:
     texte = blocs_brief(corps)["exemple"]
     a = analyser_extrait(texte) if texte is not None else None
-    if a and a["type"] == "termine" and any(_TEST.search(c["preuve"]) for c in a["analyse"]["criteres"]):
+    if a and a["type"] == "termine" and any(_prouve_par_test(c["preuve"]) for c in a["analyse"]["criteres"]):
         return ""
     return "aucun critère de l'exemple n'est prouvé par un test"
 
@@ -209,12 +216,10 @@ def analyser_sortie(sortie: str) -> dict:
     compte pas comme un compte rendu."""
     lignes = str(sortie or "").splitlines()
     debuts = [i for i, ln in enumerate(lignes) if "✅" in ln and re.search(r"TERMIN[ÉE]", ln, re.I)]
-    marque = "<ton rôle>"
     if not debuts:
         debuts = [i for i, ln in enumerate(lignes) if re.match(r"\W*VERDICT\s*:", ln, re.I)]
-        marque = "<amélioration non bloquante>"
     texte = "\n".join(lignes[debuts[-1]:]) if debuts else str(sortie or "")
-    if debuts and marque in texte:
+    if debuts and comptes_rendus.gabarit_non_rempli(texte):  # même contrôle que l'analyseur (« gabarit non rempli »)
         return {"type": "inconnu", "conforme": False, "anomalies": ["seul le gabarit du prompt a été recopié"]}
     a = comptes_rendus.analyser(texte)
     return {"type": a["type"], "conforme": bool(a["conforme"]), "anomalies": list(a["anomalies"])[:8]}

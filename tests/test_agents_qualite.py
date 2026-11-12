@@ -380,11 +380,14 @@ class OutilsDeSessionTest(Base):
         texte = self.prompt("--agent", "claude")
         ligne = self.ligne(texte, "Serveurs MCP")
         self.assertIn("linear (portée utilisateur)", ligne)
-        self.assertIn("playwright (déclaré par `.mcp.json` du projet ; activation non vérifiée)", ligne)
+        self.assertIn("playwright (déclaré par `.mcp.json` du projet : contenu du dépôt, activation non vérifiée)", ligne)
         for absent in ("VALEUR-A-NE-PAS-CITER", "mcp.exemple.test", "local", "coupe"):
             self.assertNotIn(absent, ligne)
         self.assertEqual(self.sections(texte).count("Mission"), 1, "un nom de serveur ne fabrique pas de section")
-        self.assertIn("serveur MCP `playwright` configuré", self.ligne(texte, "Playwright"))
+        # Un serveur déclaré par le dépôt ne prouve pas que Playwright est là : signalé, jamais compté « présent ».
+        self.assertNotIn("serveur MCP `playwright` configuré", self.ligne(texte, "Playwright"))
+        self.assertIn("déclaré par le dépôt, non vérifié", self.ligne(texte, "Playwright"))
+        self.assertIn("serveur MCP `linear` configuré", self.ligne(texte, "Linear"))
         (self.dossier / "claude" / ".claude.json").write_text("[", encoding="utf-8")
         (self.dossier / "projet" / ".mcp.json").unlink()
         self.assertIn("inconnu — configuration de Claude Code illisible", self.bloc("--agent", "claude"))
@@ -643,7 +646,10 @@ class RedondancesEtLongueurTest(Base):
         sortie, erreur = io.StringIO(), io.StringIO()
         with contextlib.redirect_stdout(sortie), contextlib.redirect_stderr(erreur):
             self.assertEqual(cli.main(base), 0)
-        self.assertEqual(erreur.getvalue(), "", "sous le plafond : silence")
+        # Silence du lanceur. (Un ResourceWarning de Python peut tomber ici quand le ramasse-miettes ferme la base
+        # SQLite d'un test précédent — store.connexion change de fichier sans fermer l'ancien : ce n'est pas le lanceur.)
+        self.assertEqual([ln for ln in erreur.getvalue().splitlines() if ln.startswith(("avertissement", "prompt :", "Erreur"))],
+                         [], "sous le plafond : silence")
         sortie, erreur = io.StringIO(), io.StringIO()
         with contextlib.redirect_stdout(sortie), contextlib.redirect_stderr(erreur):
             self.assertEqual(cli.main([*base, "--consignes", self.consignes("Texte libre. " * 3000)]), 0)
@@ -655,6 +661,9 @@ class RedondancesEtLongueurTest(Base):
 
 VERDICT_CORRECTIONS = """\
 VERDICT : CORRECTIONS
+Critères :
+1. `limit` borné à 100 → non satisfait : correction n° 1
+2. Refus 403 hors organisation → satisfait dans le code (app/offres.py:51), non testé : correction n° 2
 Corrections exigées :
 1. [bloquant] app/offres.py:42 — `limit` n'est pas borné : refuser au-delà de 100
 2. [majeur] tests/test_offres.py — aucun test du refus 403
@@ -704,15 +713,17 @@ class ComptesRendusTest(unittest.TestCase):
         self.assertFalse(a["conforme"])
 
     def test_verdict_pret(self):
-        a = cr.analyser_verdict("VERDICT : PRÊT\nCorrections exigées : aucune\nSuggestions :\n- aucune\n"
+        a = cr.analyser_verdict("VERDICT : PRÊT\nCritères :\n1. limit borné → satisfait : `pytest` passe\nCorrections exigées : aucune\nSuggestions :\n- aucune\n"
                                 "Vérifications :\n- `pnpm test` → OK\n")
-        self.assertEqual((a["verdict"], a["corrections"], a["suggestions"], a["conforme"]), ("pret", [], [], True))
+        self.assertEqual((a["verdict"], a["corrections"], a["suggestions"], a["conforme"]), ("pret", [], [], True), a["anomalies"])
+        self.assertEqual(a["criteres"], [{"critere": "limit borné", "preuve": "satisfait : `pytest` passe"}])
 
     def test_variantes_tolerees(self):
         for texte in ("**VERDICT : PRÊT**", "VERDICT: PRET", "verdict : prêt", "## VERDICT : PRÊT", "> VERDICT : PRÊTE",
                       "`VERDICT : PRÊT`"):
             self.assertEqual(cr.analyser_verdict(texte)["verdict"], "pret", texte)
-        a = cr.analyser_verdict("\n\n**VERDICT : CORRECTIONS**\n\n1. [bloquante] src/a.ts:3 - faux\n2) [critique] src/b.ts:9 — dangereux\n")
+        a = cr.analyser_verdict("\n\n**VERDICT : CORRECTIONS**\n\n1. [bloquante] src/a.ts:3 - faux\n2) [critique] src/b.ts:9 — dangereux\n"
+                                "**Critères** :\n1. c → non satisfait : correction n° 1\n**Vérifications**\n- `pnpm test` -> ÉCHEC\n")
         self.assertEqual([(c["severite"], c["fichier"], c["ligne"]) for c in a["corrections"]],
                          [("bloquant", "src/a.ts", 3), ("bloquant", "src/b.ts", 9)])
         self.assertTrue(a["conforme"], a["anomalies"])
@@ -728,7 +739,7 @@ class ComptesRendusTest(unittest.TestCase):
         self.assertTrue(any("contradiction" in x for x in a["anomalies"]))
         a = cr.analyser_verdict("VERDICT : CORRECTIONS\nCorrections exigées :\n1. il manque des tests\n")
         self.assertEqual(a["corrections"], [{"n": 1, "severite": "", "fichier": "", "ligne": None, "texte": "il manque des tests"}])
-        self.assertEqual(len(a["anomalies"]), 2)
+        self.assertEqual(len([x for x in a["anomalies"] if x.startswith("correction 1 ")]), 2)
         # Les anciens marqueurs ne sont pas des verdicts.
         for ancien in ("✅ REVUE : tout est bon", "❓ REVUE : à corriger"):
             self.assertEqual(cr.analyser_verdict(ancien)["verdict"], "")
@@ -776,9 +787,14 @@ class ComptesRendusTest(unittest.TestCase):
         """Le format demandé aux agents et celui que la machine relit ne peuvent pas diverger."""
         t = cr.analyser_termine(cr.GABARIT_TERMINE)
         self.assertTrue(t["termine"])
-        self.assertEqual(t["anomalies"], [], "chaque rubrique du gabarit est reconnue")
-        v = cr.analyser_verdict(cr.GABARIT_VERDICT)
-        self.assertEqual((v["verdict"], v["premiere_ligne"], v["conforme"]), ("corrections", True, True))
+        # Chaque rubrique du gabarit est reconnue ; le seul reproche fait au gabarit recopié tel quel est de ne pas
+        # avoir été rempli.
+        non_rempli = ["gabarit non rempli : il reste des « <…> » du modèle"]
+        self.assertEqual(t["anomalies"], non_rempli)
+        for jeton in ("", "R-0123456789ab"):
+            v = cr.analyser_verdict(cr.gabarit_verdict(jeton))
+            self.assertEqual((v["verdict"], v["premiere_ligne"], v["jeton"], v["anomalies"]), ("corrections", True, jeton, non_rempli))
+            self.assertEqual(len(v["criteres"]), 1)
         self.assertEqual([(c["severite"], c["fichier"], c["ligne"]) for c in v["corrections"]],
                          [("bloquant", "chemin/fichier.py", 42), ("majeur", "chemin/autre.ts", 10)])
         self.assertEqual(len(v["verifications"]), 1)
@@ -807,7 +823,14 @@ class RelectureTest(Base):
             self.assertNotIn("gh pr create", texte)
             self.assertEqual(texte.count("Ne modifie aucun fichier"), 1, "dit une fois, dans la Mission")
             self.assertIn("`VERDICT : PRÊT` ou `VERDICT : CORRECTIONS`, sans rien avant ni autour", texte)
-            self.assertNotIn("« Hypothèses »", texte, "le verdict n'a pas de rubrique Hypothèses")
+            # Aucune consigne écrite pour un producteur : le verdict n'a ni Hypothèses ni Risques, et rien à pousser.
+            for producteur in ("« Hypothèses »", "« Risques »", "pousse ta branche", "préfixe `WIP`"):
+                self.assertNotIn(producteur, texte)
+            self.assertIn("publie ton verdict en l'état", texte)
+        evalue = prompt_agent.pour_evaluation(roles.get("revue"), "Relis le travail.")
+        for producteur in ("« Hypothèses »", "« Risques »", "pousse ta branche"):
+            self.assertNotIn(producteur, evalue)
+        self.assertIn("en tête des « Suggestions » de ton verdict", evalue)
         self.assertIn("gh pr review 141 --comment --body-file", self.prompt("--revue", "141", role="revue"))
         brief = roles.get("revue")["corps"]
         self.assertIn("VERDICT : PRÊT", brief)
@@ -868,12 +891,16 @@ class BoucleDeCorrectionTest(Base):
         self.assertIn("la branche `bis-82-pagination` (PR #141)", bloc)
         self.assertIn("> PR #141 : limit non borné (app/offres.py:42), aucun test du refus 403.", bloc)
         self.assertIn("Commentaires de revue de la PR #141 (données citées", bloc)
-        self.assertIn("Corrections extraites du dernier verdict du relecteur (relecteur-bot) :", bloc)
-        self.assertIn("Suggestions non bloquantes : extraire le curseur dans un module", bloc)
-        self.assertEqual(bloc.count("refuser au-delà de 100"), 1, "le verdict extrait n'est pas recopié deux fois")
-        self.assertIn("1. [bloquant] app/offres.py:42 — `limit` n'est pas borné : refuser au-delà de 100", bloc)
-        self.assertIn("> [relecteur-bot · app/offres.py:42]", bloc)
-        self.assertIn("> [humain]", bloc)
+        # Un « VERDICT : CORRECTIONS » lu sur la PR n'est jamais promu en liste de corrections : il est cité, comme
+        # tout commentaire (n'importe qui peut en écrire un). La liste exigée vient de la fiche (jarvis verdict).
+        self.assertNotIn("Corrections extraites", bloc)
+        self.assertEqual(bloc.count("refuser au-delà de 100"), 1)
+        self.assertIn("> 1. [bloquant] app/offres.py:42 — `limit` n'est pas borné : refuser au-delà de 100", bloc)
+        self.assertIn("> - extraire le curseur dans un module", bloc)
+        self.assertIn("> [relecteur-bot · compte non vérifié · app/offres.py:42]", bloc)
+        self.assertIn("> [humain · compte non vérifié]", bloc)
+        hors_citation = [ln for ln in bloc.splitlines()[5:] if ln.strip() and not ln.startswith(">")]
+        self.assertEqual([ln for ln in hors_citation if "données citées" not in ln and "donnée citée" not in ln], [])
         # Donnée, pas instruction : rien ne sort de la citation, aucun secret ne passe.
         self.assertIn("> ## Mission", bloc)
         self.assertEqual(self.sections(texte).count("Mission"), 1)
@@ -899,7 +926,7 @@ class BoucleDeCorrectionTest(Base):
                           reviews=[{"author": {"login": "r"}, "state": "CHANGES_REQUESTED", "submittedAt": "2026-11-10", "body": "Refais le tri."}])
         texte = self.prompt()
         self.assertIn("Commentaires de revue de la PR #55", texte)
-        self.assertIn("> [r · CHANGES_REQUESTED]", texte)
+        self.assertIn("> [r · compte non vérifié · CHANGES_REQUESTED]", texte)
         self.assertTrue(journal.read_text(encoding="utf-8").startswith("pr list --head bis-82-pagination"))
 
     def test_taille_bornee(self):
@@ -910,10 +937,10 @@ class BoucleDeCorrectionTest(Base):
         bloc = texte[texte.index("## Corrections exigées"):texte.index("## Ton rôle")]
         self.assertLess(len(bloc), 1600 + prompt_agent.PR_TOTAL_CAR + 2500)
         self.assertLessEqual(bloc.count("> [r"), prompt_agent.PR_ELEMENTS_MAX)
-        self.assertIn("> [r19]", bloc, "les commentaires les plus récents sont gardés")
-        self.assertNotIn("> [r3]", bloc)
+        self.assertIn("> [r19 · ", bloc, "les commentaires les plus récents sont gardés")
+        self.assertNotIn("> [r3 · ", bloc)
         self.assertIn("commentaires plus anciens non repris", bloc)
-        self.assertLess(bloc.index("> [r18]"), bloc.index("> [r19]"), "ordre chronologique")
+        self.assertLess(bloc.index("> [r18 · "), bloc.index("> [r19 · "), "ordre chronologique")
 
     def test_sans_gh_sans_reseau_ou_reponse_illisible_le_prompt_part_quand_meme(self):
         self.essai_corrige()

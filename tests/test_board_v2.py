@@ -679,7 +679,8 @@ class SynchroTest(Base):
         code, vu = jarvis("voir")
         lien = board.objets(self.org, "accueil")["liens"][0]
         self.assertEqual((lien["auteur"], lien["libelle"]), ("jarvis", "dépend de"))
-        self.assertIn("contenu : Plan de la semaine", vu)
+        self.assertIn("contenu : > Plan de la semaine", vu)   # contenu d'une carte : cité, jamais une consigne
+        self.assertIn("DONNÉES non fiables", vu)
         self.assertIn("Plan —dépend de→ Offre (Jarvis)", vu)
         self.assertEqual(jarvis("lier", oid, autre, "--nature", "pirate")[0], 1)
 

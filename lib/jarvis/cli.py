@@ -779,8 +779,14 @@ def cmd_prompt_construire(a) -> int:
         jetons_max = int(getattr(a, "jetons_max", "") or 0)
     except ValueError:
         jetons_max = 0
+    jeton = ""
+    if getattr(a, "jeton_sortie", "") and (a.revue or role["nom"] == "revue"):
+        # Jeton de verdict de cette relecture : en clair dans le seul prompt du relecteur, en empreinte pour la fiche.
+        from . import verdicts
+        jeton = verdicts.jeton_nouveau()
+        Path(a.jeton_sortie).write_text(verdicts.empreinte_jeton(jeton), encoding="utf-8")
     texte = prompt_agent.construire(
-        projet=a.projet, issue=issue, branche=a.branche, regles=a.regles, role=role, corps=corps_candidat,
+        projet=a.projet, issue=issue, branche=a.branche, regles=a.regles, role=role, corps=corps_candidat, jeton=jeton,
         revue=a.revue, consignes=consignes, agent=getattr(a, "agent", ""), modele=getattr(a, "modele", ""),
         effort=getattr(a, "effort", ""), taille=getattr(a, "taille", ""), jetons_max=jetons_max,
         regles_presentes=not getattr(a, "sans_regles", False), criteres=criteres)
@@ -804,7 +810,8 @@ def cmd_tache_enregistrer(a) -> int:
                                role=a.role, modele=a.modele, modele_id=a.modele_id, effort=a.effort, repli=a.repli,
                                taille=a.taille, plan=a.plan, revue=a.revue, raison=a.raison, secours=a.secours,
                                classe=a.classe, reservation=a.reservation, jetons_max=int(a.jetons_max or 0),
-                               consignes_empreinte=a.consignes_empreinte, base=a.base, brief=a.brief)
+                               consignes_empreinte=a.consignes_empreinte, base=a.base, brief=a.brief,
+                               jeton_verdict=a.jeton_verdict)
     if a.reservation:
         from . import admission
         admission.confirmer(a.reservation, fiche["id"], a.worktree)
@@ -1041,9 +1048,11 @@ def cmd_verdict(a) -> int:
     decision = reste.pop(0) if reste and reste[0] in taches.VERDICTS else ""
     texte = None
     if a.stdin:
+        if _acteur() == "chef":
+            return _err("--stdin est réservé à ton humain : le chef n'écrit pas lui-même le compte rendu qu'il enregistre.")
         texte = sys.stdin.read(verdicts.TEXTE_MAX + 1)
     try:
-        r = verdicts.enregistrer(a.projet, a.issue, decision, " ".join(reste), pr=a.pr, texte=texte)
+        r = verdicts.enregistrer(a.projet, a.issue, decision, " ".join(reste), pr=a.pr, texte=texte, acteur=_acteur())
     except ValueError as exc:
         return _err(str(exc))
     except verdicts.Refus as exc:
@@ -1052,11 +1061,15 @@ def cmd_verdict(a) -> int:
             print(f"  - {ligne}", file=sys.stderr)
         if exc.motif in ("non_conforme", "ambigu"):
             print("Rien n'a été écrit. Demande au relecteur de republier son verdict au format (première ligne "
-                  "« VERDICT : PRÊT » ou « VERDICT : CORRECTIONS », corrections numérotées avec sévérité et "
-                  "fichier:ligne), puis relance cette commande.", file=sys.stderr)
-        elif exc.motif == "absent":
+                  "« VERDICT : PRÊT » ou « VERDICT : CORRECTIONS » suivie de son jeton, critères avec preuve, corrections "
+                  "numérotées avec sévérité et fichier:ligne, au moins une vérification lancée), puis relance cette "
+                  f"commande. « jarvis verdict {a.projet} {a.issue.upper()} corrections \"résumé\" » reste possible.",
+                  file=sys.stderr)
+        elif exc.motif == "absent" and not decision:
             print(f"Rien n'a été écrit. Si le relecteur n'a publié que dans l'issue : « jarvis verdict {a.projet} "
                   f"{a.issue.upper()} pret|corrections \"résumé\" » (saisie à la main).", file=sys.stderr)
+        else:
+            print("Rien n'a été écrit.", file=sys.stderr)
         return 1
     if not r["deja"]:
         store.feed_add("note", f"relecture de {a.projet} {r['fiche']['issue']} : {taches.VERDICTS[r['verdict']]}"
@@ -2032,7 +2045,7 @@ def cmd_board(a) -> int:
     acteur = _acteur()
     try:
         if a.action == "voir":
-            print(synchro.texte_board(org, espace, detail=True))
+            print(synchro.texte_board(org, espace, detail=True, cite=True))
         elif a.action == "espaces":
             for e in board.espaces(org):
                 print(f"{e['nom']:<24} {e['objets']:>4} carte(s){'  (projet)' if e['projet'] else ''}")
@@ -2624,7 +2637,7 @@ def build_parser() -> argparse.ArgumentParser:
     for opt in ("projet", "issue", "agent", "worktree"):
         s.add_argument(f"--{opt}", required=True)
     for opt in ("chemin", "role", "modele", "modele-id", "effort", "repli", "plan", "revue", "raison", "classe", "reservation",
-                "jetons-max", "consignes-empreinte", "base", "brief"):
+                "jetons-max", "consignes-empreinte", "base", "brief", "jeton-verdict"):
         s.add_argument(f"--{opt}", default="")
     s.add_argument("--taille", default="M")
     s.add_argument("--secours", action="store_true")
@@ -2638,8 +2651,8 @@ def build_parser() -> argparse.ArgumentParser:
     s = sub.add_parser("prompt-construire", help=argparse.SUPPRESS)
     for opt in ("projet", "issue", "branche", "regles"):
         s.add_argument(f"--{opt}", required=True)
-    for opt in ("role", "revue", "consignes", "criteres", "brief-sortie", "agent", "modele", "effort", "taille",
-                "jetons-max"):
+    for opt in ("role", "revue", "consignes", "criteres", "brief-sortie", "jeton-sortie", "agent", "modele", "effort",
+                "taille", "jetons-max"):
         s.add_argument(f"--{opt}", default="")
     s.add_argument("--sans-regles", action="store_true")  # le projet n'a ni CLAUDE.md ni AGENTS.md
     s.add_argument("--mesure", action="store_true")       # longueur du prompt, par section, sur la sortie d'erreur
@@ -2650,7 +2663,8 @@ def build_parser() -> argparse.ArgumentParser:
     s.add_argument("reste", nargs="*", metavar="DECISION_OU_RESUME",
                    help="sans décision : le verdict est lu sur le compte rendu publié par le relecteur")
     s.add_argument("--pr", default="", help="numéro de la PR où le relecteur a publié (sinon : celle de la relecture)")
-    s.add_argument("--stdin", action="store_true", help="lire le compte rendu du relecteur sur l'entrée standard")
+    s.add_argument("--stdin", action="store_true",
+                   help="lire le compte rendu du relecteur sur l'entrée standard (réservé à l'humain)")
     s.set_defaults(fn=cmd_verdict)
     s = sub.add_parser("bilan", help="ce que l'usine a produit ; « quotidien » : le bilan du matin")
     s.add_argument("quoi", nargs="?", choices=("quotidien",))

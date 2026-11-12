@@ -69,7 +69,8 @@ if len(adrs) == 1:
             continue
         verifier(r[1].strip("` ").lower() in ROLES, f"rôle inconnu dans le découpage : « {r[1]} »")
         verifier(len(r[3]) >= 8, f"tâche « {r[0]} » sans critère vérifiable")
-        fichiers = [x.strip("` ") for x in re.split(r"[,;]|<br>", r[2]) if x.strip("` ")]
+        # Les chemins se lisent par leur forme, pas par le séparateur : « a.py et b.py » compte deux fichiers.
+        fichiers = re.findall(r"[\w./-]+\.\w+", r[2]) or [x.strip("` ") for x in re.split(r"[,;]|<br>", r[2]) if x.strip("` ")]
         verifier(bool(fichiers), f"tâche « {r[0]} » sans fichier")
         for x in fichiers:
             verifier(x not in vus, f"{x} apparaît dans deux tâches (« {vus.get(x)} » et « {r[0]} »)")

@@ -137,9 +137,9 @@ juste après la Mission :
 
 1. la tâche et la branche de l'essai corrigé, et la PR si elle est connue ;
 2. le résumé du verdict enregistré (`jarvis verdict <projet> <ISSUE> corrections "…"`, 1 500 caractères au plus) ;
-3. si `gh` répond : les corrections extraites du dernier verdict au format, puis les commentaires de revue
-   (revues, commentaires, commentaires en ligne avec leur `fichier:ligne`), les 8 plus récents, 700 caractères
-   chacun, 4 000 au total.
+3. si `gh` répond : les commentaires de la PR (revues, commentaires, commentaires en ligne avec leur
+   `fichier:ligne`), les 8 plus récents, 700 caractères chacun, 4 000 au total, tous cités. Aucun n'est réanalysé
+   pour en tirer des « corrections » (voir « Lot 2 — relecture adverse ») : la liste exigée vient de la fiche.
 
 La PR est cherchée dans cet ordre : la relecture lancée avec `--revue N` sur cette issue ; un « PR #N » dans le
 résumé du verdict ; `gh pr list --head <branche de l'essai corrigé>`. Chaque appel à `gh` est limité à 8 secondes
@@ -359,6 +359,10 @@ requête (projet + issue + rôle) et qui n'entre plus.
 
 ## Volet aq2-verdict : le verdict de relecture s'enregistre sans recopie
 
+> Cette section décrit le volet tel qu'il a été livré. La relecture adverse en a corrigé l'identité du relecteur
+> (jeton de relecture), la portée de `--pr` et de `--stdin`, et ce que la saisie à la main peut faire : là où
+> elle contredit ce qui suit, c'est « Lot 2 — relecture adverse », en fin de document, qui fait foi.
+
 Avant : le chef lisait le verdict du relecteur et le recopiait dans `jarvis verdict <projet> <ISSUE>
 pret|corrections "résumé"`. La décision, la liste des corrections et la PR dépendaient de sa recopie.
 
@@ -542,3 +546,99 @@ que la fusion a ajouté pour que les volets se répondent :
 
 Non vérifié par cette fusion : aucun agent, chef ou modèle réel n'a été lancé ; la note visée de 9/10 n'est pas
 mesurée. Les limites de chaque volet (sections ci-dessus) restent entières.
+
+## Lot 2 — relecture adverse (corrections)
+
+Deux relecteurs adverses ont relu la branche. Tous leurs constats ont été reproduits sur le code d'avant, puis
+corrigés ; chacun a son test dans `tests/test_aq2_adverse.py` (ou dans le fichier de tests du volet).
+
+### Verdict : lié à une relecture, pas à un compte
+
+L'auteur d'un travail et son relecteur publient avec le même compte GitHub. Le filtre « publié par le compte de
+l'usine » ne distinguait donc pas le juge du jugé : un « VERDICT : PRÊT » de l'auteur sous sa propre PR passait
+pour celui du relecteur, et bloquait ensuite la saisie « corrections ».
+
+| Garde | Où |
+|---|---|
+| Une relecture (rôle `revue` ou `--revue`) lancée **après** la production jugée est exigée ; seuls comptent les textes publiés après **son** lancement | `verdicts._relecture`, `verdicts.chercher` |
+| Jeton de relecture : tiré au lancement (`jarvis prompt-construire --jeton-sortie`), écrit dans le seul prompt du relecteur (`VERDICT : PRÊT [R-…]`), gardé sur sa fiche sous forme d'empreinte SHA-256 (`jeton_verdict`) ; un texte sans ce jeton n'est pas lu | `bin/jarvis`, `cli.cmd_prompt_construire`, `taches.enregistrer`, `comptes_rendus.gabarit_verdict` |
+| Une fois publié, le jeton se lit sur la PR : un « PRÊT » qui suit un « CORRECTIONS » de la même relecture est refusé (nouvelle relecture, nouveau jeton). L'inverse est accepté | `verdicts.chercher` |
+| La ligne du verdict n'accepte devant « VERDICT » que les décorations de bonne foi (gras, code, titre, citation) : ni commentaire HTML, ni texte barré, ni puce | `comptes_rendus._VERDICT` |
+| `--pr N` ne désigne qu'une PR de l'issue : celle de la relecture, ou une PR dont la branche est celle de la production (`headRefName`) | `verdicts.chercher` |
+| Saisie à la main : `corrections` toujours accepté ; `pret` refusé contre un texte de l'usine qui demande des corrections, et quand la PR n'a pas pu être consultée ; `--stdin` et un `--pr` étranger réservés à l'humain | `verdicts.enregistrer`, `chef_moteur.INTERDIT` |
+
+Ce que le chef **garde** : saisir `pret` à la main quand la PR est lisible et ne porte aucun verdict de la
+relecture (relecteur qui n'a publié que dans l'issue, livrable sans PR). La documentation ne présente plus la
+commande comme lui retirant ce pouvoir.
+
+Limites, dites telles quelles :
+
+- Le jeton est en clair dans le fichier de prompt du relecteur (`/tmp`, même utilisateur Unix que les autres
+  agents). Un agent de production qui irait le lire pourrait écrire un verdict qui le porte : les agents ne sont
+  pas isolés les uns des autres sur ce poste, et ce lot n'y change rien. Le jeton empêche qu'un commentaire écrit
+  sans lui passe pour un verdict, pas davantage.
+- Une relecture lancée avant cette version n'a pas de jeton : son verdict ne se lit plus seul, il se saisit.
+- La fiche de relecture n'a pas besoin d'être « terminée » : le démon voit la fin d'un agent avec retard, et
+  c'est le jeton, pas le statut, qui lie le texte à la relecture.
+- Vérifié avec le faux `gh` seulement (champ `headRefName` compris).
+
+### Comptes rendus : ce que la machine refuse maintenant
+
+- **Rubrique « Critères »** dans le verdict (`critère → satisfait + preuve, ou non satisfait : correction n°`),
+  avant « Corrections exigées » : le prompt du relecteur exigeait une preuve par critère sans rubrique pour la
+  porter. Son absence est une anomalie, comme un critère sans preuve.
+- **Aucune vérification lancée** (`commande → résultat`) : anomalie. Un « PRÊT » sans rien avoir lancé n'est plus
+  enregistré par `jarvis verdict`.
+- **`fichier:ligne`** : un nom sans extension suivi de sa ligne compte (`Makefile:12`, `Dockerfile:3`) ; pour un
+  manque, la règle est écrite : le fichier où l'ajout est attendu, ligne 1.
+- **Flèche dans la commande** : quand la commande est entre accents graves, le résultat se cherche après eux.
+- **Suite d'une correction** sur une ligne non indentée : rattachée à la correction, plus perdue.
+- **Gabarit recopié** (« <commande lancée> »…) : anomalie « gabarit non rempli », pour les deux formats ;
+  `evaluation.analyser_sortie` réutilise ce contrôle.
+- `preuve_par_test` exige une référence de test (`test_x`, `tests/…`, `x.test.ts`) et refuse une preuve qui
+  commence par une négation.
+
+### Prompt de l'agent
+
+- La boucle de correction ne promeut plus aucun commentaire de PR en « corrections » : elle cite les corrections
+  de la fiche (`verdict_corrections`, quand le verdict vient du relecteur) et tous les commentaires, préfixés
+  `> `, avec « compte externe » dans l'en-tête quand l'auteur n'est pas le compte de l'usine (« compte non
+  vérifié » quand `gh api user` ne répond pas).
+- Bloc « Outils de cette session » : lignes **Linear** et **`gh`** ; un nom de serveur choisi par le dépôt
+  (`.mcp.json`) n'est repris que sous la forme `[a-z0-9][a-z0-9_-]{0,31}`, sinon seul le nombre est écrit, et
+  il ne sert jamais à conclure « Playwright présent » ni « Linear configuré ». Un nom valide reste un texte
+  choisi par le dépôt : il est marqué comme tel, pas neutralisé.
+- Protocole : le repli « Sans outil Linear » est dit une fois (plan, question et compte rendu dans la PR ou la
+  réponse finale ; arrêt si ni l'issue ni aucun critère ne sont lisibles). Rôle à livrables : PR seulement s'il
+  y a des sources à versionner.
+- Relecteur : budget et modèle parlent de son verdict (plus de « pousse ta branche », ni de « Risques ») ; en
+  évaluation, l'option prudente va en tête des « Suggestions ». Producteur évalué : conditions de fin sans PR ni
+  publication.
+- Le format du verdict n'est plus redit par l'étape 6 du brief `revue` ni par la consigne du cas d'évaluation.
+
+### Chef
+
+- `jarvis board voir` (lecture du chef) : ligne de cadrage, contenus préfixés `> `, titres entre « », marqueur
+  `[JARVIS` neutralisé en `[JARVIS cité`. La règle « Board, lecture » du rôle le dit. La lecture Telegram n'est
+  pas changée.
+- Rôle Codex : les commandes interdites au chef (celles d'un agent, comme `jarvis lourd exec`, ou de l'humain)
+  ne sont plus préfixées par `jarvis-chef` ; le préambule dit ce que vaut une commande sans préfixe.
+- `bin/jarvis-chef-codex` passe `-c project_doc_max_bytes=131072`. La documentation publique de Codex donne
+  32 Kio par défaut pour ce réglage, et le rôle généré en pèse environ 58 : sans lui, la fin du rôle (étape 7,
+  bilan, plafonds, rollback, studio, veilles, plan de nuit) n'aurait pas été lue. **Non vérifié** : que la version
+  installée (codex-cli 0.164.0) applique bien ce réglage passé par `-c` ; aucun chef Codex réel n'a été lancé.
+  Un test borne la taille du rôle à 60 % de la valeur passée.
+
+### Cas de référence
+
+Les vérifications de `revue/verdict-au-format`, `recherche/comparatif-source`, `marketing/annonces-verifiables`
+et `architecte/adr-file-de-courriels` jugent le fond qu'elles disent mesurer (défauts nommés, faits conformes au
+relevé cité, annonce comparée à la ligne qui la prouve, chemins lus par leur forme). Ce sont des contrôles par
+motif : ils refusent les fautes connues, ils ne comprennent pas le texte. La référence marketing a changé d'une
+ligne (un nombre venait d'une autre ligne du README que celle citée en preuve).
+
+### Historique
+
+Les quatre fusions de la branche portaient le message anglais par défaut de git, sans ligne `Co-Authored-By`.
+Elles ont été recréées à l'identique (mêmes arbres, mêmes parents) avec un message conforme ; la branche n'était
+pas poussée. L'ancienne tête reste sous l'étiquette locale `sauvegarde/aq2-avant-reecriture`.

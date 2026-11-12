@@ -26,6 +26,7 @@ def fin():
 
 sys.path.insert(0, os.environ.get("GOLDENS_LIB") or str(Path(__file__).resolve().parents[4] / "lib"))
 from jarvis import comptes_rendus
+import re
 
 etat = subprocess.run(["git", "status", "--porcelain", "--untracked-files=all"], capture_output=True, text=True, timeout=30)
 verifier(etat.returncode == 0, "git status impossible dans le dossier évalué")
@@ -42,7 +43,14 @@ if f.is_file():
     bloquantes = [c for c in a["corrections"] if c["severite"] == "bloquant" and c["fichier"] == "app/remise.py"
                   and c["ligne"] and 4 <= c["ligne"] <= 8]
     verifier(bool(bloquantes), "aucune correction [bloquant] ne désigne la fonction fautive (app/remise.py:4 à 8)")
-    verifier(len(a["corrections"]) >= 2, "une seule correction : il manque le refus au-dessus de 100, l'arrondi ou les tests")
+    # Le fond, pas seulement la forme : les deux défauts que l'issue rend bloquants doivent être nommés, chacun
+    # par sa correction. Un verdict hors sujet (nommage, docstring) ne passe pas.
+    borne = [c for c in bloquantes if re.search(r"\b100\b|au-dessus|d[ée]pass|sup[ée]rieur|hors de l'intervalle", c["texte"], re.I)]
+    verifier(bool(borne), "aucune correction [bloquant] sur app/remise.py ne dit que le pourcentage au-dessus de 100 n'est pas refusé (critère 1)")
+    arrondi = [c for c in a["corrections"] if c["fichier"] == "app/remise.py" and re.search(r"arrondi|centime", c["texte"], re.I)]
+    verifier(bool(arrondi), "aucune correction sur app/remise.py ne signale l'absence d'arrondi au centime (critère 2)")
+    verifier(any(x is not y for x in borne for y in arrondi) or not (borne and arrondi),
+             "le refus au-dessus de 100 et l'arrondi sont deux corrections distinctes")
     verifier(all(len(c["texte"].split()) >= 5 for c in a["corrections"]), "correction trop vague pour être appliquée")
     verifier(any(v["commande"] and v["resultat"] for v in a["verifications"]),
              "aucune vérification lancée (commande → résultat) : une relecture qui ne lance rien n'est qu'une lecture")
