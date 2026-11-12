@@ -1,31 +1,128 @@
-/* Jetons du Board V2 qui ne dépendent pas du thème (typographie, rayons, mouvement, gabarit).
-   Les couleurs et les ombres vivent dans themes.css, GÉNÉRÉ depuis design/board-v2/tokens.json (npm run jetons) :
-   thème nuit par défaut, thème jour sur :root[data-theme="jour"]. Aucune couleur en dur ailleurs. */
+/* GÉNÉRÉ par scripts/jetons.mjs depuis design/board-v2/tokens.json — ne pas modifier à la main. */
+/* Jetons qui ne dépendent pas du thème. Les couleurs et les ombres vivent dans themes.css. Règles d'usage : docs/jarvis-next/BOARD_DIRECTION.md. */
 :root {
-  /* Interface : Instrument Sans. Titres seulement (28 px et plus) : Newsreader. Code, identifiants, crédits, touches : IBM Plex Mono.
-     Les trois sont sous licence SIL OFL 1.1, embarquées par @fontsource (aucune police distante). */
+  /* police — Trois familles, toutes sous SIL OFL 1.1, embarquées par @fontsource (aucune police distante). Interface : Instrument Sans. Grands titres seulement (28 px et plus) : Newsreader. Chiffres, durées, comptes, provenance, touches, code : IBM Plex Mono. */
   --font-sans: "Instrument Sans Variable", "Segoe UI Variable", "Segoe UI", system-ui, sans-serif;
   --font-serif: "Newsreader Variable", Georgia, "Times New Roman", serif;
   --font-mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+  --fw-regular: 400;
+  --fw-medium: 500;
+  --fw-strong: 600;
 
+  /* taille — Échelle de l'interface (pixels écran) : taille et interligne vont par paire. Rien sous 12 px (11 px au plus petit en mobile). Deux graisses, 400 et 500 ; 600 pour le mot-symbole seul. La hiérarchie vient de la taille et du rôle de texte. Interlettrage 0 sous 40 px. Chiffres : font-variant-numeric: tabular-nums. */
+  --fs-meta: 12px;
+  --lh-meta: 16px;
+  --fs-sm: 13px;
+  --lh-sm: 20px;
+  --fs-base: 14px;
+  --lh-base: 20px;
+  --fs-lg: 16px;
+  --lh-lg: 24px;
+  --fs-xl: 18px;
+  --lh-xl: 24px;
+  --fs-2xl: 22px;
+  --lh-2xl: 28px;
+  --fs-figure: 28px;
+  --lh-figure: 32px;
+  --fs-title: 28px;
+  --fs-title-lg: 36px;
+  --lh-title: 1.15;
+  --fs-display: 60px;
+  --lh-display: 1.05;
+  --tracking-display: -0.02em;
+  --measure: 36rem;
+  --type-credit: var(--fw-regular) var(--fs-meta)/var(--lh-meta) var(--font-mono);
+
+  /* taille-canevas — Échelle des cartes du Board, en unités du canevas : au zoom de référence (80 %) une unité vaut 0,8 px écran. 15 = 12 px écran, le plancher. */
+  --fsc-meta: 15px;
+  --fsc-sm: 16px;
+  --fsc-base: 18px;
+  --fsc-lg: 20px;
+  --fsc-xl: 24px;
+  --fsc-title: 30px;
+
+  /* espace — Grille de 4 px : --space-N vaut N × 4 px. Marges, espacements et hauteurs fixes sont des multiples de 4 ; --space-half (2 px) ne sert qu'aux ajustements à l'intérieur d'un petit contrôle. Dans un contrôle : 4 à 12. Entre éléments liés : 2 à 8. Entre groupes : 12 à 24. Entre sections : 32 à 64. */
+  --space-half: 2px;
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-10: 40px;
+  --space-12: 48px;
+  --space-16: 64px;
+  --space-20: 80px;
+  --space-24: 96px;
+  --pad-control: var(--space-3);
+  --pad-panel: var(--space-4);
+  --pad-card: var(--space-5);
+  --pad-page: var(--space-6);
+  --gap-row: var(--space-1);
+  --gap-group: var(--space-4);
+  --gap-section: var(--space-8);
+
+  /* hauteur — Hauteurs de contrôle et de ligne. Une liste n'a qu'une hauteur de ligne ; 44 px au moins pour ce qui se touche du doigt. */
+  --control-h-sm: 32px;
+  --control-h: 36px;
+  --control-h-lg: 44px;
+  --row-h-compact: 32px;
+  --row-h: 36px;
+  --touch-min: 44px;
+
+  /* rayon — Rayon par taille d'élément : 4 plancher d'un élément imbriqué ; 6 touche et étiquette ; 8 ligne, champ et bouton ; 12 carte ; 16 panneau et dialogue ; la pastille (999) seulement pour un point d'état, un avatar ou un interrupteur. Rayon imbriqué = rayon du parent moins l'écart qui les sépare, jamais sous 4 : calc(var(--radius-card) - var(--space-1)) = 8. */
+  --radius-2xs: 4px;
   --radius-xs: 6px;
   --radius-sm: 8px;
   --radius-card: 12px;
   --radius-panel: 16px;
   --radius-pill: 999px;
 
+  /* icone — Un seul jeu (lucide, licence ISC), une taille et un trait par défaut, posés une fois par LucideProvider (src/main.tsx, valeurs de src/styles/systeme.ts). Une icône prend la couleur de son rôle de texte ; 8 px jusqu'au libellé. */
+  --icon-size: 16px;
+  --icon-stroke: 1.5;
+  --icon-gap: var(--space-2);
+
+  /* mouvement — Une seule courbe et cinq durées. Survol, appui, bascule : --dur-hover (--dur-lift pour la prise d'une carte). Menus, infobulles : --dur-appear. Panneaux, dialogues : --dur-panel. Entrée d'un contenu : --dur-enter, montée de --rise, décalage de --stagger entre six éléments au plus. Appui : scale(var(--press-scale)). Ne transiter que color, background-color, border-color, opacity et transform, nommés ; jamais « all », ni largeur, hauteur ou position. Aucune boucle hors indicateur d'attente. */
+  --ease-standard: cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-exit: var(--ease-standard);
+  --dur-lift: 120ms;
   --dur-hover: 140ms;
   --dur-appear: 180ms;
   --dur-panel: 220ms;
-  --dur-lift: 120ms;
-  --ease-standard: cubic-bezier(0.22, 1, 0.36, 1);
-  --ease-exit: cubic-bezier(0.4, 0, 1, 1);
+  --dur-enter: 320ms;
+  --stagger: 40ms;
+  --rise: 8px;
+  --press-scale: 0.98;
 
+  /* gabarit — Proportions de l'application : la coque remplit la fenêtre, le contenu des pages est plafonné. */
   --topbar-h: 56px;
   --subbar-h: 64px;
   --panel-w: 368px;
+  --page-max: 1600px;
+}
+
+@media (max-width: 760px) {
+  :root {
+    --fs-title: 26px;
+    --fs-title-lg: 30px;
+    --fs-display: 40px;
+    --pad-page: var(--space-4);
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  :root { --dur-hover: 0ms; --dur-appear: 0ms; --dur-panel: 0ms; --dur-lift: 0ms; }
+  :root {
+    --dur-lift: 0ms;
+    --dur-hover: 0ms;
+    --dur-appear: 0ms;
+    --dur-panel: 0ms;
+    --dur-enter: 0ms;
+    --stagger: 0ms;
+    --rise: 0px;
+    --press-scale: 1;
+  }
+  /* filet de sécurité : une animation ou une transition écrite sans jeton s'arrête aussi */
+  *, *::before, *::after { animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; transition-duration: 0.01ms !important; scroll-behavior: auto !important; }
 }
