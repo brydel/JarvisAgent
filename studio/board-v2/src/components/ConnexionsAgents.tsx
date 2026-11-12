@@ -111,7 +111,7 @@ export function ConnexionsAgents({ source }: { source: Source }) {
       const r = await post<Connexion>(`/api/v2/connexions/${encodeURIComponent(connexionId)}/${commande}`, corps);
       setConnexions(avant => avant.map(c => c.id === connexionId ? r : c));
       setOutilsChoisis(avant => ({ ...avant, [r.id]: r.outils_autorises }));
-      setConfirmation(commande === "decouvrir" ? "Connexion vérifiée et outils découverts." : commande === "revoquer" ? "Connexion révoquée." : "Sélection des outils enregistrée.");
+      setConfirmation(commande === "decouvrir" ? "Connexion vérifiée et outils découverts" : commande === "revoquer" ? "Connexion révoquée" : "Sélection des outils enregistrée");
     } catch (e) { setErreur(e instanceof Error ? e.message : "Action impossible"); }
     finally { setAction(""); }
   };
@@ -138,62 +138,62 @@ export function ConnexionsAgents({ source }: { source: Source }) {
   };
   if (source.demo) return null;
   return <>
-    <button type="button" className="integrations-ouvrir" aria-haspopup="dialog" title="Intégrations" onClick={() => setOuvert(true)}><PlugZap size={17}/><span>Intégrations</span></button>
+    <button type="button" className="integrations-ouvrir" aria-haspopup="dialog" title="Intégrations" onClick={() => setOuvert(true)}><PlugZap size={16}/><span>Intégrations</span></button>
     <dialog ref={dialog} className="integrations-dialog" aria-labelledby={`${id}-titre`} onClose={() => setOuvert(false)}>
       {ouvert && <div className="integrations-coque">
-        <header className="integrations-entete"><span className="integrations-embleme"><PlugZap size={22}/></span><div><p>Relier l'usine à ses outils</p><h2 id={`${id}-titre`}>Intégrations</h2></div>
-          <button type="button" className="icone-bouton" aria-label="Actualiser les intégrations" disabled={!!action} onClick={() => setActualisation(n => n + 1)}><RefreshCw size={17}/></button>
-          <button type="button" className="icone-bouton" aria-label="Fermer les intégrations" onClick={() => setOuvert(false)}><X size={20}/></button></header>
+        <header className="integrations-entete"><h2 id={`${id}-titre`}>Intégrations</h2>
+          <button type="button" className="icone-bouton" aria-label="Actualiser les intégrations" disabled={!!action} onClick={() => setActualisation(n => n + 1)}><RefreshCw size={16}/></button>
+          <button type="button" className="icone-bouton" aria-label="Fermer les intégrations" onClick={() => setOuvert(false)}><X size={16}/></button></header>
         <div className="integrations-onglets" role="tablist" aria-label="Informations des intégrations">
           {([ ["connexions", "Connexions", Link2], ["operations", "Activité des outils", Activity], ["capacites", "Capacités", ShieldCheck] ] as const).map(([cle, libelle, Icone]) =>
             <button key={cle} type="button" role="tab" id={`${id}-${cle}`} aria-controls={`${id}-panneau`} aria-selected={onglet === cle} disabled={!!action} onClick={() => { setOnglet(cle); setConfirmation(""); }}><Icone size={16}/>{libelle}</button>)}
         </div>
         <div className="integrations-contenu" role="tabpanel" id={`${id}-panneau`} aria-labelledby={`${id}-${onglet}`}>
           {erreur && <p className="integrations-erreur" role="alert">{erreur}</p>}
-          {confirmation && <p className="integrations-confirmation" role="status"><Check size={15}/>{confirmation}</p>}
-          {chargement && <p className="integrations-attente" role="status"><LoaderCircle size={16}/>Lecture de l'installation…</p>}
+          {confirmation && <p className="integrations-confirmation" role="status"><Check size={16}/>{confirmation}</p>}
+          {chargement && <p className="integrations-attente" role="status"><LoaderCircle size={16} className="tourne"/>Lecture de l'installation</p>}
           {onglet === "connexions" && <>
             <div className="integrations-intro"><div><h3>Connexions de l'usine</h3><p>Ajoute un serveur MCP, découvre ses outils, puis choisis ceux que tes agents pourront demander.</p></div>
-              <button type="button" className="bouton primaire" disabled={!!action} onClick={() => setAjout(!ajout)}><Plus size={15}/>{ajout ? "Fermer le formulaire" : "Connecter un serveur MCP"}</button></div>
+              <button type="button" className="bouton primaire" disabled={!!action} onClick={() => setAjout(!ajout)}><Plus size={16}/>{ajout ? "Fermer le formulaire" : "Connecter un serveur MCP"}</button></div>
             {ajout && <form className="integrations-formulaire" aria-label="Connecter un serveur MCP" onSubmit={e => { e.preventDefault(); void connecter(); }}>
               <label>Transport du serveur MCP<select value={transport} onChange={e => setTransport(e.target.value as "mcp_http" | "mcp_stdio")}><option value="mcp_http">Serveur HTTPS distant</option><option value="mcp_stdio">Processus local, stdio</option></select></label>
               <div className="integrations-champs"><label>Nom de la connexion<input required value={nom} maxLength={120} onChange={e => setNom(e.target.value)} placeholder="Mon espace de recherche"/></label>
                 <label>Identifiant<input required value={identifiant} maxLength={40} pattern="[a-z][a-z0-9_-]{0,39}" onChange={e => setIdentifiant(e.target.value)} placeholder="recherche"/></label></div>
               {transport === "mcp_http" && <><label>Adresse HTTPS du serveur MCP<input type="url" required value={url} maxLength={2048} onChange={e => setUrl(e.target.value)} placeholder="https://mcp.example.org/mcp" autoComplete="off"/></label>
-              {url && !adresseValide(url) && <p className="integrations-erreur">Utilise une adresse HTTPS sur le port 443, sans identifiants, paramètres ni fragment.</p>}
+              {url && !adresseValide(url) && <p className="integrations-erreur">Utilise une adresse HTTPS sur le port 443, sans identifiants, paramètres ni fragment</p>}
               <label>Variable d'authentification, facultative<input value={variable} onChange={e => setVariable(e.target.value)} pattern="[A-Z_][A-Z0-9_]*" maxLength={100} placeholder="JARVIS_MCP_TOKEN" autoComplete="off"/></label>
-              <p className="integrations-aide"><CircleHelp size={15}/><span>Indique uniquement le nom d'une variable disponible sur le serveur Jarvis. Sa valeur secrète reste sur le serveur.</span></p></>}
+              <p className="integrations-aide"><CircleHelp size={16}/><span>Indique uniquement le nom d'une variable disponible sur le serveur Jarvis. Sa valeur secrète reste sur le serveur.</span></p></>}
               {transport === "mcp_stdio" && <><label>Exécutable local, chemin absolu<input required value={commande} maxLength={2048} onChange={e => setCommande(e.target.value)} placeholder="/chemin/vers/le-serveur-mcp" autoComplete="off"/></label>
                 <label>Arguments, un par ligne<textarea value={argumentsProcessus} rows={3} maxLength={16000} onChange={e => setArgumentsProcessus(e.target.value)} placeholder="Chaque ligne devient un argument distinct"/></label>
                 <label>Variables à transmettre, noms uniquement<textarea value={variablesProcessus} rows={2} maxLength={3000} onChange={e => setVariablesProcessus(e.target.value)} placeholder="JARVIS_SERVICE_TOKEN"/></label>
                 <label>Dossier de travail, facultatif<input value={dossierProcessus} maxLength={2048} onChange={e => setDossierProcessus(e.target.value)} placeholder="/chemin/du/dossier" autoComplete="off"/></label>
-                <p className="integrations-aide"><CircleHelp size={15}/><span>La découverte lancera cet exécutable sur le serveur Jarvis. Seuls les noms de variables choisis seront transmis ; aucune commande shell n'est construite.</span></p></>}
+                <p className="integrations-aide"><CircleHelp size={16}/><span>La découverte lancera cet exécutable sur le serveur Jarvis. Seuls les noms de variables choisis seront transmis ; aucune commande shell n'est construite.</span></p></>}
               <footer><button type="button" className="bouton" disabled={!!action} onClick={() => setAjout(false)}>Annuler</button><button type="submit" className="bouton primaire" disabled={!valide || !!action}>{action === "ajout" ? "Enregistrement…" : "Enregistrer la connexion"}</button></footer>
             </form>}
-            {!chargement && !connexions.length && !erreur && <div className="integrations-vide"><PlugZap size={32}/><h3>Le prochain outil commence ici</h3><p>Aucun serveur MCP n'est encore connecté à cette installation.</p></div>}
+            {!chargement && !connexions.length && !erreur && <div className="integrations-vide"><p>Aucun serveur MCP n'est encore connecté à cette installation</p></div>}
             <div className="integrations-liste">{connexions.map(c => {
               const choix = outilsChoisis[c.id] ?? c.outils_autorises;
               const modifie = [...choix].sort().join("\0") !== [...c.outils_autorises].sort().join("\0");
               return <article className={`integration-carte${c.active ? "" : " revoquee"}`} key={c.id}>
-                <header><span className="integration-icone"><Link2 size={19}/></span><div><h4>{c.nom}</h4><p>{c.hote}</p></div><span className={`integration-etat ${c.etat}`}>{ETATS[c.etat] || c.etat}</span></header>
-                <dl><div><dt>Authentification</dt><dd>{c.auth.mode === "processus_local" ? "Processus local" : c.auth.mode === "aucune" ? "Sans authentification" : c.auth.configuree ? "Variable disponible" : "Variable manquante"}</dd></div><div><dt>Dernière découverte</dt><dd>{date(c.verified_at)}</dd></div>{c.stdio && <div><dt>Exécutable</dt><dd>{c.stdio.executable}</dd></div>}</dl>
+                <header><div><h4>{c.nom}</h4><p className="credit"><span>{c.hote}</span><span>·</span><span>{c.verified_at === null ? "pas encore vérifiée" : <>découverte le <time dateTime={new Date(c.verified_at * 1000).toISOString()}>{date(c.verified_at)}</time></>}</span></p></div><span className={`integration-etat ${c.etat}`}>{ETATS[c.etat] || c.etat}</span></header>
+                <dl><div><dt>Authentification</dt><dd>{c.auth.mode === "processus_local" ? "Processus local" : c.auth.mode === "aucune" ? "Sans authentification" : c.auth.configuree ? "Variable disponible" : "Variable manquante"}</dd></div>{c.stdio && <div><dt>Exécutable</dt><dd>{c.stdio.executable}</dd></div>}</dl>
                 {c.outils.length > 0 && <fieldset className="integration-outils"><legend>Outils accessibles aux agents</legend>{c.outils.map(o => <div key={o.name}>
                   <label><input type="checkbox" disabled={!c.active || !!action} checked={choix.includes(o.name)} onChange={e => setOutilsChoisis(avant => ({ ...avant, [c.id]: e.target.checked ? [...choix, o.name] : choix.filter(n => n !== o.name) }))}/><span><strong>{o.name}</strong>{o.description && <small>{o.description}</small>}</span></label>
                   <details><summary>Schéma d'entrée</summary><pre>{JSON.stringify(o.inputSchema, null, 2)}</pre></details>
                 </div>)}</fieldset>}
-                {!c.outils.length && c.active && <p className="integration-note">La découverte vérifie la connexion et récupère les outils réellement proposés.</p>}
-                {c.outils.length > 0 && <p className="integration-note">Chaque exécution exige aussi un mandat couvrant l'outil, le projet et la destination.</p>}
-                <footer>{c.active && <><button type="button" className="bouton" disabled={!!action} onClick={() => void administrer(c.id, "decouvrir")}><RefreshCw size={14}/>{action === `${c.id}:decouvrir` ? "Découverte…" : "Découvrir les outils"}</button>
+                {!c.outils.length && c.active && <p className="integration-note">La découverte vérifie la connexion et récupère les outils réellement proposés</p>}
+                {c.outils.length > 0 && <p className="integration-note">Chaque exécution exige aussi un mandat couvrant l'outil, le projet et la destination</p>}
+                <footer>{c.active && <><button type="button" className="bouton" disabled={!!action} onClick={() => void administrer(c.id, "decouvrir")}><RefreshCw size={16}/>{action === `${c.id}:decouvrir` ? "Découverte…" : "Découvrir les outils"}</button>
                   {modifie && <button type="button" className="bouton primaire" disabled={!!action} onClick={() => void administrer(c.id, "outils", { outils_autorises: choix })}>Enregistrer les outils</button>}
-                  <button type="button" className="bouton integration-revoquer" disabled={!!action} onClick={() => void administrer(c.id, "revoquer")}><Unplug size={14}/>Révoquer</button></>}</footer>
+                  <button type="button" className="bouton integration-revoquer" disabled={!!action} onClick={() => void administrer(c.id, "revoquer")}><Unplug size={16}/>Révoquer</button></>}</footer>
               </article>;
             })}</div>
           </>}
           {onglet === "operations" && <><div className="integrations-intro"><div><h3>Activité réelle des outils</h3><p>Les opérations enregistrées et leur résultat connu. Actualisation toutes les 7 secondes.</p></div><label className="integrations-filtre"><input type="checkbox" checked={ceProjet} onChange={e => setCeProjet(e.target.checked)}/>Ce Board seulement</label></div>
-            {!chargement && !operations.length && !erreur && <div className="integrations-vide"><Activity size={30}/><h3>Aucune opération observée</h3><p>Les appels exécutés par la passerelle apparaîtront ici.</p></div>}
-            <div className="integrations-operations">{operations.map(o => <article key={o.operation_id}><header><strong>{o.tool}</strong><span className={`integration-etat ${o.status}`}>{ETATS[o.status] || o.status}</span></header><p>{o.project || "Sans projet"} · {date(o.updated_at)}</p><dl><dt>Opération</dt><dd>{o.operation_id}</dd><dt>Mandat</dt><dd>{o.mandat_id}</dd></dl>{o.erreur && <p className="integrations-erreur">{o.erreur}</p>}</article>)}</div>
+            {!chargement && !operations.length && !erreur && <div className="integrations-vide"><h3>Aucune opération observée</h3><p>Les appels exécutés par la passerelle apparaîtront ici</p></div>}
+            <div className="integrations-operations">{operations.map(o => <article key={o.operation_id}><header><strong>{o.tool}</strong><span className={`integration-etat ${o.status}`}>{ETATS[o.status] || o.status}</span></header><p className="credit"><span>{o.project || "Sans projet"}</span><span>·</span><time dateTime={new Date(o.updated_at * 1000).toISOString()}>{date(o.updated_at)}</time></p><dl><dt>Opération</dt><dd>{o.operation_id}</dd><dt>Mandat</dt><dd>{o.mandat_id}</dd></dl>{o.erreur && <p className="integrations-erreur">{o.erreur}</p>}</article>)}</div>
           </>}
-          {onglet === "capacites" && <><div className="integrations-intro"><div><h3>Ce que l'installation a vérifié</h3><p>Chaque état est accompagné de sa preuve. Aucun appel de modèle n'est effectué par ce diagnostic.</p></div></div>
+          {onglet === "capacites" && <><div className="integrations-intro"><div><h3>Capacités vérifiées</h3><p>Chaque état est accompagné de sa preuve. Aucun appel de modèle n'est effectué par ce diagnostic.</p></div></div>
             <div className="integrations-capacites">{capacites.map(c => <article key={c.id}><header><strong>{c.id}</strong><span className={`integration-etat ${c.etat}`}>{ETATS[c.etat] || c.etat}</span></header><p>{c.preuve}</p><small>{c.scope}{c.version && ` · version ${c.version}`}</small></article>)}</div>
           </>}
         </div>

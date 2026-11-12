@@ -1,43 +1,111 @@
+/* Intégrations — même gabarit de dialogue que Réseau des agents et Missions outillées.
+   Surfaces neutres, encre pour l'onglet actif ; la couleur ne sert qu'à l'état vérifié / à vérifier / échoué (pastille). */
 .integrations-ouvrir { flex: none; height: 36px; padding: 0 12px; display: inline-flex; align-items: center; gap: 8px; border: 1px solid var(--border-card); border-radius: var(--radius-sm); background: var(--surface-inset); color: var(--text-primary); font-size: 13px; cursor: pointer; white-space: nowrap; transition: background var(--dur-hover) var(--ease-standard); }
 .integrations-ouvrir:hover { background: var(--surface-hover); }
-.integrations-dialog { width: min(1000px,calc(100vw - 40px)); height: min(780px,calc(100dvh - 48px)); border: 1px solid var(--border-strong); border-radius: 20px; padding: 0; background: var(--surface-panel); color: var(--text-primary); overflow: hidden; box-shadow: var(--shadow-lift); }
-.integrations-dialog::backdrop { background: var(--scrim);  }
-.integrations-coque { height: 100%; display: flex; flex-direction: column; }
-.integrations-entete { flex: none; display: flex; align-items: center; gap: 12px; padding: 18px 22px; background: var(--surface-card); border-bottom: 1px solid var(--border-strong); }
-.integrations-entete>div { flex: 1; }.integrations-entete p { color: var(--text-info); font-size: 11px; margin: 0; }.integrations-entete h2 { font-size: 19px; margin: 2px 0 0; }
-.integrations-embleme { width: 44px; height: 44px; display: grid; place-items: center; flex: none; color: var(--text-success); background: color-mix(in srgb, var(--accent-cyan) 22%, var(--surface-card)); border: 1px solid color-mix(in srgb, var(--success) 33%, transparent); border-radius: 14px; }
-.integrations-onglets { display: flex; gap: 8px; flex: none; padding: 12px 22px 0; border-bottom: 1px solid var(--border-strong); background: var(--surface-card-raised); overflow-x: auto; }
-.integrations-onglets button { display: inline-flex; align-items: center; gap: 8px; padding: 11px 12px; border: 0; border-bottom: 2px solid transparent; color: var(--text-secondary); background: none; font-size: 12px; white-space: nowrap; cursor: pointer; }
-.integrations-onglets button[aria-selected=true] { color: var(--text-success); border-bottom-color: var(--success); }
-.integrations-contenu { flex: 1; min-height: 0; overflow: auto; padding: 24px; }
-.integrations-intro { display: flex; flex-wrap: wrap; align-items: flex-start; gap: 16px; justify-content: space-between; margin-bottom: 20px; }
-.integrations-intro>div { flex: 1; min-width: 240px; }.integrations-intro h3 { font-size: 17px; margin: 0 0 7px; }.integrations-intro p { font-size: 12px; color: var(--text-secondary); line-height: 1.65; margin: 0; max-width: 500px; }
-.integrations-intro>.bouton { font-size: 11px; height: 35px; margin-top: 2px; }
-.integrations-formulaire { display: grid; gap: 14px; padding: 20px; margin-bottom: 24px; border: 1px solid var(--border-strong); border-radius: 13px; background: var(--surface-card-raised); }
-.integrations-formulaire label { display: grid; gap: 7px; color: var(--text-secondary); font-size: 11px; font-weight: 500; }
-.integrations-formulaire input,.integrations-formulaire textarea,.integrations-formulaire select { min-width: 0; width: 100%; border: 1px solid var(--border-strong); background: var(--surface-card-raised); color: var(--text-primary); padding: 10px 12px; font: inherit; border-radius: 8px; }
-.integrations-formulaire textarea { resize: vertical; line-height: 1.6; }
-.integrations-formulaire input::placeholder { color: var(--text-muted); }.integrations-champs { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; }.integrations-formulaire footer { display: flex; justify-content: flex-end; gap: 8px; }.integrations-formulaire .bouton { font-size: 11px; }
-.integrations-aide { display: flex; align-items: flex-start; gap: 7px; color: var(--text-secondary); font-size: 11px; line-height: 1.65; margin: 0; }.integrations-aide svg { flex: none; margin-top: 2px; }
-.integrations-liste { display: grid; gap: 14px; }.integration-carte { padding: 20px; border: 1px solid var(--border-strong); border-radius: 13px; background: var(--surface-card); }.integration-carte.revoquee { opacity: .7; }
-.integration-carte>header { display: flex; align-items: center; gap: 11px; }.integration-carte>header>div { flex: 1; min-width: 0; }.integration-carte h4 { font-size: 15px; margin: 0; overflow-wrap: anywhere; }.integration-carte>header p { color: var(--text-secondary); font-size: 11px; margin: 4px 0 0; overflow-wrap: anywhere; }.integration-icone { display: grid; place-items: center; width: 37px; height: 37px; flex: none; color: var(--text-info); background: var(--surface-more); border: 1px solid color-mix(in srgb, var(--accent-cyan) 31%, transparent); border-radius: 10px; }
-.integration-etat { display: inline-flex; align-items: center; border: 1px solid color-mix(in srgb, var(--border-strong) 31%, transparent); border-radius: 999px; padding: 4px 8px; font-size: 9px; background: var(--surface-more); color: var(--text-secondary); white-space: nowrap; }
-.integration-etat.decouverte_verifiee,.integration-etat.verifie,.integration-etat.succeeded { color: var(--text-success); background: color-mix(in srgb, var(--success) 14%, var(--surface-card)); border-color: color-mix(in srgb, var(--success) 33%, transparent); }.integration-etat.inconnu,.integration-etat.unknown,.integration-etat.configuree_non_verifiee { color: var(--text-p2); background: color-mix(in srgb, var(--warning) 14%, var(--surface-card)); border-color: color-mix(in srgb, var(--warning) 33%, transparent); }.integration-etat.failed,.integration-etat.degrade,.integration-etat.revoquee { color: var(--text-danger-soft); background: color-mix(in srgb, var(--danger) 14%, var(--surface-card)); border-color: color-mix(in srgb, var(--danger) 31%, transparent); }
-.integration-carte>dl { display: flex; flex-wrap: wrap; gap: 14px 35px; margin: 18px 0; }.integration-carte dt { font-size: 10px; color: var(--text-secondary); margin-bottom: 4px; }.integration-carte dd { font-size: 11px; color: var(--text-primary); margin: 0; }
-.integration-carte>footer { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; margin-top: 18px; }.integration-carte>footer .bouton { font-size: 10px; height: 30px; }.integration-carte .integration-revoquer { margin-left: auto; color: var(--text-danger-soft); background: transparent; border-color: color-mix(in srgb, var(--accent-violet) 50%, transparent); }
-.integration-outils { margin: 20px 0 10px; padding: 0; border: 0; min-width: 0; }.integration-outils legend { font-size: 11px; color: var(--text-secondary); font-weight: 500; margin-bottom: 8px; }.integration-outils>div { border-top: 1px solid var(--border-strong); padding: 12px 0 8px; }.integration-outils label { display: flex; align-items: flex-start; gap: 9px; font-size: 11px; cursor: pointer; }.integration-outils input { accent-color: var(--text-success); margin: 3px 0 0; flex: none; }.integration-outils label>span { min-width: 0; }.integration-outils strong { display: block; color: var(--text-primary); font-size: 11px; overflow-wrap: anywhere; }.integration-outils small { display: block; font-size: 10px; line-height: 1.6; color: var(--text-secondary); margin-top: 4px; overflow-wrap: anywhere; }.integration-outils details { padding-left: 22px; margin-top: 6px; font-size: 10px; color: var(--text-secondary); }.integration-outils summary { cursor: pointer; }.integration-outils pre { overflow: auto; padding: 10px; background: var(--surface-card-raised); border: 1px solid var(--border-strong); border-radius: 7px; color: var(--text-secondary); max-height: 160px; font-size: 10px; }.integration-note { font-size: 10px; line-height: 1.7; color: var(--text-secondary); margin: 10px 0 0; }
-.integrations-erreur { padding: 10px 12px; font-size: 11px; line-height: 1.6; color: var(--text-danger-soft); background: color-mix(in srgb, var(--danger) 19%, transparent); border: 1px solid color-mix(in srgb, var(--danger) 31%, transparent); border-radius: 8px; margin: 0 0 15px; overflow-wrap: anywhere; }
-.integrations-confirmation { display: flex; align-items: center; gap: 7px; padding: 10px 12px; margin: 0 0 15px; border: 1px solid color-mix(in srgb, var(--success) 33%, transparent); background: color-mix(in srgb, var(--success) 19%, transparent); border-radius: 8px; font-size: 11px; color: var(--text-success); }
-.integrations-attente { display: flex; gap: 8px; align-items: center; font-size: 11px; color: var(--text-secondary); }
-.integrations-vide { text-align: center; color: var(--text-info); padding: 50px 20px; border: 1px dashed var(--border-strong); border-radius: 12px; }.integrations-vide h3 { color: var(--text-primary); font-size: 15px; font-weight: 500; margin: 15px 0 8px; }.integrations-vide p { color: var(--text-secondary); font-size: 11px; margin: 0; }
-.integrations-filtre { display: flex; gap: 6px; align-items: center; font-size: 11px; color: var(--text-secondary); margin-top: 4px; }.integrations-filtre input { accent-color: var(--text-success); }
-.integrations-operations,.integrations-capacites { display: grid; gap: 10px; }.integrations-operations>article,.integrations-capacites>article { border: 1px solid var(--border-strong); background: var(--surface-hover); padding: 15px 17px; border-radius: 10px; }.integrations-operations header,.integrations-capacites header { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; }.integrations-operations header strong,.integrations-capacites header strong { font: 500 12px var(--font-sans); color: var(--text-primary); overflow-wrap: anywhere; }.integrations-operations p,.integrations-capacites p { font-size: 11px; line-height: 1.6; color: var(--text-secondary); margin: 8px 0; }.integrations-operations dl { display: grid; grid-template-columns: 65px 1fr; gap: 5px 8px; font-size: 10px; margin: 12px 0 0; }.integrations-operations dt { color: var(--text-muted); }.integrations-operations dd { color: var(--text-secondary); margin: 0; overflow-wrap: anywhere; }.integrations-capacites small { font-size: 10px; line-height: 1.6; color: var(--text-muted); }
-@media (max-width: 1500px) { .integrations-ouvrir { width: 39px; padding: 0; justify-content: center; }.integrations-ouvrir>span { display: none; } }
-@media (max-width: 900px) { .integrations-ouvrir { width: 36px; height: 36px; } }
-@media (max-width: 600px) {
-  .integrations-dialog { width: calc(100vw - 20px); height: calc(100dvh - 28px); border-radius: 14px; }.integrations-entete { padding: 12px; gap: 8px; }.integrations-entete h2 { font-size: 16px; }.integrations-entete p { font-size: 9px; }.integrations-embleme { width: 35px; height: 35px; }
-  .integrations-onglets { padding: 7px 8px 0; gap: 0; }.integrations-onglets button { font-size: 10px; padding: 10px 8px; gap: 5px; }.integrations-contenu { padding: 16px 12px; }.integrations-intro h3 { font-size: 15px; }.integrations-intro p { font-size: 11px; }.integrations-intro>div { min-width: 0; }.integrations-intro { gap: 12px; }
-  .integrations-champs { grid-template-columns: 1fr; gap: 12px; }.integrations-formulaire { padding: 15px; gap: 12px; }.integration-carte { padding: 15px; }.integration-carte>header { flex-wrap: wrap; }.integration-carte h4 { font-size: 13px; }.integration-etat { font-size: 8px; }.integration-carte>dl { gap: 12px 20px; }.integration-carte>footer { gap: 7px; }.integration-carte .integration-revoquer { margin-left: 0; }
-}
-
 .integrations-ouvrir svg { color: var(--text-muted); stroke-width: 1.5; }
+
+.integrations-dialog { width: min(1120px, calc(100vw - 40px)); max-height: min(800px, calc(100dvh - 96px)); margin-top: 48px; padding: 0; border: 1px solid var(--border-card); border-radius: var(--radius-panel); background: var(--surface-card); color: var(--text-primary); overflow: hidden; box-shadow: var(--shadow-lift); }
+.integrations-dialog[open] { display: flex; flex-direction: column; }
+.integrations-dialog::backdrop { background: var(--scrim); }
+.integrations-dialog svg { stroke-width: 1.5; flex: none; }
+.integrations-coque { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+.integrations-entete { flex: none; display: flex; align-items: center; gap: 4px; padding: 12px 16px 12px 24px; }
+.integrations-entete h2 { flex: 1; min-width: 0; margin: 0; font-size: 18px; line-height: 24px; font-weight: 500; }
+.integrations-onglets { display: flex; gap: 4px; flex: none; padding: 0 12px; border-bottom: 1px solid var(--border-subtle); overflow-x: auto; }
+.integrations-onglets button { display: inline-flex; align-items: center; gap: 8px; height: 40px; padding: 0 12px; border: 0; border-bottom: 2px solid transparent; background: none; color: var(--text-secondary); font-size: 13px; white-space: nowrap; cursor: pointer; transition: color var(--dur-hover) var(--ease-standard), border-color var(--dur-hover) var(--ease-standard); }
+.integrations-onglets button svg { color: var(--text-muted); }
+.integrations-onglets button:hover { color: var(--text-primary); }
+.integrations-onglets button[aria-selected=true] { color: var(--text-primary); border-bottom-color: var(--text-primary); }
+.integrations-onglets button:focus-visible { outline-offset: -2px; }
+.integrations-contenu { flex: 1; min-height: 0; overflow: auto; padding: 24px; }
+
+.integrations-intro { display: flex; flex-wrap: wrap; align-items: flex-start; justify-content: space-between; gap: 16px; margin-bottom: 24px; }
+.integrations-intro > div { flex: 1; min-width: 240px; }
+.integrations-intro h3 { margin: 0 0 4px; font-size: 15px; line-height: 20px; font-weight: 500; }
+.integrations-intro p { margin: 0; max-width: 560px; font-size: 13px; line-height: 20px; color: var(--text-secondary); }
+.integrations-dialog .bouton { height: 36px; padding: 0 12px; gap: 8px; }
+.integrations-dialog .bouton.primaire:disabled { background: var(--surface-hover); border-color: var(--border-card); color: var(--text-muted); opacity: 1; }
+.integrations-filtre { display: flex; align-items: center; gap: 8px; min-height: 36px; font-size: 13px; color: var(--text-secondary); cursor: pointer; }
+.integrations-filtre input, .integration-outils input { width: 16px; height: 16px; margin: 0; flex: none; accent-color: var(--brand-indigo); }
+
+.integrations-formulaire { display: grid; gap: 16px; padding: 20px; margin-bottom: 24px; border: 1px solid var(--border-card); border-radius: var(--radius-card); background: var(--surface-card-raised); }
+.integrations-formulaire label { display: grid; gap: 8px; font-size: 13px; line-height: 20px; font-weight: 500; color: var(--text-secondary); }
+.integrations-formulaire input, .integrations-formulaire textarea, .integrations-formulaire select { min-width: 0; width: 100%; padding: 8px 12px; border: 1px solid var(--border-card); border-radius: var(--radius-sm); background: var(--surface-field); color: var(--text-primary); font: inherit; font-size: 14px; line-height: 20px; font-weight: 400; transition: border-color var(--dur-hover) var(--ease-standard); }
+.integrations-formulaire input:focus, .integrations-formulaire textarea:focus, .integrations-formulaire select:focus { border-color: var(--text-secondary); }
+.integrations-formulaire textarea { resize: vertical; }
+.integrations-formulaire input::placeholder, .integrations-formulaire textarea::placeholder { color: var(--text-muted); }
+.integrations-champs { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+.integrations-formulaire footer { display: flex; justify-content: flex-end; gap: 8px; }
+.integrations-aide { display: flex; align-items: flex-start; gap: 8px; margin: 0; font-size: 13px; line-height: 20px; color: var(--text-secondary); }
+.integrations-aide svg { margin-top: 2px; color: var(--text-muted); }
+
+/* une connexion : nom, hôte et dernière découverte en ligne de crédit, puis ses outils */
+.integrations-liste { display: grid; gap: 12px; }
+.integration-carte { padding: 20px; border: 1px solid var(--border-card); border-radius: var(--radius-card); background: var(--surface-card-raised); }
+.integration-carte.revoquee > header, .integration-carte.revoquee > dl, .integration-carte.revoquee > fieldset { opacity: .64; }
+.integration-carte > header { display: flex; align-items: flex-start; gap: 12px; }
+.integration-carte > header > div { flex: 1; min-width: 0; }
+.integration-carte h4 { margin: 0; font-size: 15px; line-height: 20px; font-weight: 500; overflow-wrap: anywhere; }
+.integration-carte > header .credit { margin-top: 8px; flex-wrap: wrap; row-gap: 4px; overflow-wrap: anywhere; }
+.integration-etat { display: inline-flex; align-items: center; gap: 8px; min-height: 20px; font: 400 12px/16px var(--font-mono); color: var(--text-secondary); white-space: nowrap; }
+.integration-etat::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: var(--text-muted); flex: none; }
+.integration-etat.decouverte_verifiee::before, .integration-etat.verifie::before, .integration-etat.succeeded::before { background: var(--success); }
+.integration-etat.inconnu::before, .integration-etat.unknown::before, .integration-etat.configuree_non_verifiee::before { background: var(--warning); }
+.integration-etat.failed::before, .integration-etat.degrade::before, .integration-etat.revoquee::before { background: var(--danger); }
+.integration-carte > dl { display: flex; flex-wrap: wrap; gap: 12px 32px; margin: 16px 0 0; }
+.integration-carte dt { margin-bottom: 4px; font-size: 12px; line-height: 16px; color: var(--text-muted); }
+.integration-carte dd { margin: 0; font-size: 13px; line-height: 20px; color: var(--text-primary); overflow-wrap: anywhere; }
+.integration-carte > footer { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; margin-top: 16px; }
+.integration-carte > footer:empty { display: none; }
+.integration-carte .integration-revoquer { margin-left: auto; background: transparent; border-color: var(--border-card); color: var(--text-danger); }
+.integration-carte .integration-revoquer:hover:not(:disabled) { border-color: var(--danger); }
+.integration-outils { margin: 20px 0 0; padding: 0; border: 0; min-width: 0; }
+.integration-outils legend { margin-bottom: 8px; padding: 0; font-size: 13px; line-height: 20px; font-weight: 500; color: var(--text-secondary); }
+.integration-outils > div { padding: 12px 0; border-top: 1px solid var(--border-subtle); }
+.integration-outils label { display: flex; align-items: flex-start; gap: 12px; cursor: pointer; }
+.integration-outils input { margin-top: 2px; }
+.integration-outils label > span { min-width: 0; }
+.integration-outils strong { display: block; font: 400 13px/20px var(--font-mono); color: var(--text-primary); overflow-wrap: anywhere; }
+.integration-outils small { display: block; margin-top: 4px; font-size: 13px; line-height: 20px; color: var(--text-secondary); overflow-wrap: anywhere; }
+.integration-outils details { margin-top: 8px; padding-left: 28px; font-size: 12px; line-height: 16px; color: var(--text-muted); }
+.integration-outils summary { cursor: pointer; }
+.integration-outils pre { max-height: 160px; margin: 8px 0 0; padding: 12px; overflow: auto; border: 1px solid var(--border-subtle); border-radius: var(--radius-sm); background: var(--surface-inset); color: var(--text-secondary); font: 400 12px/16px var(--font-mono); }
+.integration-note { margin: 12px 0 0; font-size: 12px; line-height: 16px; color: var(--text-muted); }
+
+/* activité des outils et capacités : un registre, des lignes séparées par des filets */
+.integrations-operations, .integrations-capacites { display: grid; }
+.integrations-operations > article, .integrations-capacites > article { padding: 16px 0; border-top: 1px solid var(--border-subtle); }
+.integrations-operations header, .integrations-capacites header { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; }
+.integrations-operations header strong, .integrations-capacites header strong { font: 400 13px/20px var(--font-mono); color: var(--text-primary); overflow-wrap: anywhere; }
+.integrations-operations article > p, .integrations-capacites article > p { margin: 4px 0 0; max-width: 720px; font-size: 13px; line-height: 20px; color: var(--text-secondary); }
+.integrations-operations article > p.credit { margin-top: 8px; max-width: none; font: 400 12px/16px var(--font-mono); color: var(--text-muted); }
+.integrations-operations dl { display: grid; grid-template-columns: 80px minmax(0, 1fr); gap: 4px 12px; margin: 12px 0 0; font-size: 12px; line-height: 16px; }
+.integrations-operations dt { color: var(--text-muted); }
+.integrations-operations dd { margin: 0; font-family: var(--font-mono); color: var(--text-secondary); overflow-wrap: anywhere; }
+.integrations-operations .integrations-erreur { margin: 12px 0 0; }
+.integrations-capacites small { display: block; margin-top: 8px; font: 400 12px/16px var(--font-mono); color: var(--text-muted); }
+
+.integrations-erreur { margin: 0 0 16px; padding: 8px 12px; border-radius: var(--radius-sm); background: var(--danger-bg); color: var(--text-danger-soft); font-size: 13px; line-height: 20px; overflow-wrap: anywhere; }
+.integrations-confirmation { display: flex; align-items: center; gap: 8px; margin: 0 0 16px; font-size: 13px; line-height: 20px; color: var(--text-success); }
+.integrations-attente { display: flex; align-items: center; gap: 8px; margin: 0 0 16px; font-size: 13px; color: var(--text-secondary); }
+.integrations-vide { padding: 16px 0; border-top: 1px solid var(--border-subtle); }
+.integrations-vide h3 { margin: 0; font-size: 14px; line-height: 20px; font-weight: 500; color: var(--text-primary); }
+.integrations-vide p { margin: 0; font-size: 13px; line-height: 20px; color: var(--text-secondary); }
+.integrations-vide h3 + p { margin-top: 4px; }
+
+@media (max-width: 1500px) { .integrations-ouvrir { width: 36px; padding: 0; justify-content: center; } .integrations-ouvrir > span { display: none; } }
+@media (max-width: 600px) {
+  .integrations-dialog { width: calc(100vw - 16px); max-height: calc(100dvh - 24px); margin-top: 12px; border-radius: var(--radius-card); }
+  .integrations-entete { padding: 8px 8px 8px 16px; }
+  .integrations-entete h2 { font-size: 16px; }
+  .integrations-onglets { padding: 0 4px; gap: 0; }
+  .integrations-onglets button svg { display: none; }
+  .integrations-contenu { padding: 16px; }
+  .integrations-intro { gap: 12px; margin-bottom: 16px; }
+  .integrations-intro > div { min-width: 0; flex-basis: 100%; }
+  .integrations-champs { grid-template-columns: 1fr; gap: 12px; }
+  .integrations-formulaire, .integration-carte { padding: 16px; }
+  .integration-carte > header { flex-wrap: wrap; }
+  .integration-carte > header > div { flex-basis: 100%; }
+  .integration-carte .integration-revoquer { margin-left: 0; }
+}
