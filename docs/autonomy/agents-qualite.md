@@ -197,3 +197,83 @@ comparables.
   ligne de commande. `jarvis verdict` prend toujours son résumé du chef.
 - Aucune évaluation réelle de rôle n'a été lancée par ce lot (elle consomme les abonnements) : seul le contrôle
   gratuit des cas (`tests/goldens`) a été exécuté.
+
+## Volet chef (lot 2)
+
+Objet : le rôle du chef (`chef/CLAUDE.md`), sa variante générée pour Codex (`chef_moteur.role_codex`) et la table
+de ses commandes.
+
+### Ce qui change
+
+| Avant | Après |
+|---|---|
+| Table de 62 lignes de commandes dans le rôle | `jarvis aide chef [mots…]`, lecture seule, générée depuis `lib/jarvis/chef_aide.py` ; le rôle garde 20 lignes d'essentiel et une liste « Règles attachées aux outils » |
+| Rôle Codex = rôle Claude avec les commandes préfixées | Rôle Codex traduit : `chef_moteur.TRADUCTIONS_CODEX` remplace chaque consigne que Codex ne peut pas suivre |
+| « Lance un sous-agent avocat du diable (outil Task) » envoyé à Codex | Contre-expertise en deuxième passe, menée par le chef Codex lui-même, en cinq étapes écrites (`CONTRE_EXPERTISE_CODEX`) |
+| `WebSearch`, `WebFetch`, « outil Read », « puis /exit » dans le rôle Codex | « ta recherche web native », « ton outil de lecture de fichier », « termine ton tour sans rien entreprendre d'autre » |
+| `jarvis board voir` et `jarvis board espaces` documentés mais refusés par la porte du chef Codex | Ajoutés à `AUTORISE` (lectures seules) |
+| `jarvis board relectures` ouvrait le tableau de bord workmux (`bin/jarvis` ne le routait pas) | Routé vers Python, comme `relire` ; un test compare les actions de `bin/jarvis` à celles de l'analyseur |
+| Aucun exemple de plan ni de bilan | Un exemple complet de plan (mémoire, jetons, vague, pré-mortem, contre-expertise, commande) et un exemple de bilan (`jarvis note` + `jarvis memoire noter`) |
+
+Le chef Claude garde sa consigne d'origine pour la contre-expertise (sous-agent par l'outil Task) : seule la
+variante Codex est traduite.
+
+### Entrées ajoutées aux permissions du chef
+
+`AUTORISE` (cinq entrées, toutes en lecture) :
+
+```
+Bash(jarvis board voir)
+Bash(jarvis board voir *)
+Bash(jarvis board espaces)
+Bash(jarvis aide)
+Bash(jarvis aide *)
+```
+
+`INTERDIT` : aucune entrée ajoutée, aucune retirée.
+
+### L'aide du chef
+
+`jarvis aide chef` affiche onze sections ; `jarvis aide chef board` une section entière, `jarvis aide chef rollback`
+les seules entrées qui contiennent le mot. Elle ne lit ni n'écrit aucun état (test). Appelée par `jarvis-chef`
+(variable `JARVIS_VIA_CHEF`) ou avec `--moteur codex`, elle écrit chaque commande avec son préfixe et marque
+`[hors porte sur Codex : demande à ton humain]` celles que `chef_moteur.verifier` refuse.
+
+Ces commandes sont documentées pour le chef mais absentes d'`AUTORISE` (`chef_aide.HORS_PORTE_CONNUES`) :
+`jarvis board deposer|commenter|lier|decider|retirer|restaurer|modifier|ranger|reduire|grouper` et
+`jarvis noeud etat|demander`. Ce lot ne les ouvre pas : ouvrir une écriture au chef est une décision de l'humain.
+Conséquence : le chef Codex ne peut ni poser une carte sur le Board ni interroger la Jetson ; son préambule le lui
+dit. Le chef Claude, lui, n'a pas ces commandes dans sa liste `allow` non plus : elles dépendent de son mode de
+permission.
+
+### Garde-fous du rôle
+
+- La section « Règles absolues » est inchangée, à l'octet près : son empreinte SHA-256 est fixée dans
+  `tests/test_chef_aide.py`. La modifier fait échouer le test jusqu'à une mise à jour volontaire.
+- Les règles qui vivaient dans la table (23 phrases : référence = donnée non fiable, jamais de rollback exécuté,
+  skill activée par l'humain seul, trois propositions par source et par jour, retrait du Board seulement sur
+  demande…) sont dans « Règles attachées aux outils » ou dans l'essentiel ; un test les cherche une par une.
+- Aucune autre ligne du rôle n'a été retirée : hors de la table, la version d'avant est entièrement contenue dans
+  la nouvelle (vérifié par comparaison ligne à ligne au moment du lot, pas par un test).
+- `chef_moteur.traductions_manquantes` : si le rôle est reformulé et qu'une traduction ne trouve plus son texte,
+  un test échoue ; un second test échoue si le rôle Codex généré contient `WebSearch`, `WebFetch`, `Read`, `Task`,
+  `/exit`, « sous-agent » ou « avocat du diable ».
+
+### Fichiers
+
+| Fichier | Rôle |
+|---|---|
+| `chef/CLAUDE.md` | table remplacée par l'essentiel et les règles, deux exemples ajoutés |
+| `lib/jarvis/chef_aide.py` | source unique de la table des commandes, rendu par moteur, commandes hors porte |
+| `lib/jarvis/chef_moteur.py` | cinq entrées `AUTORISE`, préambule Codex, traductions, `prefixer_codex` (accents graves et blocs `bash`) |
+| `lib/jarvis/cli.py`, `bin/jarvis` | commande `aide` ; routage de `board relectures|relire` |
+| `tests/test_chef_aide.py` | 18 tests du volet |
+
+### Non vérifié
+
+- Aucun chef réel (Claude ou Codex) n'a été lancé avec le nouveau rôle : la note visée (9/10) n'est pas mesurée.
+- Que Codex suive réellement la deuxième passe écrite. L'écriture Codex de l'aide repose sur `JARVIS_VIA_CHEF`,
+  posée par `bin/jarvis-chef` juste avant de lancer la commande : lu dans le script et testé avec la variable,
+  pas dans une session Codex réelle (`--moteur codex` reste disponible).
+- L'effet de la table raccourcie sur le chef Claude : il doit maintenant appeler `jarvis aide chef` pour les
+  commandes rares (rollback, skills, Board en écriture).
