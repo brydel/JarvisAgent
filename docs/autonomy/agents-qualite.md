@@ -266,3 +266,90 @@ Limites de ce volet :
   ligne de commande. `jarvis verdict` prend toujours son résumé du chef.
 - Aucune évaluation réelle de rôle n'a été lancée par ce lot (elle consomme les abonnements) : seul le contrôle
   gratuit des cas (`tests/goldens`) a été exécuté.
+
+## Lot 2 — volet « prompt » (branche `feat/aq2-prompt`)
+
+Cette section décrit ce que le lot 2 change dans le prompt réellement envoyé. Là où elle contredit le haut de la
+page (ordre des sections, mémoire, incertitude bloquante), c'est elle qui est à jour.
+
+### Ordre des sections
+
+1. Mission · 2. **Critères d'acceptation** (si le lanceur les a) · 3. Corrections exigées (si le dernier verdict
+est « corrections ») · 4. Ton rôle · 5. Ton poste · 6. **Outils de cette session** · 7. Consignes du chef
+d'orchestre · 8. Contexte utile · 9. Protocole · 10. Fini et compte rendu.
+
+Les titres du fichier de consignes descendent d'un niveau (`## Objectif` devient `### Objectif`) : ce sont des
+rubriques de la section du chef, plus des sections du prompt.
+
+### Outils de cette session (`lib/jarvis/outils_session.py`)
+
+Constat fait au lancement, sur le poste, sans rien connecter. Chaque ligne dit le fait, son absence, ou « inconnu ».
+
+| Ligne | Source lue | Réponses possibles |
+|---|---|---|
+| Moteur | option `--agent` du lanceur | Claude Code, Codex, inconnu (lancement hors routeur) |
+| Recherche web (Codex) | réglage `codex.recherche_web` puis `codex --help` (5 s au plus) : les deux conditions de `bin/jarvis-codex` | oui, non (réglage coupé), non (option inconnue de ce Codex), inconnu (`codex` absent du PATH ou muet) |
+| Recherche web (Claude) | `permissions.deny` de `settings.json` (utilisateur, projet, projet local) | « outil intégré, sans refus dans les réglages lus, non testé », non (refusé), inconnu (réglages illisibles) |
+| Serveurs MCP (Codex) | `$CODEX_HOME/config.toml`, réglages `codex.mcp_approuves` et `codex.mode` | noms, avec « approuvés d'avance » ou « non approuvé : appels refusés », désactivés, aucun, inconnu |
+| Serveurs MCP (Claude) | `.claude.json` (portée utilisateur) et `.mcp.json` du projet | noms par portée ; connecteurs du compte et plugins toujours « inconnu » (invisibles du lanceur) |
+| Playwright | PATH, `node_modules` et `package.json` du dépôt principal, module Python, serveur MCP, `~/.cache/ms-playwright` | présent (où), déclaré mais pas installé, non trouvé (où il a été cherché) |
+| Skills citées par le rôle | chemins `skills/<nom>/` du brief ; `SKILL.md` sur disque ; lien dans `~/.claude/skills` ou `~/.agents/skills` | présent / ABSENT, lié ou non pour le moteur ; pas de ligne si le brief n'en cite aucune |
+| `jarvis lourd exec` | `admission.CLASSES`, réglage `admission.operations_lourdes_max`, `jarvis` dans le PATH | classes et nombre de places ; « aucune admise » si le réglage vaut 0 |
+
+Seuls des noms sortent des fichiers de configuration : ni URL, ni variable d'environnement, ni argument de commande
+(test). Un constat qui tombe en panne vaut « inconnu » ; le prompt part quand même. Le prompt d'évaluation
+(`pour_evaluation`) ne reçoit pas ce bloc : il dépend du poste.
+
+### Critères d'acceptation
+
+- Source 1 : la rubrique « Critères vérifiables » (ou « Critères d'acceptation ») du fichier `--consignes`.
+- Source 2, si les consignes n'en portent pas : un fichier local passé par `jarvis prompt-construire --criteres`.
+- Le lanceur n'appelle pas Linear (test : aucune commande, aucune connexion pendant l'extraction).
+- Chaque critère est une donnée : une ligne, expurgée, 320 caractères au plus, 12 critères au plus, numérotés.
+  La section rappelle que l'issue reste la référence et qu'un critère contredit est une incertitude bloquante.
+- Liste recopiée entière et sans retouche : la rubrique des consignes est remplacée par un renvoi (les critères ne
+  sont pas dits deux fois). Un critère omis, abrégé ou expurgé : les consignes gardent leur rubrique entière.
+- Aucun critère reçu (rubrique absente, « aucun », gabarit non rempli) : la Mission le dit en une phrase.
+- « Fini » renvoie alors aux critères listés en tête, par leur nombre.
+
+### Mémoire pertinente (`memoire.pertinentes`)
+
+`memoire.chercher` (commande du chef) n'a pas changé. Le prompt passe par une sélection plus sévère :
+
+- requête = sujet de la tâche : rubriques Objectif, Critères et Pièges des consignes (sinon leur début) et
+  description courte portée par la branche ; le nom du projet et l'identifiant d'issue en sont retirés, ainsi que
+  le vocabulaire générique de l'usine ; sans sujet, aucune recherche ;
+- un terme compte une fois par entrée, au poids du meilleur champ : leçon 3, échec 3, titre 2, décision 2, corps
+  et étiquettes 1 ; le rôle ajoute 1 point au plus et ne suffit jamais ;
+- une entrée n'entre que si elle contient 2 termes distincts du sujet et atteint 4 points (`SCORE_MIN`) ;
+- dès 6 entrées candidates, un terme présent dans plus de la moitié d'entre elles est ignoré ;
+- 3 entrées au plus (5 avant), score décroissant ; la date ne départage que deux scores égaux ;
+- rapprochement de mots sans dépendance (`_proches`) : préfixe, ou radical commun de 5 lettres.
+
+Le test `test_une_note_recente_hors_sujet_ne_remonte_plus` montre la note qui arrivait en tête avec l'ancienne
+requête (projet + issue + rôle) et qui n'entre plus.
+
+### Redondances retirées, incertitude, longueur
+
+- « Lire l'issue en entier » n'est plus dit que dans le Protocole ; la Mission ne renvoie plus au format du compte
+  rendu ; l'étape 4 du Protocole s'appelle « Livraison » et ne reparle plus du compte rendu ; l'interdit de fusion
+  dans `main` et les classes d'opérations lourdes sont dits une fois (tests).
+- Incertitude bloquante : après `❓ QUESTION :`, l'agent continue la partie que la question ne touche pas et le
+  dit dans la question ; il ne s'arrête que si elle touche tout, et ne livre rien qui dépende de la réponse.
+- `prompt_agent.mesurer` : caractères, lignes, estimation en jetons (3,2 caractères par jeton, à titre de
+  comparaison), caractères par section. `jarvis prompt-construire --mesure` l'affiche sur la sortie d'erreur ;
+  sans l'option, un avertissement sort au-dessus du plafond et le prompt part quand même.
+- Plafonds testés : socle (sans brief ni consignes, premier essai) 7 500 caractères ; prompt complet au pire cas
+  (chaque rôle, consignes longues, mémoire pleine, boucle de correction) 24 000 caractères.
+
+### Limites de ce volet
+
+- Rien n'a été mesuré sur un vrai agent : le gain de qualité du prompt reste à constater sur des tâches réelles.
+- « Recherche web » côté Claude n'est pas un test de l'outil : seule l'absence de refus dans les réglages est lue.
+- Les serveurs MCP sont lus dans les fichiers ; un connecteur du compte Claude (Linear, souvent) n'y figure pas et
+  reste « inconnu ». La portée locale par projet de `.claude.json` n'est pas lue (le worktree n'existe pas encore).
+- `bin/jarvis` ne passe pas `--criteres` : l'option n'est utilisable qu'à la main tant qu'aucune copie locale des
+  issues n'existe.
+- Les consignes du chef partent sans expurgation, comme avant (l'expurgation prendrait un long chemin pour une clé).
+- Le rapprochement de mots est grossier (« contrat » et « contrainte » se confondent) et les seuils (2 termes,
+  4 points) ont été réglés sur des cas de test, pas sur la mémoire réelle de l'usine.

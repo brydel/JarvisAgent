@@ -769,15 +769,32 @@ def cmd_prompt_construire(a) -> int:
             consignes = Path(a.consignes).read_text(encoding="utf-8")
         except OSError as exc:
             return _err(f"consignes illisibles : {exc}")
+    criteres = ""
+    if getattr(a, "criteres", ""):  # critères d'acceptation disponibles localement ; le lanceur ne lit pas Linear
+        try:
+            criteres = Path(a.criteres).read_text(encoding="utf-8")
+        except OSError as exc:
+            return _err(f"critères illisibles : {exc}")
     try:
         jetons_max = int(getattr(a, "jetons_max", "") or 0)
     except ValueError:
         jetons_max = 0
-    print(prompt_agent.construire(
+    texte = prompt_agent.construire(
         projet=a.projet, issue=issue, branche=a.branche, regles=a.regles, role=role, corps=corps_candidat,
         revue=a.revue, consignes=consignes, agent=getattr(a, "agent", ""), modele=getattr(a, "modele", ""),
         effort=getattr(a, "effort", ""), taille=getattr(a, "taille", ""), jetons_max=jetons_max,
-        regles_presentes=not getattr(a, "sans_regles", False)))
+        regles_presentes=not getattr(a, "sans_regles", False), criteres=criteres)
+    print(texte)
+    # La longueur va sur la sortie d'erreur : la sortie standard EST le prompt.
+    m = prompt_agent.mesurer(texte)
+    if getattr(a, "mesure", False):
+        print(f"prompt : {m['caracteres']} caractères, {m['lignes']} lignes, environ {m['jetons_estimes']} jetons "
+              f"(estimation) ; plafond {m['plafond']} caractères", file=sys.stderr)
+        for titre, n in m["sections"].items():
+            print(f"  {n:>6}  {titre}", file=sys.stderr)
+    elif m["depasse"]:
+        print(f"avertissement : prompt de {m['caracteres']} caractères, au-dessus du plafond de {m['plafond']} "
+              "(brief ou consignes trop longs ?). Il part quand même.", file=sys.stderr)
     return 0
 
 
@@ -2580,9 +2597,11 @@ def build_parser() -> argparse.ArgumentParser:
     s = sub.add_parser("prompt-construire", help=argparse.SUPPRESS)
     for opt in ("projet", "issue", "branche", "regles"):
         s.add_argument(f"--{opt}", required=True)
-    for opt in ("role", "revue", "consignes", "brief-sortie", "agent", "modele", "effort", "taille", "jetons-max"):
+    for opt in ("role", "revue", "consignes", "criteres", "brief-sortie", "agent", "modele", "effort", "taille",
+                "jetons-max"):
         s.add_argument(f"--{opt}", default="")
     s.add_argument("--sans-regles", action="store_true")  # le projet n'a ni CLAUDE.md ni AGENTS.md
+    s.add_argument("--mesure", action="store_true")       # longueur du prompt, par section, sur la sortie d'erreur
     s.set_defaults(fn=cmd_prompt_construire)
     s = sub.add_parser("verdict", help="enregistrer le verdict d'une contre-relecture")
     s.add_argument("projet")
