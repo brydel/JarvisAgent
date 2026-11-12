@@ -2,12 +2,17 @@
 
 Deux usages :
 1. **Contrôle gratuit** (`jarvis eval verifier`, et les tests du dépôt) : pour chaque cas, la vérification doit
-   refuser le projet de départ et accepter la solution de référence ; le brief du rôle doit contenir ses
-   exigences. Une modification de prompt qui retire une règle importante casse ce contrôle.
+   refuser le projet de départ et accepter la solution de référence ; le brief du rôle doit garder ses
+   exigences. Deux sortes : `exigences_brief` (règles métier, des expressions cherchées dans le brief) et
+   `exigences_compte_rendu` (contrôles exécutés : l'exemple et le contre-exemple de compte rendu du brief sont
+   relus par l'analyseur de comptes_rendus). Une modification de prompt qui retire une règle importante, ou qui
+   abîme son exemple de compte rendu, casse ce contrôle.
 2. **Exécution réelle** (`jarvis eval lancer <rôle>/<cas> --confirmer`) : un vrai agent (Claude Code ou Codex,
    en mode non interactif) travaille sur une copie du départ, avec le brief de son rôle et la consigne du cas ;
    la vérification cachée juge le résultat. Consomme le quota de l'abonnement : manuel, soumis à l'admission
-   (pauses, capacité, jetons), résultat enregistré dans evaluations.jsonl avec l'empreinte du brief.
+   (pauses, capacité, jetons), résultat enregistré dans evaluations.jsonl avec l'empreinte du brief et l'analyse
+   du compte rendu rendu par l'agent (`compte_rendu` : type, conformité, anomalies). Cette analyse est une
+   mesure à part : « ok » reste le seul verdict de la vérification cachée.
 
 La vérification vit hors du dossier donné à l'agent : il ne peut ni la lire ni l'adapter.
 """
@@ -28,7 +33,7 @@ import tomllib
 import zlib
 from pathlib import Path
 
-from . import config, store
+from . import comptes_rendus, config, store
 
 RACINE = config.JARVIS_HOME / "tests" / "goldens"
 RESULTATS = "evaluations.jsonl"
@@ -80,7 +85,9 @@ def verifier(c: dict, dossier: Path, timeout: int = 180) -> tuple[bool, str]:
     try:
         r = subprocess.run([sys.executable, "-I", str(c["dossier"] / "verifier.py")], cwd=dossier, capture_output=True,
                            input=jeton + "\n", text=True, timeout=timeout,
-                           env={k: v for k, v in os.environ.items() if not k.startswith("JARVIS_")})
+                           # GOLDENS_LIB : où trouver l'analyseur de comptes rendus (« -I » ignore PYTHONPATH).
+                           env={**{k: v for k, v in os.environ.items() if not k.startswith("JARVIS_")},
+                                "GOLDENS_LIB": str(Path(__file__).resolve().parents[1])})
     except subprocess.TimeoutExpired:
         return False, f"vérification interrompue après {timeout} s"
     sortie = (r.stdout + r.stderr).strip()
@@ -88,15 +95,142 @@ def verifier(c: dict, dossier: Path, timeout: int = 180) -> tuple[bool, str]:
     return ok, sortie.replace(jeton, "<jeton>")[-2000:]
 
 
+# --- Contrôles exécutables sur le brief : son exemple et son contre-exemple de compte rendu --------------------------
+
+_BLOC = re.compile(r"^\*\*(Exemple de bon compte rendu|Contre-exemple)[^\n]*\*\*[^\n]*\n```[^\n]*\n(.*?)\n```", re.M | re.S)
+_TEST = re.compile(r"\btests?\b|test_|\.test\.|_test\.", re.I)
+
+
+def blocs_brief(corps: str) -> dict:
+    """{"exemple": texte | None, "contre_exemple": texte | None} : les deux blocs de code qu'un brief place sous
+    « **Exemple de bon compte rendu …** » et « **Contre-exemple …** » (le premier de chaque sorte)."""
+    out: dict = {"exemple": None, "contre_exemple": None}
+    for titre, texte in _BLOC.findall(corps or ""):
+        cle = "exemple" if titre.startswith("Exemple") else "contre_exemple"
+        if out[cle] is None:
+            out[cle] = texte
+    return out
+
+
+def analyser_extrait(texte: str) -> dict:
+    """Relit un compte rendu, complet ou en extrait, avec comptes_rendus.
+
+    Un verdict de relecture est jugé en entier. Un extrait de fin de tâche est jugé sur ce qu'il montre : au moins
+    un critère et une vérification, chaque critère avec sa preuve, chaque vérification avec son résultat (les
+    rubriques qu'un extrait ne recopie pas — résumé, fichiers, branche — ne lui sont pas reprochées).
+    Renvoie {"type": "verdict" | "termine", "anomalies": [...], "analyse": {...}}."""
+    v = comptes_rendus.analyser_verdict(texte)
+    if v["verdict"]:
+        return {"type": "verdict", "anomalies": list(v["anomalies"]), "analyse": v}
+    a = comptes_rendus.analyser_termine(texte)
+    anomalies = [x for x in a["anomalies"] if x.startswith(("critère ", "vérification "))]
+    if not a["criteres"]:
+        anomalies.append("aucun critère")
+    if not a["verifications"]:
+        anomalies.append("aucune vérification")
+    return {"type": "termine", "anomalies": anomalies, "analyse": a}
+
+
+def _c_exemple(corps: str) -> str:
+    texte = blocs_brief(corps)["exemple"]
+    if texte is None:
+        return "exemple de bon compte rendu absent"
+    anomalies = analyser_extrait(texte)["anomalies"]
+    return "exemple de compte rendu non conforme (" + " ; ".join(anomalies) + ")" if anomalies else ""
+
+
+def _c_contre_exemple(corps: str) -> str:
+    texte = blocs_brief(corps)["contre_exemple"]
+    if texte is None:
+        return "contre-exemple absent"
+    return "" if analyser_extrait(texte)["anomalies"] else "contre-exemple que l'analyseur accepterait : il ne montre rien à éviter"
+
+
+def _c_preuve_par_test(corps: str) -> str:
+    texte = blocs_brief(corps)["exemple"]
+    a = analyser_extrait(texte) if texte is not None else None
+    if a and a["type"] == "termine" and any(_TEST.search(c["preuve"]) for c in a["analyse"]["criteres"]):
+        return ""
+    return "aucun critère de l'exemple n'est prouvé par un test"
+
+
+def _c_ecart_declare(corps: str) -> str:
+    texte = blocs_brief(corps)["exemple"]
+    a = analyser_extrait(texte) if texte is not None else None
+    if a and a["type"] == "termine" and (a["analyse"]["hypotheses"] or a["analyse"]["risques"]):
+        return ""
+    return "l'exemple ne montre ni hypothèse ni risque déclaré"
+
+
+# Nom du contrôle (clé `exigences_compte_rendu` d'un cas.toml) → fonction(brief) → anomalie, ou "" si tout va bien.
+CONTROLES_COMPTE_RENDU = {
+    "exemple": _c_exemple,                    # l'exemple est relu sans anomalie par l'analyseur
+    "contre_exemple": _c_contre_exemple,      # le contre-exemple existe et l'analyseur le refuse
+    "preuve_par_test": _c_preuve_par_test,    # l'exemple prouve au moins un critère par un test
+    "ecart_declare": _c_ecart_declare,        # l'exemple déclare une hypothèse ou un risque
+}
+
+
+def structure_brief(corps: str) -> list[str]:
+    """Écarts d'un brief au gabarit commun : procédure numérotée, 3 à 5 interdits, « fini » défini, exemple de
+    compte rendu relu sans anomalie, contre-exemple refusé par l'analyseur. Liste vide = conforme."""
+    lignes = (corps or "").splitlines()
+
+    def rubrique(titre: str, motif: str) -> int:
+        """Nombre d'éléments (lignes reconnues par `motif`) sous l'intitulé, jusqu'à la première ligne vide."""
+        try:
+            i = next(n for n, ln in enumerate(lignes) if ln.strip() == titre)
+        except StopIteration:
+            return -1
+        total = 0
+        for ln in lignes[i + 1:]:
+            if not ln.strip():
+                break
+            total += bool(re.match(motif, ln))
+        return total
+
+    out = []
+    etapes = rubrique("**Procédure**", r"\d+\. ")
+    if etapes < 3:
+        out.append("« **Procédure** » absente" if etapes < 0 else f"procédure de {etapes} étape(s) : 3 au moins")
+    interdits = rubrique("**À ne pas faire**", r"- ")
+    if not 3 <= interdits <= 5:
+        out.append("« **À ne pas faire** » absent" if interdits < 0 else f"{interdits} interdit(s) : 3 à 5 attendus")
+    if "**Fini quand :**" not in (corps or ""):
+        out.append("« **Fini quand :** » absent")
+    return out + [x for x in (_c_exemple(corps), _c_contre_exemple(corps)) if x]
+
+
+def analyser_sortie(sortie: str) -> dict:
+    """Compte rendu rendu par un agent évalué : {"type", "conforme", "anomalies"}.
+
+    La sortie d'un CLI peut recopier le prompt, donc le gabarit : on relit le DERNIER bloc « ✅ TERMINÉ », et un
+    bloc qui porte encore les « <…> » du gabarit ne compte pas comme un compte rendu."""
+    lignes = str(sortie or "").splitlines()
+    debuts = [i for i, ln in enumerate(lignes) if "✅" in ln and re.search(r"TERMIN[ÉE]", ln, re.I)]
+    texte = "\n".join(lignes[debuts[-1]:]) if debuts else str(sortie or "")
+    if debuts and "<ton rôle>" in texte:
+        return {"type": "inconnu", "conforme": False, "anomalies": ["seul le gabarit du prompt a été recopié"]}
+    a = comptes_rendus.analyser(texte)
+    return {"type": a["type"], "conforme": bool(a["conforme"]), "anomalies": list(a["anomalies"])[:8]}
+
+
 def exigences_manquantes(c: dict, corps: str | None = None) -> list[str]:
-    """Règles exigées par le cas absentes du brief (`corps` : un brief candidat, sinon celui du rôle)."""
+    """Exigences du cas que le brief ne tient pas (`corps` : un brief candidat, sinon celui du rôle) : expressions
+    de `exigences_brief` absentes, puis contrôles de `exigences_compte_rendu` en échec."""
     if corps is None:
         from . import roles
         r = roles.get(c["role"])
         if not r:
             return [f"rôle {c['role']} introuvable"]
         corps = r["corps"]
-    return [e for e in c.get("exigences_brief", []) if not re.search(e, corps, re.I)]
+    out = [e for e in c.get("exigences_brief", []) if not re.search(e, corps, re.I)]
+    for nom in c.get("exigences_compte_rendu", []):
+        controle_cr = CONTROLES_COMPTE_RENDU.get(nom)
+        anomalie = controle_cr(corps) if controle_cr else f"contrôle inconnu « {nom} »"
+        if anomalie:
+            out.append(anomalie)
+    return out
 
 
 def controle(role: str | None = None) -> list[dict]:
@@ -180,11 +314,13 @@ def lancer(nom: str, agent: str, modele: str = "", acteur: str = "humain", garde
             shutil.rmtree(d, ignore_errors=True)
     # Indice de triche : l'agent a cherché les cas eux-mêmes (références, vérifications) au lieu de travailler.
     suspect = bool(re.search(r"tests/goldens|verifier\.py|/reference/", sortie_agent))
+    compte_rendu = analyser_sortie(sortie_agent)
     sortie_agent = sortie_agent[-1500:]
     res = {"ts": time.time(), "cas": nom, "role": c["role"], "agent": agent, "modele": modele or f"{agent}-defaut",
            "brief": (hashlib.sha256(brief.encode("utf-8")).hexdigest()[:12] if brief is not None
                      else empreinte_brief(c["role"])), "candidat": brief is not None, "ok": ok, "duree_s": round(time.time() - debut, 1),
-           "detail": detail[-500:], "sortie_agent": sortie_agent[-300:], "suspect": suspect}
+           "detail": detail[-500:], "sortie_agent": sortie_agent[-300:], "suspect": suspect,
+           "compte_rendu": compte_rendu}
     with store.locked(RESULTATS):
         with store.state_path(RESULTATS).open("a", encoding="utf-8") as fh:
             fh.write(json.dumps(res, ensure_ascii=False) + "\n")

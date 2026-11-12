@@ -1,0 +1,19 @@
+titre = "Mettre une fonction IA derrière un drapeau, avec schéma et repli"
+role = "ia-produit"
+duree_max_min = 20
+exigences_brief = ["désactivé par défaut", "repli non-IA", "fournisseur simulé", "nouvel essai borné"]
+exigences_compte_rendu = ["exemple", "contre_exemple", "preuve_par_test", "ecart_declare"]
+consigne = """
+`resumer(texte, fournisseur)` (resume.py) appelle le modèle sans drapeau, sans contrôle de la sortie et sans repli.
+`fournisseur(texte)` est une fonction qui renvoie une chaîne JSON `{"resume": "…"}` ; elle peut lever une exception
+ou renvoyer n'importe quoi. Réécris `resumer(texte, fournisseur, actif=None)` pour qu'elle renvoie TOUJOURS un
+dictionnaire `{"resume": <chaîne>, "source": "ia" ou "repli"}` :
+- drapeau : `actif=None` lit la variable d'environnement RESUME_IA (actif seulement si elle vaut « 1 ») ; la
+  fonction est donc désactivée par défaut. Désactivée, elle n'appelle jamais le fournisseur et rend le repli ;
+- repli sans IA : la première phrase du texte (jusqu'au premier « . » inclus ; tout le texte s'il n'y a pas de
+  point), sans espaces autour ;
+- active : si le fournisseur lève une exception, un seul nouvel essai, puis le repli ;
+- la sortie est validée : un objet JSON dont « resume » est une chaîne non vide et pas plus longue que le texte ;
+  sinon, le repli.
+Ajoute tests/test_resume.py (unittest) avec un fournisseur simulé : aucun appel réseau.
+"""

@@ -2,6 +2,7 @@ titre = "État vide utile et échappement HTML"
 role = "frontend"
 duree_max_min = 20
 exigences_brief = ["vide", "erreur"]
+exigences_compte_rendu = ["exemple", "preuve_par_test"]
 consigne = """
 `rendreListe(elements)` (liste.js, exporté avec module.exports) renvoie le HTML d'une liste d'alertes.
 Avec une liste vide, il renvoie « <ul></ul> » : affiche à la place un état vide utile (un texte qui dit quoi
