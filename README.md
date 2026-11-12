@@ -176,7 +176,7 @@ Tu reçois aussi les questions du chef (❓), ses bilans (📝) et les **livrabl
 | `jarvis role` · `jarvis role voir <nom>` | Les spécialités et le brief de chacune |
 | `jarvis modele` · `choisir --role R` · `verifier` · `ok\|non M-1` | Catalogue des modèles · ce que le routeur choisirait · essai avec tes abonnements · décider d'une proposition du chef |
 | `jarvis tache [n]` · `jarvis bilan [--jours 7]` | Registre des tâches (rôle, modèle, jetons, verdict) · bilan par fournisseur, rôle et modèle |
-| `jarvis verdict <projet> <ISSUE> pret\|corrections [note]` | Enregistrer le verdict d'une contre-relecture |
+| `jarvis verdict <projet> <ISSUE> [pret\|corrections] [note]` | Enregistrer le verdict d'une contre-relecture : lu sur la PR (jeton de la relecture), ou saisi à la main |
 | `jarvis studio verifier <fichier>` | Contrôle technique d'une vidéo ou d'un visuel + planche-contact |
 | `jarvis livrer <fichier> [--titre T] [--legende L]` | Contrôler un livrable puis te l'envoyer sur Telegram |
 | `jarvis livrables [<projet> <ISSUE>]` | Livrables récents, ou dossier d'une issue |

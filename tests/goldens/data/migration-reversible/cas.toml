@@ -1,0 +1,16 @@
+titre = "Écrire une migration réversible et relançable"
+role = "data"
+duree_max_min = 20
+exigences_brief = ["réversible", "plan de retour", "redescend"]
+exigences_compte_rendu = ["exemple", "contre_exemple", "ecart_declare"]
+consigne = """
+Les migrations sont des modules Python de migrations/ avec deux fonctions, `monter(conn)` et `descendre(conn)`,
+qui reçoivent une connexion sqlite3 (voir migrations/m001_initial.py et README.md). Ajoute
+migrations/m002_email_normalise.py :
+- `monter` ajoute à la table `clients` la colonne `email_normalise` (TEXT), la remplit avec l'email sans espaces
+  autour et en minuscules (un email NULL reste NULL), et crée l'index `ix_clients_email_normalise` sur cette colonne ;
+- `descendre` retire l'index et la colonne : le schéma redevient exactement celui d'avant, sans perdre une ligne ni
+  une autre colonne ;
+- les deux fonctions sont relançables : appelées deux fois de suite, elles ne lèvent aucune erreur.
+Ne modifie pas m001_initial.py.
+"""

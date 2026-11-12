@@ -769,15 +769,38 @@ def cmd_prompt_construire(a) -> int:
             consignes = Path(a.consignes).read_text(encoding="utf-8")
         except OSError as exc:
             return _err(f"consignes illisibles : {exc}")
+    criteres = ""
+    if getattr(a, "criteres", ""):  # critères d'acceptation disponibles localement ; le lanceur ne lit pas Linear
+        try:
+            criteres = Path(a.criteres).read_text(encoding="utf-8")
+        except OSError as exc:
+            return _err(f"critères illisibles : {exc}")
     try:
         jetons_max = int(getattr(a, "jetons_max", "") or 0)
     except ValueError:
         jetons_max = 0
-    print(prompt_agent.construire(
-        projet=a.projet, issue=issue, branche=a.branche, regles=a.regles, role=role, corps=corps_candidat,
+    jeton = ""
+    if getattr(a, "jeton_sortie", "") and (a.revue or role["nom"] == "revue"):
+        # Jeton de verdict de cette relecture : en clair dans le seul prompt du relecteur, en empreinte pour la fiche.
+        from . import verdicts
+        jeton = verdicts.jeton_nouveau()
+        Path(a.jeton_sortie).write_text(verdicts.empreinte_jeton(jeton), encoding="utf-8")
+    texte = prompt_agent.construire(
+        projet=a.projet, issue=issue, branche=a.branche, regles=a.regles, role=role, corps=corps_candidat, jeton=jeton,
         revue=a.revue, consignes=consignes, agent=getattr(a, "agent", ""), modele=getattr(a, "modele", ""),
         effort=getattr(a, "effort", ""), taille=getattr(a, "taille", ""), jetons_max=jetons_max,
-        regles_presentes=not getattr(a, "sans_regles", False)))
+        regles_presentes=not getattr(a, "sans_regles", False), criteres=criteres)
+    print(texte)
+    # La longueur va sur la sortie d'erreur : la sortie standard EST le prompt.
+    m = prompt_agent.mesurer(texte)
+    if getattr(a, "mesure", False):
+        print(f"prompt : {m['caracteres']} caractères, {m['lignes']} lignes, environ {m['jetons_estimes']} jetons "
+              f"(estimation) ; plafond {m['plafond']} caractères", file=sys.stderr)
+        for titre, n in m["sections"].items():
+            print(f"  {n:>6}  {titre}", file=sys.stderr)
+    elif m["depasse"]:
+        print(f"avertissement : prompt de {m['caracteres']} caractères, au-dessus du plafond de {m['plafond']} "
+              "(brief ou consignes trop longs ?). Il part quand même.", file=sys.stderr)
     return 0
 
 
@@ -787,7 +810,8 @@ def cmd_tache_enregistrer(a) -> int:
                                role=a.role, modele=a.modele, modele_id=a.modele_id, effort=a.effort, repli=a.repli,
                                taille=a.taille, plan=a.plan, revue=a.revue, raison=a.raison, secours=a.secours,
                                classe=a.classe, reservation=a.reservation, jetons_max=int(a.jetons_max or 0),
-                               consignes_empreinte=a.consignes_empreinte, base=a.base, brief=a.brief)
+                               consignes_empreinte=a.consignes_empreinte, base=a.base, brief=a.brief,
+                               jeton_verdict=a.jeton_verdict)
     if a.reservation:
         from . import admission
         admission.confirmer(a.reservation, fiche["id"], a.worktree)
@@ -1016,17 +1040,41 @@ def cmd_cout(a) -> int:
 
 
 def cmd_verdict(a) -> int:
-    from . import taches
+    """Verdict d'une contre-relecture : lu sur le compte rendu du relecteur (verdicts.py), ou saisi à la main."""
+    from . import taches, verdicts
     if a.projet not in config.projects():
         return _err(f"projet inconnu « {a.projet} »")
+    reste = list(a.reste)
+    decision = reste.pop(0) if reste and reste[0] in taches.VERDICTS else ""
+    texte = None
+    if a.stdin:
+        if _acteur() == "chef":
+            return _err("--stdin est réservé à ton humain : le chef n'écrit pas lui-même le compte rendu qu'il enregistre.")
+        texte = sys.stdin.read(verdicts.TEXTE_MAX + 1)
     try:
-        fiche = taches.noter_verdict(a.projet, a.issue, a.verdict, " ".join(a.note))
+        r = verdicts.enregistrer(a.projet, a.issue, decision, " ".join(reste), pr=a.pr, texte=texte, acteur=_acteur())
     except ValueError as exc:
         return _err(str(exc))
-    if not fiche:
-        return _err(f"aucune tâche de production trouvée pour {a.projet} {a.issue.upper()}")
-    store.feed_add("note", f"relecture de {a.projet} {fiche['issue']} : {taches.VERDICTS[a.verdict]}")
-    print(f"Verdict enregistré pour {fiche['id']} ({a.projet} {fiche['issue']}) : {taches.VERDICTS[a.verdict]}.")
+    except verdicts.Refus as exc:
+        print(f"Erreur : verdict non enregistré — {exc}.", file=sys.stderr)
+        for ligne in exc.details[:12]:
+            print(f"  - {ligne}", file=sys.stderr)
+        if exc.motif in ("non_conforme", "ambigu"):
+            print("Rien n'a été écrit. Demande au relecteur de republier son verdict au format (première ligne "
+                  "« VERDICT : PRÊT » ou « VERDICT : CORRECTIONS » suivie de son jeton, critères avec preuve, corrections "
+                  "numérotées avec sévérité et fichier:ligne, au moins une vérification lancée), puis relance cette "
+                  f"commande. « jarvis verdict {a.projet} {a.issue.upper()} corrections \"résumé\" » reste possible.",
+                  file=sys.stderr)
+        elif exc.motif == "absent" and not decision:
+            print(f"Rien n'a été écrit. Si le relecteur n'a publié que dans l'issue : « jarvis verdict {a.projet} "
+                  f"{a.issue.upper()} pret|corrections \"résumé\" » (saisie à la main).", file=sys.stderr)
+        else:
+            print("Rien n'a été écrit.", file=sys.stderr)
+        return 1
+    if not r["deja"]:
+        store.feed_add("note", f"relecture de {a.projet} {r['fiche']['issue']} : {taches.VERDICTS[r['verdict']]}"
+                       + (f" (PR #{r['pr']})" if r["pr"] else ""))
+    print(verdicts.texte(r))
     return 0
 
 
@@ -1217,6 +1265,14 @@ def cmd_chef_commande(a) -> int:
 def cmd_chef_moteur(a) -> int:
     from . import chef_moteur
     print(chef_moteur.texte())
+    return 0
+
+
+def cmd_aide(a) -> int:
+    """« jarvis aide chef [mots…] » : la table des commandes du chef (lecture seule, source : chef_aide.py)."""
+    from . import chef_aide
+    moteur = a.moteur or chef_aide.moteur_appelant()
+    print(chef_aide.texte(moteur, a.mots))
     return 0
 
 
@@ -1590,8 +1646,17 @@ def cmd_eval(a) -> int:
                 print("Aucune évaluation réelle lancée (jarvis eval lancer <rôle>/<cas> --agent claude --confirmer).")
             for r in res:
                 quand = time.strftime("%d/%m %H:%M", time.localtime(r["ts"]))
+                cr = r.get("compte_rendu")  # absent des résultats enregistrés avant ce champ
+                if not isinstance(cr, dict):
+                    rendu = "compte rendu non analysé"
+                elif cr.get("conforme"):
+                    rendu = "compte rendu conforme"
+                else:
+                    n = len(cr.get("anomalies") or [])
+                    rendu = ("compte rendu absent" if cr.get("type") == "inconnu" else
+                             f"compte rendu non conforme ({n} anomalie{'s' if n > 1 else ''})")
                 print(f"{quand} {'✔' if r['ok'] else '✘'} {r['cas']:<34} {r['agent']}/{r['modele']:<12} brief {r['brief']} "
-                      f"· {r['duree_s']:.0f} s")
+                      f"· {r['duree_s']:.0f} s · {rendu}")
             return 0
         if a.action == "promptfoo":
             print(evaluation.promptfoo_config())
@@ -1980,7 +2045,7 @@ def cmd_board(a) -> int:
     acteur = _acteur()
     try:
         if a.action == "voir":
-            print(synchro.texte_board(org, espace, detail=True))
+            print(synchro.texte_board(org, espace, detail=True, cite=True))
         elif a.action == "espaces":
             for e in board.espaces(org):
                 print(f"{e['nom']:<24} {e['objets']:>4} carte(s){'  (projet)' if e['projet'] else ''}")
@@ -2484,6 +2549,12 @@ def build_parser() -> argparse.ArgumentParser:
     c = sub.add_parser("chef-garde", help=argparse.SUPPRESS)
     c.add_argument("commande", nargs=argparse.REMAINDER)
     c.set_defaults(fn=cmd_chef_garde)
+    s = sub.add_parser("aide", help="aide du chef : la table de ses commandes (lecture seule)")
+    s.add_argument("sujet", nargs="?", default="chef", choices=("chef",))
+    s.add_argument("mots", nargs="*", help="n'afficher que les sections ou commandes qui contiennent ces mots")
+    s.add_argument("--moteur", choices=("claude", "codex"), default="",
+                   help="écriture des commandes (défaut : celle du chef qui appelle)")
+    s.set_defaults(fn=cmd_aide)
     sub.add_parser("chef-moteur", help="moteur du chef (Claude ou Codex) : ordre, jetons, prochain lancement"
                    ).set_defaults(fn=cmd_chef_moteur)
 
@@ -2566,7 +2637,7 @@ def build_parser() -> argparse.ArgumentParser:
     for opt in ("projet", "issue", "agent", "worktree"):
         s.add_argument(f"--{opt}", required=True)
     for opt in ("chemin", "role", "modele", "modele-id", "effort", "repli", "plan", "revue", "raison", "classe", "reservation",
-                "jetons-max", "consignes-empreinte", "base", "brief"):
+                "jetons-max", "consignes-empreinte", "base", "brief", "jeton-verdict"):
         s.add_argument(f"--{opt}", default="")
     s.add_argument("--taille", default="M")
     s.add_argument("--secours", action="store_true")
@@ -2580,15 +2651,20 @@ def build_parser() -> argparse.ArgumentParser:
     s = sub.add_parser("prompt-construire", help=argparse.SUPPRESS)
     for opt in ("projet", "issue", "branche", "regles"):
         s.add_argument(f"--{opt}", required=True)
-    for opt in ("role", "revue", "consignes", "brief-sortie", "agent", "modele", "effort", "taille", "jetons-max"):
+    for opt in ("role", "revue", "consignes", "criteres", "brief-sortie", "jeton-sortie", "agent", "modele", "effort",
+                "taille", "jetons-max"):
         s.add_argument(f"--{opt}", default="")
     s.add_argument("--sans-regles", action="store_true")  # le projet n'a ni CLAUDE.md ni AGENTS.md
+    s.add_argument("--mesure", action="store_true")       # longueur du prompt, par section, sur la sortie d'erreur
     s.set_defaults(fn=cmd_prompt_construire)
-    s = sub.add_parser("verdict", help="enregistrer le verdict d'une contre-relecture")
+    s = sub.add_parser("verdict", help="enregistrer le verdict d'une contre-relecture (lu sur la PR du relecteur)")
     s.add_argument("projet")
     s.add_argument("issue")
-    s.add_argument("verdict", choices=("pret", "corrections"))
-    s.add_argument("note", nargs="*")
+    s.add_argument("reste", nargs="*", metavar="DECISION_OU_RESUME",
+                   help="sans décision : le verdict est lu sur le compte rendu publié par le relecteur")
+    s.add_argument("--pr", default="", help="numéro de la PR où le relecteur a publié (sinon : celle de la relecture)")
+    s.add_argument("--stdin", action="store_true",
+                   help="lire le compte rendu du relecteur sur l'entrée standard (réservé à l'humain)")
     s.set_defaults(fn=cmd_verdict)
     s = sub.add_parser("bilan", help="ce que l'usine a produit ; « quotidien » : le bilan du matin")
     s.add_argument("quoi", nargs="?", choices=("quotidien",))

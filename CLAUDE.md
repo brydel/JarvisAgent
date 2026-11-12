@@ -24,6 +24,6 @@ JarvisAgent est un poste de pilotage d'agents IA de code : scripts bash pour Ubu
 
 1. Lis en entier l'issue Linear citée dans ton prompt avant de coder.
 2. Au démarrage, passe-la à « In Progress » et commente `🤖 [agent] Démarré — plan :` + 3 à 5 étapes.
-3. Bloqué : commente `❓ QUESTION :` avec les options et ta recommandation, puis attends.
+3. Bloqué : commente `❓ QUESTION :` avec les options et ta recommandation, puis continue ce que la question ne touche pas ; si elle touche tout, attends. Ne livre rien qui dépende de la réponse.
 4. À la fin : commente `✅ TERMINÉ` (résumé, fichiers, vérifications, branche), ouvre une PR avec `gh pr create`, passe l'issue à « In Review ».
 5. Ne fusionne jamais dans `main`.

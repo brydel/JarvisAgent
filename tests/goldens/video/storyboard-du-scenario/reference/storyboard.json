@@ -1,0 +1,15 @@
+{
+  "format": "16:9",
+  "marque": { "nom": "Carnet", "accent": "#1F6FEB", "fond": "#0B0D12" },
+  "scenes": [
+    { "type": "titre", "duree": 3, "titre": "Tes factures en deux minutes",
+      "sous_titre": "Créées, envoyées, relancées." },
+    { "type": "capture", "duree": 7, "image": "captures/tableau.png", "url": "carnet.example",
+      "titre": "Ce qui est payé, d'un regard" },
+    { "type": "capture", "duree": 7, "image": "captures/export.png", "url": "carnet.example",
+      "titre": "Un clic pour ton comptable" },
+    { "type": "points", "duree": 6, "titre": "Pourquoi Carnet",
+      "points": ["3 modèles de facture", "Rappels de paiement par courriel", "Export CSV"] },
+    { "type": "fin", "duree": 4, "titre": "Essaie Carnet", "bouton": "Commencer", "url": "carnet.example" }
+  ]
+}

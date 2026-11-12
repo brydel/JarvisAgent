@@ -2,6 +2,7 @@ titre = "Rendre un test instable déterministe"
 role = "qa"
 duree_max_min = 20
 exigences_brief = ["instable", "horloge"]
+exigences_compte_rendu = ["exemple", "ecart_declare"]
 consigne = """
 tests/test_session.py échoue de temps en temps : il dépend de l'heure réelle et dort deux secondes.
 Rends-le déterministe sans attente réelle : injecte une horloge dans session.py (paramètre `horloge`, par

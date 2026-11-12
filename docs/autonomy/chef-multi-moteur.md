@@ -14,7 +14,8 @@ sans direction alors que Codex avait de la marge. Les agents, eux, basculaient d
 | `bin/jarvis-chef` | seule sortie du bac à sable : vérifie l'appelant, puis la commande |
 | `jarvis chef-moteur` | ordre, état des abonnements, prochain lancement |
 | `chef_releve_check` (démon) | relève en deux temps quand le moteur du chef est épuisé |
-| `<dossier du chef>/AGENTS.md` | rôle du chef réécrit pour Codex (commandes préfixées par `jarvis-chef`) |
+| `<dossier du chef>/AGENTS.md` | rôle du chef réécrit pour Codex (commandes du chef préfixées par `jarvis-chef` ; celles d'un agent ou de l'humain citées sans préfixe ; consignes propres à Claude Code traduites : voir « Volet chef » dans `agents-qualite.md`). Lu en entier grâce à `-c project_doc_max_bytes=131072` (défaut de Codex : 32 Kio) |
+| `jarvis aide chef` | table des commandes du chef, lecture seule ; sur Codex, marque celles que la porte refuse |
 | `<dossier du chef>/.codex/rules/chef.rules` | la règle qui laisse sortir `jarvis-chef`, visible du chef seul |
 
 ## Équivalence des garde-fous

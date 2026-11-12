@@ -1,0 +1,15 @@
+titre = "Écrire trois annonces dont chaque affirmation se vérifie"
+role = "marketing"
+duree_max_min = 20
+exigences_brief = ["N'invente|Inventer", "limites de caractères", "preuve"]
+exigences_compte_rendu = ["exemple", "contre_exemple", "ecart_declare"]
+consigne = """
+Lis README.md : c'est tout ce que le produit fait. Écris annonces.md avec exactement trois sections
+« ## Angle 1 : … », « ## Angle 2 : … », « ## Angle 3 : … ». Chaque section contient quatre lignes :
+« Titre : … » (30 caractères au plus), « Texte : … » (90 caractères au plus), « Action : … » (15 caractères au plus)
+et « Preuve : README.md:<numéro de ligne> » — la ligne du README qui prouve ce que l'annonce affirme.
+Les trois angles s'appuient sur trois lignes différentes du README. N'invente rien : aucun nombre qui ne soit pas
+dans le README, aucun témoignage ni citation de client, aucun superlatif (« n° 1 », « meilleur », « leader »,
+« révolutionnaire », « garanti »), aucune fonction que le README dit absente (mobile, paiement en ligne, banque).
+Ne modifie pas README.md.
+"""

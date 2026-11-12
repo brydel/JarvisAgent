@@ -30,6 +30,7 @@ ${C_CYAN}Pilotage${C_OFF}
                                         (après un redémarrage : reprend les agents et le chef)
   jarvis chef                           Lance (ou rejoint) le chef d'orchestre
   jarvis chef-moteur                    Qui dirige : Claude ou Codex, jetons, relève automatique
+  jarvis aide chef [mots…]              Les commandes du chef, par sujet (lecture seule ; il l'appelle lui-même)
   jarvis cockpit                        Interface plein écran (ateliers, plans, livrables, fil)
   jarvis web                            Tableau de bord dans le navigateur (lecture seule)
   jarvis etat · jarvis usine            État complet · les ateliers : qui travaille sur quoi
@@ -77,8 +78,11 @@ ${C_CYAN}Agents${C_OFF}
   jarvis stockage etat|migrer|revenir   État en JSON (défaut) ou SQLite, migration vérifiée
   jarvis mission liste|voir|board|executer  Jarvis Next (M1) : missions durables, Board, exécutant local
   jarvis executant liste                Exécutants déclarés et bail d'orchestrateur (un seul démon)
+  jarvis verdict <projet> <ISSUE> [--pr N] [--stdin] [résumé]
+                                        Verdict d'une contre-relecture, lu sur la PR du relecteur
   jarvis verdict <projet> <ISSUE> pret|corrections [note]
-                                        Verdict d'une contre-relecture
+                                        Le même, saisi à la main (relecteur sans verdict sur la PR)
+                                        « corrections » passe toujours ; --stdin : réservé à l'humain
   jarvis board · jarvis status          Tableau de bord workmux · tâches du projet courant
   jarvis board voir|deposer|lier|retirer|restaurer …  Le Board partagé du Studio (un par projet)
 
@@ -440,8 +444,11 @@ cmd_task() {
   prompt_file="$(mktemp --suffix=.md)"
   local brief_file
   brief_file="$(mktemp)"
+  # Jeton de verdict d'une relecture : le prompt le porte en clair, la fiche n'en garde que l'empreinte.
+  local jeton_file
+  jeton_file="$(mktemp)"
   local -a pargs=(--projet "$projet" --issue "$issue" --branche "$branch" --regles "$rules" --role "${F[role]:-}"
-                  --brief-sortie "$brief_file" --agent "$who" --modele "${F[modele]:-}" --effort "${F[effort]:-}"
+                  --brief-sortie "$brief_file" --jeton-sortie "$jeton_file" --agent "$who" --modele "${F[modele]:-}" --effort "${F[effort]:-}"
                   --taille "${F[taille]:-M}" --jetons-max "${F[jetons_max]:-}")
   ((sans_regles)) && pargs+=(--sans-regles)
   [[ -n "$revue" ]] && pargs+=(--revue "$revue")
@@ -465,7 +472,8 @@ cmd_task() {
   [[ "${F[par_secours]:-0}" == "1" ]] && targs+=(--secours)
   # Version du brief réellement mise dans le prompt (stable ou candidat en essai).
   [[ -s "$brief_file" ]] && targs+=(--brief "$(cat "$brief_file")")
-  rm -f "$brief_file"
+  [[ -s "$jeton_file" ]] && targs+=(--jeton-verdict "$(cat "$jeton_file")")
+  rm -f "$brief_file" "$jeton_file"
   # Point de départ de la branche (workmux la crée depuis le dépôt principal) : base exacte d'un rollback.
   local base_sha
   base_sha="$(git -C "$root" rev-parse HEAD 2>/dev/null || true)"
@@ -490,7 +498,7 @@ cmd_task() {
 cmd_board() {
   case "${1:-}" in
     # le Board partagé (Studio) : lu et alimenté par le chef
-    voir|espaces|deposer|modifier|ranger|reduire|grouper|commenter|lier|decider|retirer|restaurer) py board "$@" ;;
+    voir|espaces|deposer|modifier|ranger|reduire|grouper|commenter|lier|decider|retirer|restaurer|relectures|relire) py board "$@" ;;
     *) has workmux || die "workmux n'est pas installé."; exec workmux dashboard "$@" ;;
   esac
 }
@@ -656,7 +664,7 @@ main() {
     fermer|reprendre|sante|reparer-git|role|modele|tache|verdict|bilan|usine|studio|livrer|livrables|web|\
     admission|pause|profil|lourd|audit|diagnostic|politique|budget|fournisseurs|proposition|\
     budget-jetons|cout|memoire|secrets|eval|rejouer|traces|proxy|rollback|execution|skill|stockage|executant|chef-moteur|\
-    mission|reference)
+    mission|reference|aide)
                   py "$cmd" "$@" ;;
     chef-lancer)  cmd_chef_lancer "$@" ;;
     relancer)     cmd_relancer "$@" ;;

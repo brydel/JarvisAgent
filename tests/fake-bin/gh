@@ -3,6 +3,7 @@
 #   FAKE_GH_DIR/pr-<n>.json        réponse de « gh pr view <n> --json … »
 #   FAKE_GH_DIR/pr-<n>-inline.json réponse de « gh api repos/{owner}/{repo}/pulls/<n>/comments »
 #   FAKE_GH_DIR/pr-list.json       réponse de « gh pr list --head <branche> … »
+#   FAKE_GH_DIR/user.json          réponse de « gh api user » (le compte connecté)
 #   FAKE_GH_LOG                    journal des appels (une ligne par appel)
 #   FAKE_GH_LENT=<secondes>        gh qui ne répond pas à temps
 set -euo pipefail
@@ -17,6 +18,7 @@ servir() { [[ -f "$1" ]] && cat "$1" || { echo "gh : introuvable ($1)" >&2; exit
 case "${1:-} ${2:-}" in
   "pr view") servir "$dir/pr-${3:-}.json" ;;
   "pr list") servir "$dir/pr-list.json" ;;
+  "api user") servir "$dir/user.json" ;;
   "api "*)
     n="$(sed -n 's|.*/pulls/\([0-9]*\)/comments$|\1|p' <<<"${2:-}")"
     servir "$dir/pr-$n-inline.json" ;;

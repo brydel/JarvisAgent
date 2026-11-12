@@ -1,0 +1,17 @@
+titre = "Transformer un scénario en storyboard valide pour le studio"
+role = "video"
+duree_max_min = 20
+exigences_brief = ["bénéfice dans les 3 premières secondes", "données de démonstration", "scenario-video.md"]
+exigences_compte_rendu = ["exemple", "contre_exemple", "ecart_declare"]
+consigne = """
+Lis scenario-video.md et écris storyboard.json à côté, au format du studio (rendre.cjs) :
+`{"format": "16:9", "marque": {"nom": …, "accent": …, "fond": …}, "scenes": [ … ]}`. Chaque scène a un `type`
+(`titre`, `capture`, `points`, `chiffre` ou `fin`) et une `duree` en secondes (0,8 au minimum). Règles :
+- la vidéo dure de 20 à 45 secondes au total ;
+- la première scène est de type `titre` et porte le bénéfice du scénario ; elle dure 3 secondes au plus ;
+- au moins deux scènes `capture`, chacune avec un `titre` et une `image` qui existe (chemin relatif au storyboard) ;
+- la dernière scène est de type `fin`, avec `titre`, `bouton` et `url` ;
+- chaque `titre` fait 6 mots au plus ; la marque reprend le nom et la couleur d'accent du scénario ;
+- rien d'inventé : aucune scène `chiffre` (le scénario ne donne aucun chiffre), aucune adresse de courriel à l'image.
+Ne lance aucun rendu : seul le fichier storyboard.json est attendu.
+"""

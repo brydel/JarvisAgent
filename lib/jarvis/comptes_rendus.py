@@ -1,8 +1,9 @@
 """Comptes rendus des agents : un seul format, lisible par une machine, pour finir une tâche et pour relire.
 
 - Fin de tâche : bloc `✅ TERMINÉ` (critère → preuve, commande → résultat, hypothèses, risques, fichiers, branche/PR).
-- Relecture : première ligne `VERDICT : PRÊT` ou `VERDICT : CORRECTIONS`, puis la liste numérotée des corrections
-  exigées, chacune avec sa sévérité et son `fichier:ligne`.
+- Relecture : première ligne `VERDICT : PRÊT` ou `VERDICT : CORRECTIONS` (suivie du jeton de la relecture quand le
+  prompt en donne un), puis les critères avec leur preuve, la liste numérotée des corrections exigées, chacune
+  avec sa sévérité et son `fichier:ligne`, les suggestions et les vérifications lancées.
 
 Les gabarits ci-dessous sont ceux que le prompt de chaque agent reçoit (lib/jarvis/prompt_agent.py) ; l'analyseur
 relit ce format. Il est tolérant (gras, accents absents, « : » collé) mais signale tout écart dans « anomalies » :
@@ -39,6 +40,8 @@ Branche : <branche> · PR : <#numéro, ou « aucune » + la raison>"""
 
 GABARIT_VERDICT = """\
 VERDICT : CORRECTIONS
+Critères :
+1. <critère d'acceptation> → <satisfait + la preuve, ou « non satisfait : correction n° … »>
 Corrections exigées :
 1. [bloquant] chemin/fichier.py:42 — ce qui est faux, et ce qui est attendu
 2. [majeur] chemin/autre.ts:10 — …
@@ -49,17 +52,38 @@ Vérifications :
 
 REGLES_VERDICT = (
     "La première ligne est exactement `VERDICT : PRÊT` ou `VERDICT : CORRECTIONS`, sans rien avant ni autour. "
-    "`PRÊT` : aucune correction exigée (écris « Corrections exigées : aucune »). `CORRECTIONS` : au moins une, "
-    "numérotée, avec sa sévérité entre crochets (`bloquant` : faux, dangereux ou critère non satisfait ; `majeur` : "
-    "non testé ou fragile ; `mineur` : à corriger mais sans risque) et son `fichier:ligne`. Ce qui n'empêche pas de "
-    "livrer va dans « Suggestions ».")
+    "« Critères » reprend chaque critère d'acceptation avec sa preuve. `PRÊT` : aucune correction exigée (écris "
+    "« Corrections exigées : aucune »). `CORRECTIONS` : au moins une, numérotée, sur une ligne, avec sa sévérité "
+    "entre crochets (`bloquant` : faux, dangereux ou critère non satisfait ; `majeur` : non testé ou fragile ; "
+    "`mineur` : à corriger mais sans risque) et son `fichier:ligne` ; pour un manque (test, migration, fichier "
+    "absent), cite le fichier où l'ajout est attendu, ligne 1. Ce qui n'empêche pas de livrer va dans "
+    "« Suggestions ». « Vérifications » porte au moins une commande que tu as lancée, avec son résultat : sans "
+    "elle, le verdict est refusé.")
 
-_VERDICT = re.compile(r"^\W*VERDICT\s*:\s*(PR[EÊ]TE?|CORRECTIONS?)(?![A-Za-zÀ-ÿ])", re.I)
+# Jeton de relecture : donné au seul relecteur, dans son prompt, à recopier sur la ligne du verdict (verdicts.py).
+_JETON = re.compile(r"\s*\[\s*(R-[0-9a-f]{8,32})\s*\]")
+
+
+def gabarit_verdict(jeton: str = "") -> str:
+    """Gabarit du verdict ; avec `jeton`, la première ligne le porte (« VERDICT : CORRECTIONS [R-…] »)."""
+    if not jeton:
+        return GABARIT_VERDICT
+    tete, _, reste = GABARIT_VERDICT.partition("\n")
+    return f"{tete} [{jeton}]\n{reste}"
+
+
+# Préfixe borné aux décorations que `_propre` ne retire pas (code, emphase) : un commentaire HTML, un texte barré
+# ou toute autre décoration devant « VERDICT » ne fait pas un verdict.
+_VERDICT = re.compile(r"^[`*_]{0,3}\s*VERDICT\s*:\s*(PR[EÊ]TE?|CORRECTIONS?)(?![A-Za-zÀ-ÿ])", re.I)
 _NUMERO = re.compile(r"^\s*(\d{1,3})\s*[.)]\s+(.*\S)\s*$")
 _PUCE = re.compile(r"^\s*[-*•]\s+(.*\S)\s*$")
 _CROCHET = re.compile(r"^\[\s*([A-Za-zÀ-ÿ]+)\s*\]\s*")
-# Chemin de fichier (avec extension ou au moins un « / »), suivi ou non de « :ligne » ou « :ligne-ligne ».
-_LIEU = re.compile(r"^`?((?:[\w.@+-]+/)*[\w.@+-]+\.[A-Za-z0-9]{1,8}|(?:[\w.@+-]+/)+[\w.@+-]+)(?::(\d+)(?:-\d+)?)?`?")
+# Chemin de fichier (avec extension ou au moins un « / »), suivi ou non de « :ligne » ou « :ligne-ligne » ; un nom
+# sans extension ni dossier (Makefile, Dockerfile) compte quand « :ligne » le suit.
+_LIEU = re.compile(r"^`?((?:[\w.@+-]+/)*[\w.@+-]+\.[A-Za-z0-9]{1,8}|(?:[\w.@+-]+/)+[\w.@+-]+|[\w.@+-]+(?=:\d))"
+                   r"(?::(\d+)(?:-\d+)?)?`?")
+# Valeurs laissées telles que le gabarit les donne (« <commande lancée> ») : le compte rendu n'a pas été rempli.
+_MARQUES = tuple(sorted(m for m in set(re.findall(r"<[^<>\n]+>", GABARIT_TERMINE + GABARIT_VERDICT)) if " " in m))
 _SEPARATEUR = re.compile(r"^\s*(?:—|–|-|:)\s*")
 _FLECHE = re.compile(r"\s*(?:→|->|=>)\s*")
 _VIDE = re.compile(r"^(aucune?s?|néant|rien|n/a|ras)\b", re.I)
@@ -117,12 +141,25 @@ def _correction(numero: int, texte: str) -> dict:
 
 
 def _paire(texte: str, gauche: str, droite: str) -> dict:
-    a, *b = _FLECHE.split(texte, maxsplit=1)
+    """« gauche → droite ». Quand la partie gauche est entre accents graves, la flèche se cherche après eux : une
+    flèche à l'intérieur de la commande (`x => x`) n'est pas un résultat."""
+    t = texte.strip()
+    if t.startswith("`") and "`" in t[1:]:
+        m = _FLECHE.search(t, t.index("`", 1) + 1)
+        a, b = (t[:m.start()], [t[m.end():]]) if m else (t, [])
+        return {gauche: a.strip().strip("`").strip(), droite: (b[0].strip() if b else "")}
+    a, *b = _FLECHE.split(t, maxsplit=1)
     return {gauche: a.strip().strip("`").strip(), droite: (b[0].strip() if b else "")}
 
 
+def gabarit_non_rempli(texte: str) -> bool:
+    """Vrai si le texte porte encore une valeur du gabarit (« <commande lancée> », « <ton rôle> »…)."""
+    return any(m in str(texte or "") for m in _MARQUES)
+
+
 def _sections(lignes: list[str]) -> dict[str, list[str]]:
-    """Découpe en rubriques : {rubrique: [éléments]}. Une ligne indentée sans puce prolonge l'élément précédent."""
+    """Découpe en rubriques : {rubrique: [éléments]}. Une ligne indentée sans puce prolonge l'élément précédent ;
+    sous « Corrections exigées », une ligne non indentée aussi : la suite d'une correction n'est jamais perdue."""
     out: dict[str, list[str]] = {}
     courante: str | None = None
     for brute in lignes:
@@ -141,7 +178,7 @@ def _sections(lignes: list[str]) -> dict[str, list[str]]:
         elt = _element(_propre(brute) if brute.lstrip().startswith(">") else brute)
         if elt is not None:
             out[courante].append(elt)
-        elif out[courante] and brute[:1] in (" ", "\t"):
+        elif out[courante] and (brute[:1] in (" ", "\t") or courante == "corrections"):
             out[courante][-1] += " " + brute.strip()
         elif courante in ("resume",):
             out[courante].append(brute.strip())
@@ -152,23 +189,40 @@ def _liste(elements: list[str]) -> list[str]:
     return [e for e in elements if not _VIDE.match(e.strip("« »\"'*_ "))]
 
 
+def _decision(mot: str) -> str:
+    """« pret » ou « corrections », à partir du mot écrit après « VERDICT : »."""
+    brut = unicodedata.normalize("NFD", mot).encode("ascii", "ignore").decode().upper()
+    return "pret" if brut.startswith("PRET") else "corrections"
+
+
 def analyser_verdict(texte: str) -> dict:
     """Verdict d'une relecture et corrections exigées.
 
     Renvoie {"verdict": "pret" | "corrections" | "", "premiere_ligne": bool, "corrections": [{"n", "severite",
     "fichier", "ligne", "texte"}], "suggestions": [...], "verifications": [{"commande", "resultat"}],
-    "anomalies": [...], "conforme": bool}. Le verdict retenu est le premier rencontré.
+    "criteres": [{"critere", "preuve"}], "jeton": str, "anomalies": [...], "ambigu": bool, "conforme": bool}. Le
+    verdict retenu est le premier rencontré ; « ambigu » vaut vrai quand le texte porte deux décisions différentes,
+    ou autre chose que la décision (et le jeton de relecture) sur sa ligne de verdict. Un verdict sans rubrique
+    « Critères » ou sans aucune vérification lancée n'est pas conforme : c'est le verdict rendu sans avoir relu.
     """
     lignes = str(texte or "").splitlines()
     verdict, premiere, debut = "", False, 0
     utiles = [i for i, ln in enumerate(lignes) if ln.strip()]
+    decisions, surcharge, jeton = [], False, ""
     for i in utiles:
-        m = _VERDICT.match(_propre(lignes[i]))
+        propre = _propre(lignes[i])
+        m = _VERDICT.match(propre)
         if m:
-            mot = unicodedata.normalize("NFD", m.group(1)).encode("ascii", "ignore").decode().upper()
-            verdict = "pret" if mot.startswith("PRET") else "corrections"
-            premiere, debut = i == utiles[0], i + 1
-            break
+            decision = _decision(m.group(1))
+            decisions.append(decision)
+            if len(decisions) == 1:
+                verdict, premiere, debut = decision, i == utiles[0], i + 1
+                # « VERDICT : PRÊT ou CORRECTIONS », « VERDICT : PRÊT sous réserve… » : la ligne ne tranche pas.
+                reste = propre[m.end():]
+                j = _JETON.match(reste)
+                if j:
+                    jeton, reste = j.group(1), reste[j.end():]
+                surcharge = bool(re.sub(r"[\W_]+", "", reste))
     suite = lignes[debut:]
     sections = _sections(suite)
     brutes = sections.get("corrections")
@@ -181,7 +235,7 @@ def analyser_verdict(texte: str) -> dict:
             m = _NUMERO.match(ln)
             if m:
                 brutes.append(m.group(2))
-            elif brutes and ln[:1] in (" ", "\t") and ln.strip():
+            elif brutes and ln.strip():
                 brutes[-1] += " " + ln.strip()
     corrections = [_correction(n, t) for n, t in enumerate(_liste(brutes or []), 1)]
     anomalies = []
@@ -193,6 +247,23 @@ def analyser_verdict(texte: str) -> dict:
         anomalies.append("verdict CORRECTIONS sans liste numérotée de corrections exigées")
     if verdict == "pret" and corrections:
         anomalies.append("verdict PRÊT avec des corrections exigées : contradiction")
+    ambigu = surcharge or len(set(decisions)) > 1
+    if surcharge:
+        anomalies.append("la ligne du verdict porte autre chose que la décision : écris « VERDICT : PRÊT » ou "
+                         "« VERDICT : CORRECTIONS », seul sur la ligne")
+    if len(set(decisions)) > 1:
+        anomalies.append("deux verdicts différents dans le même texte (PRÊT et CORRECTIONS) : un seul verdict par "
+                         "compte rendu")
+    criteres = [_paire(c, "critere", "preuve") for c in _liste(sections.get("criteres", []))]
+    verifications = [_paire(v, "commande", "resultat") for v in _liste(sections.get("verifications", []))]
+    if verdict:
+        if not criteres:
+            anomalies.append("rubrique « Critères » absente ou vide : chaque critère d'acceptation avec sa preuve")
+        anomalies += [f"critère {i} sans preuve" for i, c in enumerate(criteres, 1) if not c["preuve"]]
+        if not any(v["commande"] and v["resultat"] for v in verifications):
+            anomalies.append("aucune vérification lancée (commande → résultat)")
+        if gabarit_non_rempli("\n".join(suite)):
+            anomalies.append("gabarit non rempli : il reste des « <…> » du modèle")
     for c in corrections:
         if not c["severite"]:
             anomalies.append(f"correction {c['n']} sans sévérité ({', '.join(SEVERITES)})")
@@ -201,9 +272,8 @@ def analyser_verdict(texte: str) -> dict:
         elif c["ligne"] is None:
             anomalies.append(f"correction {c['n']} sans numéro de ligne")
     return {"verdict": verdict, "premiere_ligne": premiere, "corrections": corrections,
-            "suggestions": _liste(sections.get("suggestions", [])),
-            "verifications": [_paire(v, "commande", "resultat") for v in _liste(sections.get("verifications", []))],
-            "anomalies": anomalies, "conforme": not anomalies}
+            "suggestions": _liste(sections.get("suggestions", [])), "verifications": verifications,
+            "criteres": criteres, "jeton": jeton, "anomalies": anomalies, "ambigu": ambigu, "conforme": not anomalies}
 
 
 _TERMINE = re.compile(r"^\W*TERMIN[ÉE]\b", re.I)
@@ -237,6 +307,8 @@ def analyser_termine(texte: str) -> dict:
     anomalies += [f"vérification {i} sans résultat" for i, v in enumerate(verifs, 1) if not v["resultat"]]
     if not branche:
         anomalies.append("branche absente")
+    if debut is not None and gabarit_non_rempli("\n".join(corps)):
+        anomalies.append("gabarit non rempli : il reste des « <…> » du modèle")
     return {"termine": debut is not None, "resume": " ".join(s.get("resume", [])).strip(), "criteres": criteres,
             "verifications": verifs, "hypotheses": _liste(s.get("hypotheses", [])),
             "risques": _liste(s.get("risques", [])), "fichiers": [f.strip("`") for f in _liste(s.get("fichiers", []))],

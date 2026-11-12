@@ -1,0 +1,12 @@
+titre = "Corriger un bug avec son test, sans toucher au reste"
+role = "generaliste"
+duree_max_min = 20
+exigences_brief = ["plus petite modification", "test qui échoue", "au passage"]
+exigences_compte_rendu = ["exemple", "contre_exemple", "preuve_par_test", "ecart_declare"]
+consigne = """
+`tronquer("abcdefghij", 5)` (texte.py) renvoie 6 caractères au lieu de 5 : le « … » n'est pas compté. Corrige :
+un texte coupé fait exactement `longueur` caractères, « … » compris (`tronquer("abcdefghij", 5)` rend « abcd… ») ;
+un texte assez court est renvoyé tel quel ; une longueur inférieure à 1 lève ValueError. Ajoute dans
+tests/test_texte.py le test qui reproduit le bug, sans retirer les tests existants. Ne touche à rien d'autre :
+la fonction `slug` du même fichier est mal écrite, mais elle est hors périmètre.
+"""

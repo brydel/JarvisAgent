@@ -2,6 +2,7 @@ titre = "Rendre le formulaire d'inscription accessible"
 role = "frontend"
 duree_max_min = 20
 exigences_brief = ["accessibilit", "clavier"]
+exigences_compte_rendu = ["exemple", "contre_exemple"]
 consigne = """
 index.html contient un formulaire d'inscription inutilisable au lecteur d'écran. Chaque champ doit avoir un
 libellé associé (label for=…), les champs email et mot de passe sont obligatoires (required), le message

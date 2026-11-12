@@ -2,6 +2,7 @@ titre = "Entrée de journal des modifications"
 role = "redaction"
 duree_max_min = 20
 exigences_brief = ["notes de version", "utilisateur"]
+exigences_compte_rendu = ["exemple", "contre_exemple"]
 consigne = """
 Ajoute en tête de CHANGELOG.md l'entrée de la version 1.3.0 datée du 2026-10-17, au même format que les
 précédentes, en français, avec les sections « Ajouté » et « Corrigé ». Changements : ajout des alertes de prix
