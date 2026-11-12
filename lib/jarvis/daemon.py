@@ -128,8 +128,11 @@ def _suite_pour_chef(fiche: dict | None) -> str:
     r = roles.ou_defaut(fiche["role"])
     autre = "codex" if fiche["agent"] == "claude" else "claude"
     if fiche.get("revue") or r["nom"] == "revue":
-        return (f" C'est une contre-relecture : lis son verdict, puis enregistre-le avec « jarvis verdict "
-                f"{fiche['projet']} {fiche['issue']} pret|corrections \"résumé\" ».")
+        # Le démon n'enregistre pas le verdict lui-même (appel réseau dans sa boucle, « terminé » vu avant la
+        # publication) : il donne au chef la commande qui le lit sur la PR, sans recopie.
+        return (f" C'est une contre-relecture : enregistre son verdict avec « jarvis verdict {fiche['projet']} "
+                f"{fiche['issue']} » — la commande lit le compte rendu publié par le relecteur (décision, corrections, "
+                f"PR) et refuse un verdict absent, ambigu ou hors format : suis alors ce qu'elle indique.")
     suite = ""
     if r["livrable"] != "pr":
         d = livrables.dossier(fiche["projet"], fiche["issue"], creer=False)

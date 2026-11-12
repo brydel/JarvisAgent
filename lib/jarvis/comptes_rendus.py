@@ -152,23 +152,34 @@ def _liste(elements: list[str]) -> list[str]:
     return [e for e in elements if not _VIDE.match(e.strip("« »\"'*_ "))]
 
 
+def _decision(mot: str) -> str:
+    """« pret » ou « corrections », à partir du mot écrit après « VERDICT : »."""
+    brut = unicodedata.normalize("NFD", mot).encode("ascii", "ignore").decode().upper()
+    return "pret" if brut.startswith("PRET") else "corrections"
+
+
 def analyser_verdict(texte: str) -> dict:
     """Verdict d'une relecture et corrections exigées.
 
     Renvoie {"verdict": "pret" | "corrections" | "", "premiere_ligne": bool, "corrections": [{"n", "severite",
     "fichier", "ligne", "texte"}], "suggestions": [...], "verifications": [{"commande", "resultat"}],
-    "anomalies": [...], "conforme": bool}. Le verdict retenu est le premier rencontré.
+    "anomalies": [...], "ambigu": bool, "conforme": bool}. Le verdict retenu est le premier rencontré ; « ambigu »
+    vaut vrai quand le texte porte deux décisions différentes, ou autre chose que la décision sur sa ligne de verdict.
     """
     lignes = str(texte or "").splitlines()
     verdict, premiere, debut = "", False, 0
     utiles = [i for i, ln in enumerate(lignes) if ln.strip()]
+    decisions, surcharge = [], False
     for i in utiles:
-        m = _VERDICT.match(_propre(lignes[i]))
+        propre = _propre(lignes[i])
+        m = _VERDICT.match(propre)
         if m:
-            mot = unicodedata.normalize("NFD", m.group(1)).encode("ascii", "ignore").decode().upper()
-            verdict = "pret" if mot.startswith("PRET") else "corrections"
-            premiere, debut = i == utiles[0], i + 1
-            break
+            decision = _decision(m.group(1))
+            decisions.append(decision)
+            if len(decisions) == 1:
+                verdict, premiere, debut = decision, i == utiles[0], i + 1
+                # « VERDICT : PRÊT ou CORRECTIONS », « VERDICT : PRÊT sous réserve… » : la ligne ne tranche pas.
+                surcharge = bool(re.sub(r"[\W_]+", "", propre[m.end():]))
     suite = lignes[debut:]
     sections = _sections(suite)
     brutes = sections.get("corrections")
@@ -193,6 +204,13 @@ def analyser_verdict(texte: str) -> dict:
         anomalies.append("verdict CORRECTIONS sans liste numérotée de corrections exigées")
     if verdict == "pret" and corrections:
         anomalies.append("verdict PRÊT avec des corrections exigées : contradiction")
+    ambigu = surcharge or len(set(decisions)) > 1
+    if surcharge:
+        anomalies.append("la ligne du verdict porte autre chose que la décision : écris « VERDICT : PRÊT » ou "
+                         "« VERDICT : CORRECTIONS », seul sur la ligne")
+    if len(set(decisions)) > 1:
+        anomalies.append("deux verdicts différents dans le même texte (PRÊT et CORRECTIONS) : un seul verdict par "
+                         "compte rendu")
     for c in corrections:
         if not c["severite"]:
             anomalies.append(f"correction {c['n']} sans sévérité ({', '.join(SEVERITES)})")
@@ -203,7 +221,7 @@ def analyser_verdict(texte: str) -> dict:
     return {"verdict": verdict, "premiere_ligne": premiere, "corrections": corrections,
             "suggestions": _liste(sections.get("suggestions", [])),
             "verifications": [_paire(v, "commande", "resultat") for v in _liste(sections.get("verifications", []))],
-            "anomalies": anomalies, "conforme": not anomalies}
+            "anomalies": anomalies, "ambigu": ambigu, "conforme": not anomalies}
 
 
 _TERMINE = re.compile(r"^\W*TERMIN[ÉE]\b", re.I)

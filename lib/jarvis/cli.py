@@ -1033,17 +1033,35 @@ def cmd_cout(a) -> int:
 
 
 def cmd_verdict(a) -> int:
-    from . import taches
+    """Verdict d'une contre-relecture : lu sur le compte rendu du relecteur (verdicts.py), ou saisi à la main."""
+    from . import taches, verdicts
     if a.projet not in config.projects():
         return _err(f"projet inconnu « {a.projet} »")
+    reste = list(a.reste)
+    decision = reste.pop(0) if reste and reste[0] in taches.VERDICTS else ""
+    texte = None
+    if a.stdin:
+        texte = sys.stdin.read(verdicts.TEXTE_MAX + 1)
     try:
-        fiche = taches.noter_verdict(a.projet, a.issue, a.verdict, " ".join(a.note))
+        r = verdicts.enregistrer(a.projet, a.issue, decision, " ".join(reste), pr=a.pr, texte=texte)
     except ValueError as exc:
         return _err(str(exc))
-    if not fiche:
-        return _err(f"aucune tâche de production trouvée pour {a.projet} {a.issue.upper()}")
-    store.feed_add("note", f"relecture de {a.projet} {fiche['issue']} : {taches.VERDICTS[a.verdict]}")
-    print(f"Verdict enregistré pour {fiche['id']} ({a.projet} {fiche['issue']}) : {taches.VERDICTS[a.verdict]}.")
+    except verdicts.Refus as exc:
+        print(f"Erreur : verdict non enregistré — {exc}.", file=sys.stderr)
+        for ligne in exc.details[:12]:
+            print(f"  - {ligne}", file=sys.stderr)
+        if exc.motif in ("non_conforme", "ambigu"):
+            print("Rien n'a été écrit. Demande au relecteur de republier son verdict au format (première ligne "
+                  "« VERDICT : PRÊT » ou « VERDICT : CORRECTIONS », corrections numérotées avec sévérité et "
+                  "fichier:ligne), puis relance cette commande.", file=sys.stderr)
+        elif exc.motif == "absent":
+            print(f"Rien n'a été écrit. Si le relecteur n'a publié que dans l'issue : « jarvis verdict {a.projet} "
+                  f"{a.issue.upper()} pret|corrections \"résumé\" » (saisie à la main).", file=sys.stderr)
+        return 1
+    if not r["deja"]:
+        store.feed_add("note", f"relecture de {a.projet} {r['fiche']['issue']} : {taches.VERDICTS[r['verdict']]}"
+                       + (f" (PR #{r['pr']})" if r["pr"] else ""))
+    print(verdicts.texte(r))
     return 0
 
 
@@ -2603,11 +2621,13 @@ def build_parser() -> argparse.ArgumentParser:
     s.add_argument("--sans-regles", action="store_true")  # le projet n'a ni CLAUDE.md ni AGENTS.md
     s.add_argument("--mesure", action="store_true")       # longueur du prompt, par section, sur la sortie d'erreur
     s.set_defaults(fn=cmd_prompt_construire)
-    s = sub.add_parser("verdict", help="enregistrer le verdict d'une contre-relecture")
+    s = sub.add_parser("verdict", help="enregistrer le verdict d'une contre-relecture (lu sur la PR du relecteur)")
     s.add_argument("projet")
     s.add_argument("issue")
-    s.add_argument("verdict", choices=("pret", "corrections"))
-    s.add_argument("note", nargs="*")
+    s.add_argument("reste", nargs="*", metavar="DECISION_OU_RESUME",
+                   help="sans décision : le verdict est lu sur le compte rendu publié par le relecteur")
+    s.add_argument("--pr", default="", help="numéro de la PR où le relecteur a publié (sinon : celle de la relecture)")
+    s.add_argument("--stdin", action="store_true", help="lire le compte rendu du relecteur sur l'entrée standard")
     s.set_defaults(fn=cmd_verdict)
     s = sub.add_parser("bilan", help="ce que l'usine a produit ; « quotidien » : le bilan du matin")
     s.add_argument("quoi", nargs="?", choices=("quotidien",))

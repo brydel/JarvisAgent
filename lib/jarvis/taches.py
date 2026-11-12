@@ -130,22 +130,33 @@ def dernier_auteur(projet: str, issue: str) -> str:
     return ""
 
 
-def noter_verdict(projet: str, issue: str, verdict: str, note: str = "") -> dict | None:
-    """Enregistre le verdict de la contre-relecture sur la dernière tâche de production de l'issue."""
+# Ce qu'un verdict porte en plus de la décision et de sa note. « source » : « chef » (saisi à la main),
+# « relecteur » (lu sur la PR) ou « entree » (compte rendu fourni sur l'entrée standard). Voir verdicts.py.
+DETAILS_VERDICT = {"source": "chef", "pr": "", "corrections": [], "auteur": "", "publie": None}
+
+
+def noter_verdict(projet: str, issue: str, verdict: str, note: str = "", details: dict | None = None) -> dict | None:
+    """Enregistre le verdict de la contre-relecture sur la dernière tâche de production de l'issue.
+
+    `details` : clés de DETAILS_VERDICT (les autres sont ignorées) ; sans lui, le verdict est noté « saisi par le
+    chef » et les détails d'un verdict précédent sont effacés."""
     if verdict not in VERDICTS:
         raise ValueError(f"verdict inconnu (valeurs : {', '.join(VERDICTS)})")
+    plus = {f"verdict_{k}": (details or {}).get(k, defaut) for k, defaut in DETAILS_VERDICT.items()}
 
     def _set(data):
         for t in reversed(data["taches"]):
             if t["projet"] == projet and t["issue"] == issue.upper() and not t.get("revue") and t["role"] != "revue":
                 t["verdict"], t["verdict_note"], t["verdict_ts"] = verdict, note.strip()[:NOTE_VERDICT_MAX], time.time()
+                t.update(plus)
                 return dict(t)
         return None
 
     t = store.update_json(FILE, _vide(), _set)
     if t:
         from . import evenements
-        evenements.sans_echec(t["id"], "verdict", verdict=verdict, note=note.strip()[:120] or None)
+        evenements.sans_echec(t["id"], "verdict", verdict=verdict, note=" ".join(note.split())[:120] or None,
+                              source=plus["verdict_source"], pr=plus["verdict_pr"] or None)
     return t
 
 

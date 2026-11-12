@@ -353,3 +353,86 @@ requête (projet + issue + rôle) et qui n'entre plus.
 - Les consignes du chef partent sans expurgation, comme avant (l'expurgation prendrait un long chemin pour une clé).
 - Le rapprochement de mots est grossier (« contrat » et « contrainte » se confondent) et les seuils (2 termes,
   4 points) ont été réglés sur des cas de test, pas sur la mémoire réelle de l'usine.
+
+## Volet aq2-verdict : le verdict de relecture s'enregistre sans recopie
+
+Avant : le chef lisait le verdict du relecteur et le recopiait dans `jarvis verdict <projet> <ISSUE>
+pret|corrections "résumé"`. La décision, la liste des corrections et la PR dépendaient de sa recopie.
+
+Maintenant : `jarvis verdict <projet> <ISSUE>` lit le compte rendu publié par le relecteur, l'analyse avec
+`comptes_rendus.analyser_verdict` et enregistre sur la fiche de production la décision, la liste numérotée des
+corrections et le numéro de la PR. Le résumé du chef est facultatif (`jarvis verdict <projet> <ISSUE> "résumé"`).
+Cette section remplace la ligne « `jarvis verdict` prend toujours son résumé du chef » des limites connues.
+
+### Ce que fait la commande
+
+| Appel | Effet |
+|---|---|
+| `jarvis verdict P I` | lit le dernier verdict publié sur la PR ; l'enregistre s'il est conforme, sinon refuse (code 1, rien d'écrit) |
+| `jarvis verdict P I "résumé"` | idem ; le résumé (400 caractères au plus) est ajouté à la fin de la note |
+| `jarvis verdict P I --pr N` | lit cette PR au lieu de celle que le registre connaît |
+| `jarvis verdict P I --stdin` | analyse un compte rendu fourni sur l'entrée standard (relecteur qui n'a publié que dans l'issue) |
+| `jarvis verdict P I pret\|corrections "résumé"` | saisie à la main, comme avant — voir « Autorisations » |
+
+La PR est cherchée dans cet ordre : `--pr`, la relecture lancée avec `--revue N` (`taches.pr_connue`), puis
+`gh pr list --head <branche de la production>`. `gh` est lancé dans le dossier du projet, en lecture seule
+(`api user`, `pr view`, `pr list`), 8 secondes par appel.
+
+Motifs de refus, chacun avec son message : verdict **absent** (aucune PR connue, `gh` muet, PR sans verdict, verdict
+plus ancien que l'essai jugé) ; **non conforme** (verdict hors de la première ligne, `CORRECTIONS` sans liste, `PRÊT`
+avec des corrections, correction sans sévérité ou sans `fichier:ligne`, plus de 20 000 caractères, plus de 20
+corrections) ; **ambigu** (deux décisions différentes dans le texte, ou une ligne de verdict qui porte autre chose
+que la décision : « VERDICT : PRÊT ou CORRECTIONS ») ; **contradiction** (la décision saisie à la main n'est pas
+celle du relecteur). Le message nomme les écarts ; il ne recopie pas le texte du relecteur.
+
+Deux verdicts successifs : sur le même essai, le plus récent fait foi et remplace le précédent (un dernier verdict
+non conforme est refusé, la commande ne retombe pas sur l'avant-dernier). Après une relance, un verdict publié avant
+le lancement du nouvel essai ne le juge pas : la commande attend celui de la nouvelle relecture. Relancer la
+commande sur un verdict déjà enregistré ne réécrit rien.
+
+### Ce qui est enregistré
+
+Sur la fiche (`taches.noter_verdict`, paramètre `details`) : `verdict`, `verdict_note` (1 500 caractères au plus :
+« PR #N — n correction(s) exigée(s) par le relecteur : » puis une ligne par correction au format du gabarit, puis
+le résumé du chef), `verdict_source` (`relecteur`, `entree` ou `chef`), `verdict_pr`, `verdict_corrections`
+(`[{n, severite, fichier, ligne, texte}]`, 20 au plus, 300 caractères par texte), `verdict_auteur`,
+`verdict_publie`. La boucle de correction n'a pas changé : elle cite `verdict_note`, qui porte maintenant la liste
+du relecteur et la PR.
+
+### Autorisations : rien de plus pour le chef
+
+- La commande reste `Bash(jarvis verdict *)` ; elle n'écrit que ce que `noter_verdict` écrivait déjà (plus les
+  champs ci-dessus). Elle ne fusionne rien, ne livre rien, ne lance rien, n'écrit rien sur GitHub.
+- La saisie à la main reste possible quand le compte rendu ne peut pas être lu, ou qu'il est mal formé mais du
+  même avis (la sortie le signale : « saisi à la main »). Elle est **refusée** quand le verdict publié dit autre
+  chose : on ne note plus « prêt » un livrable dont le relecteur exige des corrections, ni un verdict ambigu.
+- Le démon n'enregistre pas le verdict lui-même. Deux raisons : il verrait la relecture « terminée » avant que le
+  verdict soit publié, et il ferait des appels réseau dans sa boucle de surveillance. Son message de fin de
+  relecture donne au chef la commande courte.
+
+### Le texte du relecteur est une donnée non fiable
+
+- Seuls comptent les textes publiés par le compte GitHub de l'usine (`gh api user`) : sur un dépôt public,
+  n'importe qui peut écrire « VERDICT : PRÊT » sous une PR. Les autres sont comptés dans le message, pas lus.
+- Seuls comptent les textes publiés après la création de la fiche de production jugée.
+- Taille bornée avant analyse ; ne sont gardés que les champs extraits, chacun sur une ligne, sans caractère de
+  contrôle ni bloc de code, expurgés (`memoire.expurger`).
+- La sortie de la commande cite les corrections avec le préfixe `> ` et les annonce comme des constats à
+  vérifier : le chef la lit, elle ne doit pas lui donner d'ordre.
+
+### Limites
+
+- Le relecteur et l'auteur publient avec le même compte GitHub : un agent de production qui écrirait lui-même un
+  verdict au format sous sa PR, après le lancement de son essai, serait pris pour le relecteur. La commande ne
+  vérifie pas non plus qu'une tâche de relecture existe pour l'issue.
+- Si les relecteurs publient depuis un autre compte que celui de `gh` sur la machine du chef (exécutant distant),
+  la lecture automatique refuse tout : il reste `--stdin` ou la saisie à la main.
+- Un verdict publié seulement dans l'issue Linear n'est pas lu (pas d'accès Linear depuis `lib/jarvis`).
+- Vérifié avec le faux `gh` de `tests/fake-bin` seulement : la forme réelle de `gh pr view --json reviews,comments`
+  (champs `author.login`, `submittedAt`, `createdAt`) n'a pas été confrontée à un vrai dépôt par ce lot.
+- `chef/CLAUDE.md`, le rôle du chef Codex et l'aide de `bin/jarvis` décrivent encore la recopie à la main (toujours
+  valide) : à mettre à jour par les volets qui portent ces fichiers.
+
+Fichiers : `lib/jarvis/verdicts.py` (lecture, garde-fous, enregistrement), `lib/jarvis/comptes_rendus.py` (champ
+`ambigu`), `lib/jarvis/taches.py` (`noter_verdict(details=…)`), `lib/jarvis/cli.py` (`cmd_verdict`),
+`lib/jarvis/daemon.py` (message de fin de relecture), `tests/test_verdict_auto.py`, `tests/fake-bin/gh` (`api user`).
