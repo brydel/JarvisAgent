@@ -3,7 +3,7 @@ import type { EspaceBoard } from "../types";
 import { useStore } from "@xyflow/react";
 import {
   ChevronDown, ClipboardPaste, Ellipsis, File, Grid3x3, Image as IconeImage,
-  Check, Folder, FolderGit2, Link2, Maximize, Minus, Mic, Moon, Network, Plus, Presentation, Sparkles, Star, Sun, Type, Upload, Video,
+  Check, Folder, FolderGit2, Link2, Maximize, Minus, Mic, Moon, Network, Plus, Presentation, Sun, Type, Upload, Video,
 } from "lucide-react";
 import { BoutonCommande, useCommandes } from "../commandes/react";
 import { useUi } from "../etat/ui";
@@ -82,10 +82,10 @@ export const SousBarre = memo(function SousBarre({ projet, espaces = [], changer
     <div className="subbar">
       <div className="projet">
         {changerEspace && !demo ? <MenuProjet projet={projet} espaces={espaces} changer={changerEspace} /> : (
-          <><Network size={20} color="var(--text-secondary)" /><span>{projet}</span><ChevronDown size={16} color="var(--text-secondary)" /></>
+          <><Network size={18} strokeWidth={1.5} color="var(--text-muted)" /><span>{projet}</span></>
         )}
-        {demo && <span className="bandeau-demo" role="note" title="Données fictives, rien n'est enregistré">DÉMO</span>}
-        <span className="actions-projet"><Star size={18} /><Ellipsis size={18} style={{ marginLeft: 22 }} /></span>
+        {demo && <span className="bandeau-demo" role="note" title="Données fictives, rien n'est enregistré">Démo</span>}
+        
       </div>
       <div className="filtres" role="group" aria-label="Filtrer par type">
         {FILTRES.map((f) => (
@@ -95,7 +95,7 @@ export const SousBarre = memo(function SousBarre({ projet, espaces = [], changer
         ))}
         <button type="button" aria-label="Filtrer par priorité" title="Filtrer par priorité"
           onClick={() => setPriorite(priorite === "" ? "P1" : priorite === "P1" ? "P2" : priorite === "P2" ? "P3" : "")}>
-          {priorite ? <span className={`badge-p ${priorite}`} style={{ height: 20, minWidth: 26, fontSize: 11 }}>{priorite}</span> : <Plus size={15} />}
+          {priorite ? <span className={`badge-p ${priorite}`} style={{ height: 20, minWidth: 28, fontSize: 12 }}>{priorite}</span> : <Plus size={15} />}
         </button>
       </div>
       <div className="zoom" role="group" aria-label="Zoom">
@@ -107,7 +107,7 @@ export const SousBarre = memo(function SousBarre({ projet, espaces = [], changer
       <BoutonCommande id="affichage.grille" classe="bouton-carre"><Grid3x3 size={18} /></BoutonCommande>
       <BoutonCommande id="affichage.theme.basculer" classe="bouton-carre">{jour ? <Moon size={18} /> : <Sun size={18} />}</BoutonCommande>
       <BoutonCommande id="presentation.demarrer" classe="bouton-carre"><Presentation size={18} /></BoutonCommande>
-      <button type="button" className="bouton-principal" title="Lancer une mission (Ctrl+Maj+M)" onClick={() => executer("mission.lancer", "bouton")}><Sparkles size={18} /> Lancer une mission</button>
+      <button type="button" className="bouton-principal" title="Lancer une mission (Ctrl+Maj+M)" onClick={() => executer("mission.lancer", "bouton")}>Lancer une mission</button>
       {communaute}
     </div>
   );

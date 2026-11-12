@@ -1,14 +1,14 @@
 export function taille(octets: number): string {
   if (!octets) return "";
   if (octets < 1024) return `${octets} o`;
-  const u = ["KB", "MB", "GB"];
+  const u = ["Ko", "Mo", "Go"];
   let v = octets / 1024;
   let i = 0;
   while (v >= 1024 && i < u.length - 1) {
     v /= 1024;
     i++;
   }
-  return `${v < 10 ? v.toFixed(1) : Math.round(v)} ${u[i]}`;
+  return `${v < 10 ? v.toFixed(1).replace(".", ",") : Math.round(v)} ${u[i]}`;
 }
 
 export function duree(s: number | undefined): string {

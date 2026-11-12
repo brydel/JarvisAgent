@@ -2,19 +2,23 @@
    Les couleurs et les ombres vivent dans themes.css, GÉNÉRÉ depuis design/board-v2/tokens.json (npm run jetons) :
    thème nuit par défaut, thème jour sur :root[data-theme="jour"]. Aucune couleur en dur ailleurs. */
 :root {
-  --font-sans: "Inter Variable", Inter, "Segoe UI Variable", "Segoe UI", system-ui, sans-serif;
+  /* Interface : Instrument Sans. Titres seulement (28 px et plus) : Newsreader. Code, identifiants, crédits, touches : IBM Plex Mono.
+     Les trois sont sous licence SIL OFL 1.1, embarquées par @fontsource (aucune police distante). */
+  --font-sans: "Instrument Sans Variable", "Segoe UI Variable", "Segoe UI", system-ui, sans-serif;
+  --font-serif: "Newsreader Variable", Georgia, "Times New Roman", serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
 
   --radius-xs: 6px;
   --radius-sm: 8px;
   --radius-card: 12px;
-  --radius-panel: 14px;
+  --radius-panel: 16px;
   --radius-pill: 999px;
 
   --dur-hover: 140ms;
   --dur-appear: 180ms;
   --dur-panel: 220ms;
   --dur-lift: 120ms;
-  --ease-standard: cubic-bezier(0.2, 0, 0, 1);
+  --ease-standard: cubic-bezier(0.22, 1, 0.36, 1);
   --ease-exit: cubic-bezier(0.4, 0, 1, 1);
 
   --topbar-h: 56px;

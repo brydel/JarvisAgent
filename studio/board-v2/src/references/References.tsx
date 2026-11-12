@@ -143,16 +143,16 @@ export default function ReferencesWorkspace({ source }: { source: Source }) {
           <section className="p-page rf-page" aria-labelledby="rf-titre">
             <div className="p-page-heading">
               <div>
-                <div className="p-breadcrumb">Bibliothèque de références · tout reste sur ton poste</div>
-                <h1 id="rf-titre">Tes références.<br /><span>Citées, pas résumées.</span></h1>
-                <p>Capture un site, retrouve-le par ses mots, sa palette ou ses polices, et pose-le sur le Board. La recherche fonctionne sans aucun fournisseur d'IA.</p>
+                <p className="credit">Bibliothèque locale<span>·</span><span>tout reste sur ton poste</span></p>
+                <h1 id="rf-titre">Références</h1>
+                <p>Capture un site, retrouve-le par ses mots, sa palette ou ses polices, et pose-le sur le Board. Chaque passage est cité avec sa source, jamais résumé. La recherche fonctionne sans aucun fournisseur d'IA.</p>
               </div>
               {liste && <Moteur liste={liste} />}
             </div>
 
             <label className={`rf-search ${enRecherche ? "is-busy" : ""}`}>
-              <Search size={19} aria-hidden />
-              <input ref={champ} type="search" value={q} placeholder="Pose une question à tes références : « tarifs affichés sans astérisque », « héros sombre »…"
+              <Search size={16} strokeWidth={1.5} aria-hidden />
+              <input ref={champ} type="search" value={q} placeholder="Rechercher dans les références"
                 aria-label="Rechercher dans les références" aria-controls="rf-resultats" autoComplete="off" spellCheck={false}
                 onChange={(e) => setQ(e.target.value)} onKeyDown={(e) => { if (e.key === "Escape" && q) { e.preventDefault(); setQ(""); } else fleches(e); }} />
               {enRecherche && <span className="rf-spinner" role="status" aria-label="Recherche en cours" />}
@@ -272,7 +272,7 @@ function FormulaireAjout({ demo, collections, captureDisponible, apres }: { demo
         <button type="button" aria-pressed={mode === "texte"} onClick={() => setMode("texte")}><FileText size={14} />Texte</button>
       </div>
       {mode === "site" ? (
-        <input className="rf-add-url" name="url" inputMode="url" autoComplete="off" spellCheck={false} placeholder="https://un-site-que-tu-admires.com" aria-label="Adresse du site à capturer"
+        <input className="rf-add-url" name="url" inputMode="url" autoComplete="off" spellCheck={false} placeholder="https://exemple.com" aria-label="Adresse du site à capturer"
           value={url} onChange={(e) => setUrl(e.target.value)} disabled={demo} />
       ) : (
         <div className="rf-add-texte">

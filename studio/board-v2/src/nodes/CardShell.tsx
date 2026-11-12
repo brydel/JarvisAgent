@@ -1,6 +1,6 @@
 import { memo, useEffect, useRef, useState, type ReactNode } from "react";
 import { Handle, NodeResizer, Position } from "@xyflow/react";
-import { ArrowUpToLine, ClipboardList, Copy, FileText, Minimize2, Maximize2, Palette, Wrench, Image as IconeImage, Link2, Lock, LockOpen, MoreHorizontal, Music, PanelRight, Sparkles, Target, Trash2, Users, Video, Folder } from "lucide-react";
+import { ArrowUpToLine, ClipboardList, Copy, FileText, Minimize2, Maximize2, Palette, Wrench, Image as IconeImage, Link2, Lock, LockOpen, MoreHorizontal, Music, PanelRight, Target, Trash2, Users, Video, Folder } from "lucide-react";
 import type { ObjetBoard, Priorite } from "../types";
 import { CONTEXTUALISABLES, TAILLES, useActions } from "./contexte";
 import { Avatar } from "../components/Avatar";
@@ -179,8 +179,8 @@ export function MenuCarte({ objet }: { objet: ObjetBoard }) {
             // même source que partout : le registre dit si la commande est possible, et sinon pourquoi
             const e = registre.etat("carte.analyser", contexte({ selection: [objet] }));
             return e.disponible
-              ? <button role="menuitem" onClick={faire(() => lancer("carte.analyser"))}><Sparkles size={16} /> Analyser avec Jarvis</button>
-              : <button role="menuitem" aria-disabled="true" className="avec-raison" title={e.raison ?? undefined}><Sparkles size={16} />
+              ? <button role="menuitem" onClick={faire(() => lancer("carte.analyser"))}><ClipboardList size={16} /> Analyser avec Jarvis</button>
+              : <button role="menuitem" aria-disabled="true" className="avec-raison" title={e.raison ?? undefined}><ClipboardList size={16} />
                 <span>Analyser avec Jarvis<small>{e.raison}</small></span></button>;
           })()}
           <button role="menuitem" onClick={faire(() => lancer("edition.dupliquer"))}><Copy size={16} /> Dupliquer</button>

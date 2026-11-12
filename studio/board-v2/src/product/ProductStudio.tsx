@@ -1,11 +1,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ArrowRight, ArrowUpRight, BookOpen, CheckCircle2, ChevronRight, Circle, Code2,
+import { ArrowUpRight, CheckCircle2, ChevronRight, Circle,
   FileText, Fingerprint, GitBranch, Layers3, LockKeyhole, Plus, RefreshCw, ShieldCheck,
-  Sparkles, Users, WandSparkles, X } from "lucide-react";
+  Users, WandSparkles, X } from "lucide-react";
 import type { Source, Inspection } from "../api";
 import type { ObjetBoard } from "../types";
 import { Avatar } from "../components/Avatar";
 import { DialogueMission, type DemandeMission } from "../components/DialogueMission";
+import { Marque } from "../components/Marque";
 import { ProductNav } from "./ProductNav";
 import { useStudioNavigation } from "./routing";
 import { chargerProduit, dateCourte, requete, verifierAgent, type Agent, type Candidate, type Catalogue, type ProductData, type Verification } from "./api";
@@ -52,7 +53,7 @@ export function ProductStudio({ source }: { source: Source }) {
     <ProductNav recherche={search} setRecherche={["agents", "missions", "fichiers", "connaissances"].includes(vue) ? setSearch : undefined} />
     <main className="product-main" id="contenu-produit">
       {error && <div className="p-error" role="alert"><span>{error}</span><button className="p-button p-quiet" onClick={refresh}><RefreshCw size={15}/>Réessayer</button></div>}
-      {!data && !error && <div className="p-loading" role="status"><span className="p-loader"/>Chargement de ton espace...</div>}
+      {!data && !error && <div className="p-loading" role="status"><span className="p-loader"/>Chargement</div>}
       {data && <>
         {vue === "accueil" && <Accueil data={data} demo={source.demo} composer={composer} />}
         {vue === "agents" && <Atelier catalogue={data.catalogue} demo={source.demo} recherche={search} refresh={refresh} notifier={setNotice} />}
@@ -71,37 +72,35 @@ function Accueil({ data, demo, composer }: { data: ProductData; demo: boolean; c
   const { aller } = useStudioNavigation();
   const agents = data.catalogue.agents.slice(0, 4);
   const active = data.catalogue.execution.executants.filter(x => x.actif && !x.revoque).length;
+  const cartes = data.board.objets.length;
   const choices = [
-    { icon: BookOpen, title: "Comprendre un sujet", text: "Rassembler le contexte, poser les bonnes questions.", prompt: "Je souhaite comprendre un sujet. Voici mon objectif : " },
-    { icon: Code2, title: "Concevoir un produit", text: "Transformer une idee en brief d'implementation.", prompt: "Je souhaite concevoir un produit. Probleme utilisateur : " },
-    { icon: FileText, title: "Préparer une candidature", text: "Comparer une offre a un profil vérifié.", prompt: "Préparer une candidature sans rien envoyer. Offre et profil : " },
+    { title: "Comprendre un sujet", text: "Rassembler le contexte et poser les bonnes questions avant de lancer quoi que ce soit", prompt: "Je souhaite comprendre un sujet. Voici mon objectif : " },
+    { title: "Concevoir un produit", text: "Transformer une idée en brief d'implémentation, tâche par tâche", prompt: "Je souhaite concevoir un produit. Problème utilisateur : " },
+    { title: "Préparer une candidature", text: "Comparer une offre à un profil vérifié, sans rien envoyer", prompt: "Préparer une candidature sans rien envoyer. Offre et profil : " },
   ];
   return <>
     <section className="p-hero">
       <div className="p-hero-copy">
-        <div className="p-availability"><span className={active ? "p-dot live" : "p-dot"}/>{demo ? "Explore un espace de démonstration" : active ? `${active} executant${active > 1 ? "s" : ""} disponible${active > 1 ? "s" : ""}` : "Ton espace. Tes outils. Ton rythme."}</div>
-        <h1>Une idée.<br/>Toute une équipe.</h1>
-        <p className="p-lead">Donne une direction. Rassemble tes ressources.<br/>Construis avec des agents que tu comprends et que tu peux améliorer.</p>
-        <div className="p-hero-actions"><button className="p-button p-primary" onClick={() => composer()}><Sparkles size={18}/>Cadrer une mission<ArrowUpRight size={17}/></button>
-          <button className="p-button p-quiet" onClick={() => aller("board")}>Ouvrir mon Board<ArrowRight size={17}/></button></div>
-        <div className="p-trust"><ShieldCheck size={15}/>Actions sensibles sous ton contrôle<span/><span>Claude + Codex</span></div>
+        <p className="credit">{demo ? "Espace de démonstration" : active ? `${active} exécutant${active > 1 ? "s" : ""} disponible${active > 1 ? "s" : ""}` : "Aucun exécutant actif"}<span>·</span><span>{cartes} carte{cartes > 1 ? "s" : ""} sur le Board</span></p>
+        <h1>Cadre une mission sur le Board, tes agents la mènent</h1>
+        <p className="p-lead">Rassemble notes, liens et fichiers sur le canevas, relie-les par des flèches, puis confie la mission à des rôles que tu peux lire et corriger. Envoyer, publier ou modifier tes fichiers attend toujours ton accord, avec Claude Code comme avec Codex.</p>
+        <div className="p-hero-actions"><button className="p-button p-primary" onClick={() => composer()}>Cadrer une mission</button>
+          <button className="p-button p-quiet" onClick={() => aller("board")}>Ouvrir mon Board</button></div>
       </div>
       <div className="p-formation" aria-label="Aperçu des rôles de ton équipe">
-        <div className="p-formation-grid"/>
-        <div className="p-orbit p-orbit-one"/><div className="p-orbit p-orbit-two"/>
-        <div className="p-core"><img src="/v2/jarvis-mark.svg" alt=""/><strong>Jarvis</strong><span>Tu donnes la direction</span></div>
-        {agents.map((a, i) => <button key={a.nom} className={`p-orbit-agent orbit-${i}`} onClick={() => aller("agents", { agent: a.nom })}>
-          <Avatar id={a.nom} role={a.nom} taille={42} titre={a.titre}/><span><strong>{a.court}</strong><small>{a.equipe}</small></span><ArrowUpRight size={15}/></button>)}
-        <div className="p-formation-caption"><GitBranch size={14}/>Des rôles spécialisés, pas des sessions permanentes</div>
+        <div className="p-ours-tete"><strong><Marque taille={16}/>Jarvis</strong><span>Tu donnes la direction</span></div>
+        <div className="p-ours">{agents.map((a) => <button key={a.nom} className="p-orbit-agent" onClick={() => aller("agents", { agent: a.nom })}>
+          <Avatar id={a.nom} role={a.nom} taille={88} titre={a.titre}/><span><strong>{a.court}</strong><small>{a.equipe}</small></span></button>)}</div>
+        <p className="credit p-formation-caption">Des rôles spécialisés, pas des sessions permanentes</p>
       </div>
     </section>
     <section className="p-start">
-      <div className="p-section-title"><div><h2>Par quoi commence-t-on ?</h2><p>Choisis une intention. Jarvis prépare le cadrage ; aucune action externe n'est déclenchée.</p></div><span className="p-shortcut">À ton rythme</span></div>
-      <div className="p-intents">{choices.map(({ icon: Icon, title, text, prompt }) => <button key={title} onClick={() => composer(prompt)}>
-        <span className="p-intent-icon"><Icon size={22}/></span><h3>{title}</h3><p>{text}</p><ArrowUpRight className="p-corner" size={19}/></button>)}</div>
+      <div className="p-section-title"><div><h2>Par quoi commence-t-on ?</h2><p>Choisis une intention. Jarvis prépare le cadrage ; aucune action externe n'est déclenchée.</p></div></div>
+      <div className="p-intents">{choices.map(({ title, text, prompt }) => <button key={title} onClick={() => composer(prompt)}>
+        <h3>{title}</h3><p>{text}</p></button>)}</div>
     </section>
-    <section className="p-workspace-row"><div className="p-workspace-card"><span className="p-workspace-icon"><Layers3 size={25}/></span><div><h3>Ton espace de travail visuel</h3><p>{data.board.objets.length} ressources sur le Board. Images, liens, notes et missions au même endroit.</p></div><button className="p-button p-quiet" onClick={() => aller("board")}>Reprendre<ArrowRight size={16}/></button></div>
-      <button className="p-workspace-card p-lab-link" onClick={() => aller("agents")}><span className="p-workspace-icon"><WandSparkles size={24}/></span><div><h3>Fais évoluer ton équipe</h3><p>{data.catalogue.agents.length} roles à découvrir et améliorer.</p></div><ArrowUpRight size={20}/></button></section>
+    <section className="p-workspace-row"><div className="p-workspace-card"><div><h3>Ton Board</h3><p>{cartes} carte{cartes > 1 ? "s" : ""} sur le canevas : images, liens, notes et missions au même endroit</p></div><button className="p-button p-quiet" onClick={() => aller("board")}>Reprendre</button></div>
+      <button className="p-workspace-card p-lab-link" onClick={() => aller("agents")}><div><h3>L'atelier des agents</h3><p>{data.catalogue.agents.length} rôles à lire, corriger et comparer avant d'adopter</p></div></button></section>
   </>;
 }
 

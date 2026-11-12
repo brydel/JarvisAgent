@@ -1,7 +1,8 @@
 import { memo, useEffect, useRef } from "react";
-import { ArrowUpRight, BarChart3, Bot, Library, Folder, Home, LayoutGrid, Moon, Search, Settings, Sun, Target } from "lucide-react";
+import { BarChart3, Bot, Library, Folder, Home, LayoutGrid, Moon, Search, Settings, Sun, Target } from "lucide-react";
 import { resoudreTheme, ui, useUi } from "../etat/ui";
 import { useStudioNavigation, type Vue } from "./routing";
+import { Marque } from "../components/Marque";
 import "./navigation.css";
 
 const items = [
@@ -45,20 +46,20 @@ export const ProductNav = memo(function ProductNav({ recherche = "", setRecherch
   return (
     <header className="topbar product-nav">
       <button className="marque product-brand" onClick={() => aller("accueil")} aria-label="Jarvis Studio, accueil">
-        <img src="/v2/jarvis-mark.svg" alt="" />Jarvis<span>Studio</span>
+        <Marque />Jarvis<span>Studio</span>
       </button>
       <nav className="nav" aria-label="Sections">
         {items.map(([key, label, Icon]) => (
           <button key={key} type="button" onClick={() => aller(key as Vue)}
             aria-current={vue === key || (key === "references" && vue === "connaissances") ? "page" : undefined} title={label}>
-            <Icon /><span>{label}</span>
+            <Icon strokeWidth={1.5} /><span>{label}</span>
           </button>
         ))}
       </nav>
       {setRecherche && (
         <label className="recherche">
-          <Search size={16} />
-          <input ref={input} value={recherche} type="search" placeholder="Rechercher..."
+          <Search size={16} strokeWidth={1.5} />
+          <input ref={input} value={recherche} type="search" placeholder="Rechercher"
             aria-label={vue === "board" ? "Rechercher dans le Board" : "Rechercher dans cet espace"}
             onChange={event => setRecherche(event.target.value)} />
           <kbd>{vue === "board" ? "/" : "Ctrl K"}</kbd>
@@ -67,21 +68,21 @@ export const ProductNav = memo(function ProductNav({ recherche = "", setRecherch
       {notifications > 0 && (
         <button className="p-button p-quiet p-notifications" onClick={() => aller("board")}
           aria-label={`${notifications} approbations en attente sur le Board`}>
-          {notifications} à valider<ArrowUpRight size={14} />
+          <span className="p-a-valider tab-num">{notifications}</span> à valider
         </button>
       )}
       {/* hors du Board (qui a son bouton dans sa barre et sa commande Maj+D) : le thème se change ici, pour tout le produit */}
       {vue !== "board" && (
         <button type="button" className="p-icon-button p-theme" aria-label={jour ? "Passer au thème nuit" : "Passer au thème jour"}
           title={jour ? "Thème nuit" : "Thème jour"} aria-pressed={jour} onClick={() => ui.definir({ theme: jour ? "nuit" : "jour" })}>
-          {jour ? <Moon size={16} aria-hidden /> : <Sun size={16} aria-hidden />}
+          {jour ? <Moon size={16} strokeWidth={1.5} aria-hidden /> : <Sun size={16} strokeWidth={1.5} aria-hidden />}
         </button>
       )}
       {/* le Board affiche déjà son propre bandeau « DÉMO » : un seul badge par écran */}
       {!(demo && vue === "board") && (
         <span className={`p-mode ${demo ? "is-demo" : ""}`}
-          title={demo ? "Données fictives. Aucune exécution réelle." : "Interface locale ; ce badge ne prouve pas la disponibilité des fournisseurs."}>
-          {demo ? "DÉMO" : "LOCAL"}
+          title={demo ? "Données fictives. Aucune exécution réelle." : "Interface locale. La disponibilité des fournisseurs se vérifie dans Configuration."}>
+          {demo ? "Démo" : "Local"}
         </span>
       )}
     </header>

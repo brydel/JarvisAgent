@@ -19,7 +19,7 @@ test("réel : état vide, capture d'un site, états, recherche citée, fiche, po
   page.on("pageerror", (e) => erreurs.push(e.message));
   await ouvrir(page);
   await page.getByRole("navigation", { name: "Sections" }).getByRole("button", { name: "Références", exact: true }).click();
-  await expect(page.getByRole("heading", { level: 1, name: /Tes références/ })).toBeVisible();
+  await expect(page.getByRole("heading", { level: 1, name: "Références" })).toBeVisible();
   await expect(page.getByText("Ta bibliothèque attend son premier site")).toBeVisible();
   await page.screenshot({ path: path.join(sorties, "vide.png") });
 
@@ -135,9 +135,9 @@ for (const [nom, largeur, hauteur] of [["bureau", 1440, 1000], ["mobile", 390, 8
     await page.screenshot({ path: path.join(sorties, `demo-fiche-${nom}.png`) });
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
     await page.keyboard.press("Escape");
-    await expect(page.getByRole("heading", { level: 1, name: /Tes références/ })).toBeVisible();
+    await expect(page.getByRole("heading", { level: 1, name: "Références" })).toBeVisible();
     await page.goto("/v2/?demo=1&vue=connaissances");
-    await expect(page.getByRole("heading", { level: 1, name: /Tes références/ })).toBeVisible();
+    await expect(page.getByRole("heading", { level: 1, name: "Références" })).toBeVisible();
     expect(erreurs).toEqual([]);
   });
 }

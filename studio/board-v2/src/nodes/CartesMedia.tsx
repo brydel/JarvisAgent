@@ -121,7 +121,7 @@ export const AudioNode = memo(function AudioNode({ data, selected }: P) {
             const v = VITESSES[(VITESSES.indexOf(vitesse) + 1) % VITESSES.length] ?? 1;
             setVitesse(v);
             if (audio.current) audio.current.playbackRate = v;
-          }}>{vitesse}x ⌄</button>
+          }}>{String(vitesse).replace(".", ",")}×</button>
           <span style={{ width: 18 }} />
           <Plus size={20} aria-hidden="true" />
         </div>

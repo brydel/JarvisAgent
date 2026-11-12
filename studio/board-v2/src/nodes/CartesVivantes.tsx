@@ -1,6 +1,6 @@
 import { memo, useCallback, useEffect, useRef, useState } from "react";
 import type { Node, NodeProps } from "@xyflow/react";
-import { Bold, Calendar, Check, FileText, Italic, List, Loader, MoreHorizontal, Target, Underline, Users, Wrench, X } from "lucide-react";
+import { Bold, Check, FileText, Italic, List, Loader, MoreHorizontal, Target, Underline, Users, Wrench, X } from "lucide-react";
 import type { AgentResume, DonneesNoeud, MissionResume } from "../types";
 import { libelleTache } from "../lib/format";
 import { rendreNote } from "../lib/markdown";
@@ -113,15 +113,14 @@ export const MissionNode = memo(function MissionNode({ data, selected }: P) {
     <CardShell objet={o} selected={selected} sources={data.sources} classe="c-mission" entete={false}>
       <div className="contenu" onDoubleClick={() => a.inspecter(o.id)}>
         <div className="ligne1">
-          <span className="icone-mission"><Target size={26} /></span>
-          <span className="etiquette-type">MISSION</span>
+          <span className="etiquette-type"><Target size={20} strokeWidth={1.5} aria-hidden />Mission</span>
           <span className={`statut-pill ${s.classe}`}>
-            {s.classe === "en-cours" ? <Loader size={17} className="tourne" /> : s.classe === "reussie" ? <Check size={17} /> : null}
+            {s.classe === "en-cours" ? <Loader size={16} strokeWidth={1.5} className="tourne" /> : s.classe === "reussie" ? <Check size={17} /> : null}
             {s.libelle}{s.classe === "en-cours" && <DepuisTravail agents={agents} />}
           </span>
         </div>
         <h3>{o.meta.titre || m.objectif}</h3>
-        <div className="progression" aria-label={`Progression : ${m.faites} tâche(s) sur ${m.total}`}>
+        <div className="progression" aria-label={`Progression : ${m.faites} sur ${m.total} tâche${m.total > 1 ? "s" : ""}`}>
           <div className="barre"><span style={{ transform: `scaleX(${m.progression / 100})` }} /></div>
           <output className="tab-num">{m.progression}%</output>
         </div>
@@ -140,7 +139,6 @@ export const MissionNode = memo(function MissionNode({ data, selected }: P) {
         </ul>
         <OutilsAgents agents={agents} />
         <div className="bas">
-          <Calendar size={19} />
           {o.meta.echeance ? <>Échéance <span className="date">{String(o.meta.echeance)}</span></> : <span>Sans échéance</span>}
           <span className="pile-avatars">
             {agents.slice(0, 2).map((ag) => (
@@ -164,7 +162,7 @@ function DepuisTravail({ agents }: { agents: AgentResume[] }) {
   const ag = agents.find((x) => !x.fin);
   if (!ag) return null;
   const s = Math.max(0, Date.now() / 1000 - ag.debut);
-  return <span className="depuis tab-num" title={`Agent au travail depuis ${Math.round(s)} s`}> · {s < 60 ? "< 1 min" : `${Math.floor(s / 60)} min`}</span>;
+  return <span className="depuis tab-num" title={`Agent au travail depuis ${Math.round(s)} s`}> · {s < 60 ? "< 1 min" : s < 3600 ? `${Math.floor(s / 60)} min` : s < 86400 ? `${Math.floor(s / 3600)} h` : `${Math.floor(s / 86400)} j`}</span>;
 }
 
 /** Dernière action réelle de l'équipe (outils déclarés par l'exécutant) : ce qui a été lu ou utilisé. */
@@ -195,7 +193,7 @@ function EquipeProjet({ o, selected }: { o: P["data"]["objet"]; selected: boolea
   return (
     <CardShell objet={o} selected={selected} classe="c-agents" entete={false}>
       <div className="entete">
-        <Users size={19} /> {String(o.meta.titre ?? "ÉQUIPE").toUpperCase()}
+        <Users size={20} strokeWidth={1.5} /> {String(o.meta.titre ?? "Équipe")}
         <span className="badge-actifs tab-num">{actifs ? `${actifs} au travail` : "au repos"}</span>
       </div>
       <div className="grille-agents">
@@ -209,7 +207,7 @@ function EquipeProjet({ o, selected }: { o: P["data"]["objet"]; selected: boolea
           </div>
         ))}
       </div>
-      {membres.length > 4 && <p className="meta-carte">+ {membres.length - 4} autre(s) agent(s)</p>}
+      {membres.length > 4 && <p className="meta-carte">+ {membres.length - 4} {membres.length - 4 > 1 ? "autres agents" : "autre agent"}</p>}
     </CardShell>
   );
 }
@@ -222,7 +220,7 @@ export const AgentsNode = memo(function AgentsNode({ data, selected }: P) {
   return (
     <CardShell objet={o} selected={selected} sources={data.sources} classe="c-agents" entete={false}>
       <div className="entete">
-        <Users size={19} /> ÉQUIPE D'AGENTS
+        <Users size={20} strokeWidth={1.5} /> Équipe d'agents
         <span className="badge-actifs tab-num">{actifs} actif{actifs > 1 ? "s" : ""}</span>
       </div>
       {agents.length ? (
@@ -244,7 +242,7 @@ export const AgentsNode = memo(function AgentsNode({ data, selected }: P) {
       ) : (
         <div className="vide-agents">Aucun agent n'a encore travaillé sur cette mission.<br />Ils apparaîtront ici dès qu'un exécutant prendra une tâche.</div>
       )}
-      {agents.length > 4 && <p className="meta-carte">+ {agents.length - 4} tentative(s) dans l'historique de la mission</p>}
+      {agents.length > 4 && <p className="meta-carte">+ {agents.length - 4} {agents.length - 4 > 1 ? "tentatives" : "tentative"} dans l'historique de la mission</p>}
     </CardShell>
   );
 });

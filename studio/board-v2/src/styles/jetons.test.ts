@@ -54,7 +54,7 @@ describe("jetons de design", () => {
   });
 
   it("chaque jeton utilisé par une feuille existe dans les deux thèmes", () => {
-    const connus = new Set([...Object.keys(jetons.themes.nuit), "font-sans", "radius-xs", "radius-sm", "radius-card", "radius-panel", "radius-pill",
+    const connus = new Set([...Object.keys(jetons.themes.nuit), "font-sans", "font-serif", "font-mono", "radius-xs", "radius-sm", "radius-card", "radius-panel", "radius-pill",
       "dur-hover", "dur-appear", "dur-panel", "dur-lift", "ease-standard", "ease-exit", "topbar-h", "subbar-h", "panel-w"]);
     const inconnus: string[] = [];
     for (const f of feuillesDuProduit()) {

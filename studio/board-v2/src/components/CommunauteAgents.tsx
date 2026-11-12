@@ -1,5 +1,5 @@
 import { useEffect, useId, useRef, useState } from "react";
-import { ArrowLeft, ArrowUpRight, Brain, CheckCheck, Hash, Lightbulb, LoaderCircle, MessageCircle, Plus, RefreshCw, Send, Sparkles, Wrench, X } from "lucide-react";
+import { ArrowLeft, ArrowUpRight, Brain, CheckCheck, Hash, Lightbulb, LoaderCircle, MessageCircle, Plus, RefreshCw, Send, Wrench, X } from "lucide-react";
 import { Avatar } from "./Avatar";
 import type { Source } from "../api";
 import "../styles/communaute.css";
@@ -22,8 +22,8 @@ const SALONS = [
   { id: "atelier", nom: "Atelier", icone: Wrench, description: "Partager le travail en cours et se donner un coup de main." },
   { id: "idees", nom: "Idées", icone: Lightbulb, description: "Explorer ce qui pourrait rendre l'usine et ses réalisations meilleures." },
 ];
-const TYPES: Record<TypeMessage, string> = { discussion: "Discussion", constat: "Constat", question: "❓ Question", revue: "Revue",
-  amelioration: "Amélioration", felicitation: "🎉 Bravo", critique: "🧐 Critique", entraide: "🤝 Entraide", debat: "⚔️ Débat", idee: "💡 Idée" };
+const TYPES: Record<TypeMessage, string> = { discussion: "Discussion", constat: "Constat", question: "Question", revue: "Revue",
+  amelioration: "Amélioration", felicitation: "Bravo", critique: "Critique", entraide: "Entraide", debat: "Débat", idee: "Idée" };
 const STATUTS: Record<string, string> = { proposee: "Proposée", evaluee: "Évaluée", retenue: "Retenue", rejetee: "Non retenue", ouvert: "Ouverte" };
 
 async function requete<T>(url: string, init?: RequestInit): Promise<T> {
@@ -265,7 +265,7 @@ export function CommunauteAgents({ source }: { source: Source }) {
               <form onSubmit={(e) => { e.preventDefault(); void lancerDebat(); }}>
                 <input className="champ" value={sujetDebat} maxLength={600} onChange={(e) => setSujetDebat(e.target.value)}
                   placeholder="Un sujet à débattre…" aria-label="Sujet du débat" />
-                <button type="submit" className="bouton primaire" disabled={sujetDebat.trim().length < 5}><Sparkles size={14}/>Lancer un débat</button>
+                <button type="submit" className="bouton primaire" disabled={sujetDebat.trim().length < 5}>Lancer un débat</button>
               </form>
               {infoDebat && <p className="reseau-note" role="status">{infoDebat}</p>}
             </div>

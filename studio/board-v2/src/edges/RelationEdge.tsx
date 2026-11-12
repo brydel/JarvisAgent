@@ -2,7 +2,7 @@ import { memo, useState } from "react";
 import {
   BaseEdge, EdgeLabelRenderer, Position, getBezierPath, useInternalNode, useReactFlow, type Edge, type EdgeProps, type InternalNode,
 } from "@xyflow/react";
-import { ArrowRightToLine, CircleCheck, CircleDashed, Lock, Sparkles, X } from "lucide-react";
+import { ArrowRightToLine, CircleCheck, CircleDashed, Lock, X } from "lucide-react";
 import { contourDe } from "../outils/fleche";
 import { pointSurContour } from "../outils/geometrie";
 import { etiquetteParlante, libelleUtile, type EtatFleche, type LectureFleche } from "../relations/effets";
@@ -141,7 +141,7 @@ export const RelationEdge = memo(function RelationEdge({ id, source, target, dat
                 }} />
             ) : <>
               {Etat && <Etat size={12} aria-hidden />}
-              {data.auteur === "jarvis" && <Sparkles size={11} aria-label="Tracé par Jarvis" />}
+              {data.auteur === "jarvis" && <span className="trace-par" title="Tracé par Jarvis">Jarvis ·</span>}
               {/* le libellé de l'humain d'abord ; l'effet du moment est toujours dit (jamais remplacé par lui) */}
               {libelle && <span>{libelle}</span>}
               {parlante ? <span className="effet-lien">{libelle ? `· ${lecture!.libelle}` : lecture!.libelle}</span>

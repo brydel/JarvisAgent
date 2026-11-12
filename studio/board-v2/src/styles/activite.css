@@ -1,5 +1,5 @@
-.app.avec-activite:has(> .product-nav) { grid-template-rows: 60px var(--subbar-h) auto minmax(0, 1fr); }
-.activite-directe { flex: 0 0 auto; border-bottom: 1px solid var(--border-strong); background: var(--dialog-bg-1); color: var(--text-primary); }
+.app.avec-activite:has(> .product-nav) { grid-template-rows: var(--topbar-h) var(--subbar-h) auto minmax(0, 1fr); }
+.activite-directe { flex: 0 0 auto; border-bottom: 1px solid var(--border-subtle); background: var(--bg-app); color: var(--text-primary); }
 .activite-titre { display: flex; align-items: center; gap: 10px; padding: 10px 20px; width: 100%; border: 0; color: inherit; background: transparent; text-align: left; cursor: pointer; }
 .activite-titre span { flex: 1; font-size: 12px; color: var(--text-secondary); }
 .activite-contenu { display: grid; grid-template-columns: 1fr 1fr; height: 220px; border-top: 1px solid var(--border-strong); }
@@ -7,12 +7,12 @@
 .activite-apercu { border-left: 1px solid var(--border-strong); }
 .activite-meta, .activite-apercu > p { color: var(--text-secondary); }
 .activite-session { width: 100%; display: flex; gap: 8px; padding: 9px; border: 1px solid var(--border-strong); border-radius: 6px; background: transparent; color: inherit; text-align: left; margin: 6px 0; cursor: pointer; }
-.activite-session[aria-pressed=true] { border-color: var(--brand-indigo); background: var(--surface-more); }
+.activite-session[aria-pressed=true] { border-color: var(--border-strong); background: var(--surface-more); }
 .activite-session span, .activite-tache { display: flex; flex-direction: column; gap: 4px; overflow-wrap: anywhere; }
 .activite-tache { padding: 9px; border-bottom: 1px solid var(--border-strong); }
 .activite-tache button { align-self: start; background: transparent; border: 0; color: var(--text-accent-soft); cursor: pointer; }
 .activite-directe [role=alert], .activite-tache > strong { color: var(--text-p2); }
-.activite-apercu pre { white-space: pre-wrap; overflow-wrap: anywhere; font: 11px/1.5 monospace; }
+.activite-apercu pre { white-space: pre-wrap; overflow-wrap: anywhere; font: 400 12px/1.5 var(--font-mono); }
 @media (max-width: 900px) {
   .app.avec-activite:has(> .product-nav) { grid-template-rows: auto auto auto minmax(0, 1fr); }
   .app.avec-activite .travail { grid-template-rows: minmax(160px, 1fr) minmax(0, 0.7fr); }

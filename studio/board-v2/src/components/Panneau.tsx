@@ -1,6 +1,6 @@
 import { memo, useEffect, useState } from "react";
 import { AnimatePresence, motion } from "motion/react";
-import { Calendar, Check, CircleDashed, Copy, FileText, Image as IconeImage, Link2, Loader, MoreHorizontal, Music, Play, Plus, ShieldCheck, Sparkles, Star, Target, Video, X } from "lucide-react";
+import { Calendar, Check, CircleDashed, Copy, FileText, Image as IconeImage, Link2, Loader, Music, Play, Plus, ShieldCheck, Target, Video, X } from "lucide-react";
 import type { Approbation, Evenement, ObjetBoard, Priorite, ReglagesBoard } from "../types";
 import type { Inspection, Source } from "../api";
 import { ilya, libelleTache, taille } from "../lib/format";
@@ -19,12 +19,12 @@ export function decrireEvenement(e: Evenement | Inspection["chronologie"][number
     case "demo": return String(d.texte ?? "");
     case "board_objet": return `Objet ${d.type ?? ""} ajouté au Board`;
     case "board_maj": return `Objet modifié (${(d.champs as string[] | undefined)?.join(", ") ?? ""})`;
-    case "board_supprime": return "Objet(s) supprimé(s)";
-    case "board_restaure": return "Objet(s) restauré(s)";
+    case "board_supprime": return "Suppression sur le Board";
+    case "board_restaure": return "Restauration sur le Board";
     case "board_lien": return "Relation créée";
     case "board_fichier": return `Fichier ${d.famille ?? ""} téléversé`;
     case "board_commentaire": return "Commentaire ajouté";
-    case "board_propositions": return `Jarvis a contextualisé l'élément (${d.n ?? 0} action(s) proposée(s)${Number(d.liens) ? `, ${d.liens} lien(s)` : ""})`;
+    case "board_propositions": return `Jarvis a contextualisé l'élément (${d.n ?? 0} ${Number(d.n) > 1 ? "actions proposées" : "action proposée"}${Number(d.liens) ? `, ${d.liens} ${Number(d.liens) > 1 ? "liens" : "lien"}` : ""})`;
     case "outils": return `Outils : ${((d.outils as unknown as { outil: string; detail: string }[]) ?? []).map((o) => `${o.outil} ${o.detail}`).join(" · ")}`;
     case "reglages_board": return "Réglages du chef modifiés";
     case "board_proposition": return `Proposition ${d.decision === "lancer" ? "lancée" : "écartée"}`;
@@ -158,7 +158,7 @@ function ReglagesJarvis({ reglages, regler }: { reglages?: ReglagesBoard; regler
   );
   return (
     <section className="section section-jarvis" aria-label="Autonomie de Jarvis">
-      <div className="tete"><h4><Sparkles size={17} /> Autonomie de Jarvis</h4></div>
+      <div className="tete"><h4>Autonomie de Jarvis</h4></div>
       {ligne("auto_analyse", "Analyser ce que je dépose", "Résumé, contexte, liens vers les autres cartes du projet.")}
       {ligne("actions_auto", "Lancer seul les actions sans risque", "Une action L1 par élément (rédiger, résumer, comparer). Rien d'externe.")}
       <p className="vide">Envoyer, publier, postuler ou modifier tes fichiers attend toujours ton accord.</p>
@@ -177,11 +177,11 @@ function SectionJarvis({ objet, contextualiser, deciderProposition }: {
   const props = objet.meta.propositions ?? [];
   return (
     <section className="section section-jarvis" aria-label="Actions proposées par Jarvis">
-      <div className="tete"><h4><Sparkles size={17} /> Jarvis</h4>
+      <div className="tete"><h4>Jarvis</h4>
         {e?.etat !== "analyse" && (
           <button type="button" className="lien-texte" onClick={() => contextualiser(objet.id)}>{e ? "Relancer l'analyse" : "Analyser avec Jarvis"}</button>
         )}</div>
-      {!e && <p className="vide">Pas encore analysé.</p>}
+      {!e && <p className="vide">Pas encore analysé</p>}
       {e && e.etat !== "pret" && <p className={`vide etat-${e.etat}`}>{e.etat === "analyse" ? <Loader size={14} className="tourne" /> : null} {e.texte}</p>}
       {objet.meta.jarvis_resume && <p className="resume-jarvis">{objet.meta.jarvis_resume}</p>}
       {props.length > 0 && <h5 className="sous-titre">Actions proposées par Jarvis</h5>}
@@ -253,15 +253,15 @@ function Apercu({ objets, approbations, activite }: { objets: ObjetBoard[]; appr
     <>
       <div className="section">
         <h4>Board</h4>
-        <p className="vide" style={{ marginTop: 6 }}>{objets.length} carte(s). Sélectionne une carte pour voir ses détails, son activité et ses commentaires.</p>
+        <p className="vide" style={{ marginTop: 6 }}>{objets.length} carte{objets.length > 1 ? "s" : ""}. Sélectionne une carte pour voir ses détails, son activité et ses commentaires.</p>
       </div>
       <div className="section">
         <div className="tete"><h4><ShieldCheck size={17} /> Approbations</h4>{approbations.length > 0 && <span className="compte-attente">{approbations.length} en attente</span>}</div>
         {approbations.length ? approbations.map((a) => <div key={a.id} className="meta-carte" style={{ fontSize: 13 }}>{a.niveau} · {a.type} ({a.tache_id})</div>)
-          : <p className="vide">Rien à décider.</p>}
+          : <p className="vide">Rien à décider</p>}
       </div>
       <div className="section"><div className="tete"><h4>Activité récente</h4></div>
-        {activite.length ? <ListeActivite activite={activite} max={6} /> : <p className="vide">Pas encore d'activité.</p>}</div>
+        {activite.length ? <ListeActivite activite={activite} max={6} /> : <p className="vide">Pas encore d'activité</p>}</div>
     </>
   );
 }
@@ -287,9 +287,9 @@ function Details({ objet, insp, approbations, demo, activite, priorite, modifier
           <IconeType type={objet.type} />
           <div style={{ minWidth: 0 }}>
             <h3>{objet.meta.titre || m?.objectif || objet.asset?.nom || objet.type}</h3>
-            <span className="etiquette-type" style={{ height: 22, fontSize: 11 }}>{objet.type === "mission" ? <>✳ MISSION</> : objet.type.toUpperCase()}</span>
+            <span className="etiquette-type" style={{ fontSize: 12 }}>{objet.type.charAt(0).toUpperCase() + objet.type.slice(1)}</span>
           </div>
-          <span className="actions"><Star size={18} /><MoreHorizontal size={18} style={{ marginLeft: 14 }} /></span>
+          
         </div>
         <dl className="grille-details">
           {m ? (
@@ -315,7 +315,7 @@ function Details({ objet, insp, approbations, demo, activite, priorite, modifier
           </div>
         </dl>
         {m && (
-          <div className="p-progression" aria-label={`${m.faites} tâche(s) faite(s) sur ${m.total}`}>
+          <div className="p-progression" aria-label={`${m.faites} sur ${m.total} tâche${m.total > 1 ? "s" : ""}`}>
             Progression<div className="barre"><span style={{ width: `${m.progression}%` }} /></div><output className="tab-num">{m.progression}%</output>
           </div>
         )}
@@ -387,7 +387,7 @@ function Details({ objet, insp, approbations, demo, activite, priorite, modifier
       )}
       <div className="section">
         <div className="tete"><h4>Activité récente</h4><button type="button" className="lien-texte" onClick={voirTout}>Voir tout</button></div>
-        {activite.length ? <ListeActivite activite={activite} max={3} /> : <p className="vide">Pas encore d'activité.</p>}
+        {activite.length ? <ListeActivite activite={activite} max={3} /> : <p className="vide">Pas encore d'activité</p>}
       </div>
     </>
   );

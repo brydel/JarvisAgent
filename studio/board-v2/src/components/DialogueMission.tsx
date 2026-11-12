@@ -1,6 +1,6 @@
 import { useEffect, useId, useRef, useState } from "react";
 import { motion } from "motion/react";
-import { Loader, ShieldCheck, Sparkles, X } from "lucide-react";
+import { Loader, ShieldCheck, Target, X } from "lucide-react";
 import { siClaude } from "simple-icons";
 import type { Priorite } from "../types";
 
@@ -85,7 +85,7 @@ export function DialogueMission({ ouvert, initialObjectif, demo, fermer, lancer 
             soumettre();
           }}>
           <header className="dialogue-tete">
-            <span className="dialogue-icone" aria-hidden="true"><Sparkles size={20} /></span>
+            <span className="dialogue-icone" aria-hidden="true"><Target size={18} strokeWidth={1.5} /></span>
             <div>
               <h2 id={`${id}-titre`}>Lancer une mission</h2>
               <p>Jarvis prépare une analyse de cadrage et l'ajoute au Board.</p>
@@ -145,7 +145,7 @@ export function DialogueMission({ ouvert, initialObjectif, demo, fermer, lancer 
             <span className="raccourci">Ctrl + Entrée</span>
             <button type="button" className="bouton" onClick={fermer}>Annuler</button>
             <button type="submit" className="bouton primaire" disabled={!valide || envoi} aria-busy={envoi}>
-              {envoi ? <><Loader size={15} className="tourne" /> Lancement…</> : <><Sparkles size={15} /> Lancer la mission</>}
+              {envoi ? <><Loader size={15} className="tourne" /> Lancement…</> : <>Lancer la mission</>}
             </button>
           </footer>
         </motion.form>

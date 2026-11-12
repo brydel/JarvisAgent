@@ -19,7 +19,7 @@ test.describe("visuel", () => {
         await page.mouse.move(5, 5);
         await attendreStable(page, 500);
       }
-      await expect(page.getByText("DÉMO", { exact: true })).toBeVisible();
+      await expect(page.getByText("Démo", { exact: true })).toBeVisible();
       fs.mkdirSync(RAPPORTS, { recursive: true });
       await page.screenshot({ path: path.join(RAPPORTS, `after-${nom}.png`) });
       await expect(page).toHaveScreenshot(`board-demo-${nom}.png`);
