@@ -140,16 +140,16 @@ export const RelationEdge = memo(function RelationEdge({ id, source, target, dat
                   if (e.key === "Escape") setEdition(false);
                 }} />
             ) : <>
-              {Etat && <Etat size={12} aria-hidden />}
+              {Etat && <Etat size={16} aria-hidden />}
               {data.auteur === "jarvis" && <span className="trace-par" title="Tracé par Jarvis">Jarvis ·</span>}
               {/* le libellé de l'humain d'abord ; l'effet du moment est toujours dit (jamais remplacé par lui) */}
               {libelle && <span>{libelle}</span>}
               {parlante ? <span className="effet-lien">{libelle ? `· ${lecture!.libelle}` : lecture!.libelle}</span>
-                : !libelle && <span style={{ opacity: 0.7 }}>{data.style === "defaut" ? "Nommer…" : lecture && etat !== "neutre" ? lecture.libelle : rendu.nom}</span>}
+                : !libelle && <span className="nom-type">{data.style === "defaut" ? "Nommer" : lecture && etat !== "neutre" ? lecture.libelle : rendu.nom}</span>}
             </>}
             {selected && !edition && (
               <button type="button" className="retirer-lien" aria-label="Retirer cette relation"
-                onClick={(e) => { e.stopPropagation(); deleteElements({ edges: [{ id }] }); }}><X size={12} /></button>
+                onClick={(e) => { e.stopPropagation(); deleteElements({ edges: [{ id }] }); }}><X size={12} className="trait-fort" /></button>
             )}
           </div>
         </EdgeLabelRenderer>

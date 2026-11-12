@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { Activity, ChevronDown, ChevronUp, Terminal } from "lucide-react";
 import type { Source } from "../api";
+import { LIBELLE_TYPE } from "../lib/format";
 import "../styles/activite.css";
 
 interface Session {
@@ -31,13 +32,17 @@ async function lire<T>(url: string, signal: AbortSignal): Promise<T> {
 
 /** Lecture périodique indépendante du SSE : les sessions tmux ne publient pas d'événements de mission. */
 export function ActiviteDirecte({ source, inspecter }: { source: Source; inspecter: (id: string) => void }) {
-  const [ouvert, setOuvert] = useState(true);
+  // repliée sur une ligne tant qu'il n'y a rien à voir ; elle s'ouvre dès qu'un agent travaille, qu'une tâche attend
+  // ou qu'une erreur est à lire. Ton choix (ouvrir, replier) l'emporte ensuite.
+  const [choix, setChoix] = useState<boolean | null>(null);
   const [etat, setEtat] = useState<Activite | null>(null);
   const [erreur, setErreur] = useState("");
   const [session, setSession] = useState("");
   const [apercu, setApercu] = useState("");
   const [erreurApercu, setErreurApercu] = useState("");
   const espace = encodeURIComponent(source.espace);
+  const aVoir = Boolean(erreur || etat?.sessions_erreur || etat?.sessions?.length || etat?.taches.length);
+  const ouvert = choix ?? aVoir;
   useEffect(() => {
     if (source.demo) return;
     const c = new AbortController();
@@ -80,10 +85,10 @@ export function ActiviteDirecte({ source, inspecter }: { source: Source; inspect
   const actifs = etat?.sessions?.filter(s => ["working", "waiting", "untracked", "silent"].includes(s.status)).length ?? 0;
   const selection = etat?.sessions?.find(s => s.id === session);
   return <section className="activite-directe" aria-label="Travail en direct">
-    <button type="button" className="activite-titre" aria-expanded={ouvert} aria-controls="travail-observe" onClick={() => setOuvert(!ouvert)}>
-      <Activity size={17}/><strong>Travail en direct</strong>
-      <span>{etat ? `${etat.sessions === null ? "Sessions indisponibles" : `${actifs} session(s) active(s)`} · ${etat.taches.length} tâche(s) en cours ou en attente` : "Observation…"}</span>
-      {ouvert ? <ChevronUp size={17}/> : <ChevronDown size={17}/>}
+    <button type="button" className="activite-titre" aria-expanded={ouvert} aria-controls="travail-observe" onClick={() => setChoix(!ouvert)}>
+      <Activity size={16} aria-hidden/><strong>Travail en direct</strong>
+      <span>{etat ? `${etat.sessions === null ? "Sessions indisponibles" : `${actifs} session${actifs > 1 ? "s actives" : " active"}`} · ${etat.taches.length} tâche${etat.taches.length > 1 ? "s" : ""} en cours ou en attente` : "Observation en cours"}</span>
+      {ouvert ? <ChevronUp size={16} aria-hidden/> : <ChevronDown size={16} aria-hidden/>}
     </button>
     {ouvert && <div id="travail-observe" className="activite-contenu">
       <div className="activite-liste">
@@ -93,21 +98,21 @@ export function ActiviteDirecte({ source, inspecter }: { source: Source; inspect
         {etat?.sessions_erreur && <p role="alert">Sessions non observables : {etat.sessions_erreur}</p>}
         {etat && !etat.executant_actif && etat.taches.length > 0 && <p role="status">Aucun exécutant de missions n'a donné signe de vie récemment. Vérifie le démon et l'enrôlement.</p>}
         {etat?.sessions?.map(s => <button type="button" key={s.id} className="activite-session" aria-pressed={session === s.id} onClick={() => setSession(s.id)}>
-          <Terminal size={15}/><span><b>{s.project} / {s.worktree}</b><small>{s.kind || "Agent"} · {ETATS[s.status] || s.status} · {s.session}/{s.window}</small>{s.title && <small>{s.title}</small>}</span>
+          <Terminal size={16} aria-hidden/><span><b>{s.project} / {s.worktree}</b><small>{s.kind || "Agent"} · {ETATS[s.status] || s.status} · {s.session}/{s.window}</small>{s.title && <small>{s.title}</small>}</span>
         </button>)}
         {etat?.taches.map(t => <div key={t.id} className="activite-tache">
-          <b>{t.objectif}</b><span>{t.type} · {ETATS[t.statut] || t.statut} · {t.fournisseur || "fournisseur à attribuer"}
+          <b>{t.objectif}</b><span>{LIBELLE_TYPE[t.type] ?? t.type.replace(/_/g, " ")} · {ETATS[t.statut] || t.statut} · {t.fournisseur || "fournisseur à attribuer"}
             {t.debut !== null && ` · depuis ${Math.max(0, Math.floor((etat.ts - t.debut) / 60))} min`}</span>
           {t.bail_perime && <strong>Bail expiré : reprise à vérifier</strong>}
           {t.raison && <small>{t.raison}</small>}
-          {t.objet_id && <button type="button" onClick={() => inspecter(t.objet_id!)}>Voir la carte liée</button>}
+          {t.objet_id && <button type="button" className="lien-texte" onClick={() => inspecter(t.objet_id!)}>Voir la carte liée</button>}
         </div>)}
-        {etat && etat.sessions !== null && !etat.sessions.length && !etat.taches.length && <p>Aucun travail observé dans cet espace.</p>}
+        {etat && etat.sessions !== null && !etat.sessions.length && !etat.taches.length && <p>Aucun travail observé dans cet espace</p>}
       </div>
       <div className="activite-apercu" aria-label="Sortie de la session">
         {selection ? <><strong>{selection.project} / {selection.worktree}</strong>
           {erreurApercu && <p role="alert">{erreurApercu} — l'ancienne sortie peut être périmée.</p>}
-          <pre>{apercu || (erreurApercu ? "" : "Capture en cours…")}</pre></>
+          <pre>{apercu || (erreurApercu ? "" : "Capture en cours")}</pre></>
           : <p>Sélectionne une session pour voir sa sortie terminal. Pour les missions, le statut vient du moteur ; le contenu du modèle est disponible à la remise du résultat.</p>}
       </div>
     </div>}

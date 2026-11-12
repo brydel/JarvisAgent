@@ -1,6 +1,7 @@
 // ════════════════════════════════════════════════════════════════════════════════════════════════════════════
 // MODE DÉMO — données FICTIVES, isolées de l'état réel. Affichées uniquement avec ?demo=1 et le bandeau « DÉMO ».
-// Composition reprise de design/references/JARVIS_BOARD_V2_REFERENCE.png (géométrie mesurée, écran ÷ 0,8).
+// Composition reprise de design/references/JARVIS_BOARD_V2_REFERENCE.png (géométrie mesurée, écran ÷ 0,8) ; la rangée du bas
+// est descendue de 16 unités pour que la ligne « Alimentée par » de la mission tienne avant la carte suivante.
 // Les fichiers (public/demo) sont réels (lecture, forme d'onde, vignettes PDF) ; les missions et agents ne le sont pas.
 // ════════════════════════════════════════════════════════════════════════════════════════════════════════════
 import type { Asset, EtatBoard, MissionResume, ObjetBoard } from "../types";
@@ -72,11 +73,11 @@ export function fixtureDemo(): EtatBoard {
         description: "Remplacer l'accueil par un aperçu du Board, puis ouvrir une PR avec ses tests Playwright." } }),
     objet({ id: "BO-demo-agents", type: "agents", x: 1270, y: 432.5, largeur: 331, hauteur: 342, mission_id: missionDemo.id,
       mission: missionDemo, meta: { titre: "Équipe d'agents" } }),
-    objet({ id: "BO-demo-audio", type: "audio", x: 307.5, y: 836.25, largeur: 462, hauteur: 178, priorite: "P3", asset: audio,
+    objet({ id: "BO-demo-audio", type: "audio", x: 307.5, y: 852.25, largeur: 462, hauteur: 178, priorite: "P3", asset: audio,
       asset_id: audio.id, meta: { titre: "Point d'équipe du 9 octobre", demo_src: D + "reunion-ideation.mp3" } }),
-    objet({ id: "BO-demo-video", type: "video", x: 795, y: 836.25, largeur: 378, hauteur: 178, priorite: "P2", asset: video,
+    objet({ id: "BO-demo-video", type: "video", x: 795, y: 852.25, largeur: 378, hauteur: 178, priorite: "P2", asset: video,
       asset_id: video.id, meta: { titre: "Présentation produit.mp4" } }),
-    objet({ id: "BO-demo-dossier", type: "dossier", x: 1205, y: 860, largeur: 378, hauteur: 152,
+    objet({ id: "BO-demo-dossier", type: "dossier", x: 1205, y: 876, largeur: 378, hauteur: 152,
       meta: { titre: "Ressources design", demo_vignettes: [D + "ressource-1.jpg", D + "ressource-2.jpg", D + "ressource-3.jpg"],
         demo_elements: 4 } }),
   ];

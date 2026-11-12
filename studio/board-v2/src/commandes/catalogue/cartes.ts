@@ -1,7 +1,7 @@
 // Cartes intelligentes : chaque type de carte déclare ici ses actions contextuelles. Elles apparaissent dans la barre
 // flottante au-dessus de la sélection et dans le menu contextuel, et restent trouvables dans la palette.
 // Aucune de ces actions ne lance un agent ni un effet externe sans que le libellé le dise.
-import { FileCheck2, FileWarning, ImageDown, Link2, ListTodo, Minimize2, PanelRight, ScanSearch, Sparkles, Spline, ThumbsUp, Trash2 } from "lucide-react";
+import { FileCheck2, FileWarning, ImageDown, Link2, ListTodo, Minimize2, PanelRight, ScanSearch, Spline, ThumbsUp, Trash2 } from "lucide-react";
 import { cartesProches, estLivrable } from "../../cartes/etat";
 import { COULEURS, type NomCouleur } from "../../etat/ui";
 import { TAILLES } from "../../nodes/contexte";
@@ -98,7 +98,7 @@ export const commandesCartes: Commande<ContexteBoard>[] = [
       c.b.ui.definir({ liaison: un(c)!.id, outil: "selection" });
       c.b.toast("Clique la carte à relier (Échap pour annuler)");
     } },
-  { id: "carte.analyser", libelle: "Analyser avec Jarvis", icone: Sparkles, categorie: "Carte", niveau: "ecriture", emplacements: ["flottante", "menu"],
+  { id: "carte.analyser", libelle: "Analyser avec Jarvis", icone: ScanSearch, categorie: "Carte", niveau: "ecriture", emplacements: ["flottante", "menu"],
     motsCles: "contextualiser résumé propositions ia",
     // une carte bloquée par une dépendance non terminée ne se lance pas : le serveur refuse, l'interface le dit avant
     disponible: (c) => !enLecture(c) && Boolean(un(c)) && CONTEXTUALISABLES.has(un(c)!.type) && !un(c)!.relations?.bloquee,

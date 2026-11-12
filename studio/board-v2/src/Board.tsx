@@ -222,13 +222,13 @@ export function Board({ source, charge }: Props) {
               {vide && !immersif && (
                 <div className="etat-vide">
                   <div>
-                    <h2>Ton Board est prêt</h2>
-                    Colle une image, un lien ou un texte (Ctrl+V), dépose des fichiers, dessine avec les outils du haut, ou ouvre la palette (Ctrl+K).
+                    <h2>Aucune carte sur le Board {source.espace === "accueil" ? "Accueil" : source.espace}</h2>
+                    <p>Colle une image, un lien ou un texte <span className="touches"><kbd className="touche">Ctrl</kbd> <kbd className="touche">V</kbd></span>, dépose des fichiers, dessine avec les outils du haut, ou ouvre la palette <span className="touches"><kbd className="touche">Ctrl</kbd> <kbd className="touche">K</kbd></span></p>
                     <div><button type="button" className="bouton primaire" onClick={() => acces.executer("ajouter.note", "bouton")}>Écrire une première note</button></div>
                   </div>
                 </div>
               )}
-              {erreur && <div className="etat-vide"><div role="alert"><h2>Board indisponible</h2>{erreur}<div><button type="button" className="bouton" onClick={() => void charger()}>Réessayer</button></div></div></div>}
+              {erreur && <div className="etat-vide"><div role="alert"><h2>Board indisponible</h2><p>{erreur}</p><div><button type="button" className="bouton" onClick={() => void charger()}>Réessayer</button></div></div></div>}
               <div className="toasts" aria-live="polite">
                 {toasts.map((t) => (
                   <div key={t.id} className={`toast${t.erreur ? " erreur" : ""}`}>{t.texte}
