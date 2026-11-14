@@ -20,6 +20,7 @@ interface Geste {
   pointeur: number;
   depart: Point;
   departEcran: Point;
+  zoom: number;
   points: PointTrait[];
   stylet: boolean;
   dernier: Point;
@@ -77,6 +78,7 @@ export function CoucheOutils({ outil, b }: { outil: IdOutil; b: ServicesBoard })
     if (!el) return;
     const molette = (e: WheelEvent) => {
       e.preventDefault();
+      if (geste.current) return;  // un tracé garde son repère jusqu’au relâchement
       const v = rf.getViewport(), r = el.getBoundingClientRect();
       const px = e.clientX - r.left, py = e.clientY - r.top;
       const k = Math.max(ZOOM_MIN, Math.min(ZOOM_MAX, v.zoom * 2 ** (-e.deltaY * (e.ctrlKey ? 0.01 : 0.002))));
@@ -108,6 +110,7 @@ export function CoucheOutils({ outil, b }: { outil: IdOutil; b: ServicesBoard })
   };
 
   const debut = (e: PointeurReact<HTMLDivElement>) => {
+    if (geste.current) return;
     if (e.button === 1) {  // bouton du milieu : déplacer la vue sans quitter l'outil
       e.preventDefault();
       e.currentTarget.setPointerCapture(e.pointerId);
@@ -121,11 +124,18 @@ export function CoucheOutils({ outil, b }: { outil: IdOutil; b: ServicesBoard })
     const p = vers(e);
     const { couleur, epaisseur } = ui.lire();
     const stylet = e.pointerType === "pen";
-    geste.current = { outil, pointeur: e.pointerId, depart: p, departEcran: { x: e.clientX, y: e.clientY }, dernier: p, stylet,
+    geste.current = { outil, pointeur: e.pointerId, depart: p, departEcran: { x: e.clientX, y: e.clientY }, zoom: rf.getZoom(), dernier: p, stylet,
       points: [[p.x, p.y, stylet ? e.pressure || 0.5 : 0.5]], effaces: new Set(), couleur, epaisseur: outil === "surligneur" ? Math.max(18, epaisseur * 3) : epaisseur };
     if (trace.current) trace.current.setAttribute("class", `apercu-trace ${outil} teinte-${couleur}`);
     if (forme.current) forme.current.setAttribute("class", `apercu-forme ${outil} teinte-${couleur}`);
   };
+
+  // Une alerte d'activité peut agrandir la bande au-dessus du Board pendant le tracé.
+  // Le déplacement du pointeur reste mesuré dans le repère de départ, sans écraser le dessin.
+  const pointDuGeste = (g: Geste, e: { clientX: number; clientY: number }): Point => ({
+    x: g.depart.x + (e.clientX - g.departEcran.x) / g.zoom,
+    y: g.depart.y + (e.clientY - g.departEcran.y) / g.zoom,
+  });
 
   const mouvement = (e: PointeurReact<HTMLDivElement>) => {
     if (pan.current) {
@@ -140,7 +150,7 @@ export function CoucheOutils({ outil, b }: { outil: IdOutil; b: ServicesBoard })
     const natif = e.nativeEvent;
     const echantillons = typeof natif.getCoalescedEvents === "function" ? natif.getCoalescedEvents() : [];
     for (const ev of echantillons.length ? echantillons : [natif]) {
-      const p = vers(ev);
+      const p = pointDuGeste(g, ev);
       if (g.outil === "gomme") {
         const touches = sousLaGomme(indexDe(b.objets()), g.dernier, p, 10 / rf.getZoom()).filter((o) => !g.effaces.has(o.id));
         for (const o of touches) g.effaces.add(o.id);
@@ -163,8 +173,8 @@ export function CoucheOutils({ outil, b }: { outil: IdOutil; b: ServicesBoard })
     if (!g || e.pointerId !== g.pointeur) return;
     geste.current = null;
     cancelAnimationFrame(image.current);
-    const p = vers(e);
-    const zoom = rf.getZoom();
+    const p = pointDuGeste(g, e);
+    const zoom = g.zoom;
     const court = Math.hypot(e.clientX - g.departEcran.x, e.clientY - g.departEcran.y) < 6;
     const meta = { couleur: g.couleur };
     const revenir = () => ui.definir({ outil: "selection" });

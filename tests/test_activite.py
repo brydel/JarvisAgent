@@ -84,6 +84,7 @@ class ActiviteTest(test_missions.Base):
     def test_echec_tmux_conserve_message_chef_en_file(self):
         with mock.patch.object(agents, "chef_running", return_value=True), \
                 mock.patch.object(agents, "chef_has_dialog", return_value=False), \
+                mock.patch.object(agents, "_chef_volets", return_value=[("%1", "123", True)]), \
                 mock.patch.object(agents, "_run", return_value=subprocess.CompletedProcess([], 1)) as run:
             self.assertTrue(agents.chef_inject("Relire la mission"))
             # pas d'Entrée après une saisie refusée (la recherche de la fenêtre du chef ne compte pas)

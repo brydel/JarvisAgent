@@ -156,6 +156,22 @@ test.describe("outils de tableau blanc", () => {
     await expect(page.locator(".react-flow__node-forme")).toHaveCount(2);
   });
 
+  test("un changement de hauteur autour du canevas ne déforme pas le tracé et ne recadre pas le premier dessin", async ({ page }) => {
+    await ouvrir(page);
+    const activite = page.getByRole("region", { name: "Travail en direct" });
+    await expect(activite).not.toContainText("Observation en cours");
+    const z = await zone(page);
+    await page.keyboard.press("r");
+    await page.mouse.move(z.x, z.y);
+    await page.mouse.down();
+    // Reproduit le dépliage asynchrone d'une alerte du panneau d'activité pendant le geste.
+    await activite.evaluate((el) => { el.style.minHeight = `${el.getBoundingClientRect().height + 80}px`; });
+    await page.mouse.move(z.x + 240, z.y + 160, { steps: 12 });
+    await page.mouse.up();
+    await expect.poll(async () => (await objetsDeType(page, "forme")).map((o) => [o.largeur, o.hauteur])).toEqual([[300, 200]]);
+    await expect(page.getByRole("group", { name: "Zoom", exact: true }).getByRole("status")).toHaveText("80%");
+  });
+
   test("note adhésive et texte libre : édition en place hors du calque transformé, tout reste du texte", async ({ page }) => {
     await ouvrir(page);
     const z = await zone(page);

@@ -214,13 +214,9 @@ test.describe("board réel", () => {
     const a = page.locator(`.react-flow__node[data-id="${ida}"]`), b = page.locator(`.react-flow__node[data-id="${idb}"]`);
     const ba = (await a.boundingBox())!, bb = (await b.boundingBox())!;
     expect(Math.abs(ba.x - bb.x) + Math.abs(ba.y - bb.y)).toBeGreaterThan(30);  // pas empilées
-    await page.mouse.move(ba.x + ba.width / 2, ba.y + 20);  // survol : les points d'attache apparaissent
-    const depart = (await a.locator(".react-flow__handle-top").boundingBox())!;
-    await page.mouse.move(depart.x + depart.width / 2, depart.y + depart.height / 2);
-    await page.mouse.down();
-    const cible = (await b.locator(".react-flow__handle-top").boundingBox())!;
-    await page.mouse.move(cible.x + cible.width / 2, cible.y + cible.height / 2, { steps: 20 });
-    await page.mouse.up();
+    // Le cadrage du premier ajout est animé : les locators attendent que les poignées soient stables.
+    await a.hover({ position: { x: ba.width / 2, y: 20 } });
+    await a.locator(".react-flow__handle-top").dragTo(b.locator(".react-flow__handle-top"));
     await expect(page.getByText(/Relation créée/).first()).toBeVisible();
     const relations = () => page.evaluate(async ([x, y]) => (await (await fetch("/api/v2/board")).json()).liens
       .filter((l: { source_id: string; cible_id: string }) => l.source_id === x && l.cible_id === y).length, [ida, idb]);
@@ -343,6 +339,8 @@ test.describe("board réel", () => {
     await deposer(page, "Entretien téléphonique jeudi 10 h", "Entretien", 620);
     const lienJarvis = page.locator(".etiquette-lien.par-jarvis").filter({ hasText: "inspire" });
     await expect(lienJarvis).toBeVisible({ timeout: 25_000 });
+    // Les cartes ajoutées et la bande d’activité peuvent déplacer la source hors du champ visible.
+    await page.getByRole("button", { name: "Ajuster à la vue", exact: true }).click();
     await carteOffre.getByRole("button", { name: /Jarvis :/ }).click();
     await expect(page.getByRole("region", { name: "Actions proposées par Jarvis" }).getByText("Lancée par Jarvis")).toBeVisible();
     await page.screenshot({ path: path.join(RAPPORTS, "etat-chef-autonome.png") });

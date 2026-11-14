@@ -22,6 +22,9 @@ export async function ouvrir(page: Page) {
   await page.reload();
   await expect(page.locator(".react-flow")).toBeVisible();
   await page.evaluate(() => document.fonts.ready);
+  // Le premier relevé peut déplier une alerte et déplacer le canevas : les coordonnées des gestes
+  // de test se calculent après cette observation, comme après le chargement des polices.
+  await expect(page.getByRole("region", { name: "Travail en direct" })).not.toContainText("Observation en cours");
 }
 
 export async function attendreStable(page: Page, ms = 400) {

@@ -200,7 +200,12 @@ export function Canevas({ source, etat, b, filtre, priorite, recherche, selectio
   if (etat) {
     const c = cadrage.current, vide = etat.objets.length === 0;
     if (!c || c.espace !== source.espace) cadrage.current = { espace: source.espace, vide, cadrer: !source.demo && !vide };
-    else if (c.vide !== vide) { c.vide = vide; c.cadrer = !source.demo && !vide && OUTILS_DIRECTS.has(outil); }
+    else if (c.vide !== vide) {
+      c.vide = vide;
+      // L'outil revient à « sélection » avant la réponse du serveur : ce sont les objets reçus
+      // qui disent si le premier ajout est un dessin, jamais l'outil courant à cet instant.
+      c.cadrer = !source.demo && !vide && OUTILS_DIRECTS.has(outil) && etat.objets.some((o) => !TYPES_TABLEAU.has(o.type));
+    }
   }
   const vueInitiale: Viewport = source.demo ? { x: 0, y: ZONE_LIBRE.top - 12, zoom: 0.8 } : { x: ZONE_LIBRE.left, y: ZONE_LIBRE.top, zoom: 0.8 };
   const direct = OUTILS_DIRECTS.has(outil);

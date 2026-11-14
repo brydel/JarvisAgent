@@ -300,31 +300,40 @@ def programme_actif(pane_pid: int, arbre: dict | None = None) -> bool | None:
     return False
 
 
-def chef_etat() -> str:
-    """« actif », « absent » (pas de fenêtre) ou « eteint » (fenêtre ouverte sur un simple shell)."""
+def _chef_volets() -> list[tuple[str, str, bool]]:
+    """Identifiant, PID et activité de chaque volet du chef, sans cibler une fenêtre ambiguë."""
     if not shutil.which("tmux"):
-        return "absent"
-    wins = _chef_wins()
-    if not wins:
-        return "absent"
+        return []
+    arbre = _arbre()
     volets = []
-    for win in wins:
+    for win in _chef_wins():
         try:
-            res = _run(["tmux", "list-panes", "-t", win, "-F", "#{pane_pid}\t#{pane_current_command}"], timeout=5)
+            res = _run(["tmux", "list-panes", "-t", win, "-F",
+                        "#{pane_id}\t#{pane_pid}\t#{pane_current_command}\t#{pane_dead}"], timeout=5)
         except (subprocess.TimeoutExpired, OSError):
             continue
-        if res.returncode == 0:
-            volets += [ln.split("\t", 1) for ln in res.stdout.splitlines() if "\t" in ln]
+        if res.returncode:
+            continue
+        for ligne in res.stdout.splitlines():
+            champs = ligne.split("\t")
+            if len(champs) != 4:
+                continue
+            cible, pid, commande, mort = champs
+            if not cible.startswith("%") or not cible[1:].isdigit() or not pid.isdigit():
+                continue
+            actif = False if mort == "1" else programme_actif(int(pid), arbre)
+            if actif is None:  # sans /proc : on se contente de ce que dit tmux
+                actif = bool(commande.strip()) and commande.strip() not in SHELLS
+            volets.append((cible, pid, actif))
+    return volets
+
+
+def chef_etat() -> str:
+    """« actif », « absent » (pas de fenêtre) ou « eteint » (fenêtre ouverte sur un simple shell)."""
+    volets = _chef_volets()
     if not volets:
         return "absent"
-    arbre = _arbre()
-    for pid, commande in volets:
-        actif = programme_actif(int(pid), arbre) if pid.isdigit() else None
-        if actif is None:  # sans /proc : on se contente de ce que dit tmux
-            actif = commande.strip() not in SHELLS
-        if actif:
-            return "actif"
-    return "eteint"
+    return "actif" if any(actif for _, _, actif in volets) else "eteint"
 
 
 def chef_running() -> bool:
@@ -371,19 +380,26 @@ def _chef_wins() -> list[str]:
             if nom == config.CHEF_WINDOW and wid]
 
 
-def _chef_win() -> str:
-    wins = _chef_wins()
-    return wins[0] if wins else f"{config.SESSION}:{config.CHEF_WINDOW}"
+def _chef_cible() -> tuple[str, str] | None:
+    """Fixe le volet vivant et son PID : un shell voisin ne doit jamais recevoir le message."""
+    return next(((cible, pid) for cible, pid, actif in _chef_volets() if actif), None)
 
 
-def chef_has_dialog() -> bool:
-    """Vrai si le chef affiche une question à choix : y taper Entrée validerait une option à sa place.
+def _chef_cible_vivante(cible: tuple[str, str]) -> bool:
+    return any((volet, pid) == cible and actif for volet, pid, actif in _chef_volets())
+
+
+def chef_has_dialog(cible: tuple[str, str] | None = None) -> bool:
+    """Vrai si le chef ciblé affiche un choix, ou s'il n'y a plus de destinataire vivant.
 
     On ne regarde que le bas de l'écran visible (pas l'historique) : une boîte de dialogue est
     toujours en bas, et un vieux texte qui défile ne doit pas bloquer les messages.
     """
+    cible = cible or _chef_cible()
+    if cible is None:
+        return True
     try:
-        res = _run(["tmux", "capture-pane", "-p", "-t", _chef_win()], timeout=5)
+        res = _run(["tmux", "capture-pane", "-p", "-t", cible[0]], timeout=5)
     except (subprocess.TimeoutExpired, OSError):
         return True  # dans le doute, on n'écrit pas
     if res.returncode != 0:
@@ -398,10 +414,11 @@ CODEX_PAUSE_SAISIE = 0.6
 
 
 def _type_into_chef(line: str) -> bool:
-    if chef_has_dialog():  # nouvelle vérification juste avant d'écrire : l'écran a pu changer
+    cible = _chef_cible()
+    if cible is None or chef_has_dialog(cible) or not _chef_cible_vivante(cible):
         return False
     try:
-        saisie = _run(["tmux", "send-keys", "-t", _chef_win(), "-l", line], timeout=5)
+        saisie = _run(["tmux", "send-keys", "-t", cible[0], "-l", line], timeout=5)
         if saisie.returncode:
             return False
         from . import chef_moteur
@@ -409,7 +426,11 @@ def _type_into_chef(line: str) -> bool:
             # Codex prend une saisie rapide suivie d'Entrée pour un collage : le message resterait dans la
             # zone de saisie sans partir (constaté à l'essai réel du 11 nov.).
             time.sleep(CODEX_PAUSE_SAISIE)
-        validation = _run(["tmux", "send-keys", "-t", _chef_win(), "Enter"], timeout=5)
+        # Le chef peut s'arrêter ou afficher une question pendant la saisie. On garde le message
+        # en file et on ne presse jamais Entrée dans le shell qui a repris sa place.
+        if not _chef_cible_vivante(cible) or chef_has_dialog(cible):
+            return False
+        validation = _run(["tmux", "send-keys", "-t", cible[0], "Enter"], timeout=5)
         return validation.returncode == 0
     except (subprocess.TimeoutExpired, OSError):
         return False
