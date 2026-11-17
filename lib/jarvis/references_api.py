@@ -6,6 +6,7 @@ JSON ; les captures d'écran sont servies par la route de fichiers existante (/a
 
 Lecture
   GET  /api/v2/references[?collection=&etiquette=&q=&corbeille=1]   liste + facettes + état du moteur
+  GET  /api/v2/references/graphe[?page=&limite=]                    sources et observations du graphe
   GET  /api/v2/references/recherche?q=…[&collection=&etiquette=&n=] passages classés, avec citation complète
   GET  /api/v2/references/RF-…                                      fiche (et état de la capture)
   GET  /api/v2/references/fragments/FR-…                            un fragment entier
@@ -45,6 +46,9 @@ def lire(route: str, query: dict, tenant: str):
                                          etiquette=_un(query, "etiquette", None, 40), q=_un(query, "q", "", 200) or "",
                                          supprimees=_un(query, "corbeille") == "1"),
                      "moteur": references.etat_moteur(tenant)}
+    if route == "/api/v2/references/graphe":
+        return 200, references.graphe(tenant, page=int(_un(query, "page", "1", 8) or 1),
+                                     limite=int(_un(query, "limite", "8", 4) or 8))
     if route == "/api/v2/references/recherche":
         return 200, references.chercher(tenant, _un(query, "q", "") or "", collection=_un(query, "collection", None, 80),
                                         etiquette=_un(query, "etiquette", None, 40), n=int(_un(query, "n", "8", 4) or 8))

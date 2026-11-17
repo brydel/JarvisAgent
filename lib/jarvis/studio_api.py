@@ -230,11 +230,34 @@ class Handler(BaseHTTPRequestHandler):
             if resultat_os is not None:
                 self._json(*resultat_os)
                 return
+            from . import memoire_fichiers
+            if route_memoire := memoire_fichiers.ROUTE.fullmatch(route):
+                objet_id, action = route_memoire.groups()
+                if action == "memoire":
+                    self._json(200, memoire_fichiers.lire(org, objet_id, (q.get("q") or [""])[0][:180]))
+                    return
+                if action == "contexte":
+                    self._json(200, missions.apercu_contexte_documentaire(org, objet_id))
+                    return
             from . import references_api
             if (resultat_ref := references_api.lire(route, q, org)) is not None:
                 self._json(*resultat_ref)
                 return
-            if route == "/api/v2/atelier":
+            if route == "/api/v2/graphe-global":
+                from . import graphe_global
+                if any(len(v) != 1 for v in q.values()):
+                    raise ValueError("paramètre du graphe répété")
+                self._json(200, graphe_global.lire(org,
+                    page=int(q.get("page", ["1"])[0]), limite=int(q.get("limite", ["100"])[0]),
+                    objet=q.get("objet", [""])[0], session=q.get("session", [""])[0], entree=q.get("entree", [""])[0]))
+            elif route == "/api/v2/journal-memoire":
+                from . import journal_memoire
+                if any(len(v) != 1 for v in q.values()):
+                    raise ValueError("paramètre du journal répété")
+                self._json(200, journal_memoire.lire(org, q.get("espace", ["accueil"])[0],
+                           avant=q.get("avant", [None])[0], limite=int(q.get("limite", ["20"])[0]),
+                           nature=q.get("nature", [""])[0]))
+            elif route == "/api/v2/atelier":
                 self._json(200, studio_product.catalogue(org))
             elif m := re.fullmatch(r"/api/v2/atelier/candidats/(RB-[0-9]{4,})", route):
                 self._json(200, studio_product.comparer(org, m.group(1)))
@@ -567,6 +590,13 @@ class Handler(BaseHTTPRequestHandler):
         from . import references_api
         if (resultat_ref := references_api.ecrire(route, corps, org, serveur=self.server)) is not None:
             self._json(*resultat_ref)
+            return
+        from . import memoire_fichiers
+        if (route_memoire := memoire_fichiers.ROUTE.fullmatch(route)) and route_memoire[2] == "indexer":
+            extrait = corps.get("texte_pdf", "")
+            if set(corps) - {"texte_pdf"} or not isinstance(extrait, str) or len(extrait) > 23_000:
+                raise ValueError("extrait PDF invalide")
+            self._json(200, memoire_fichiers.indexer(org, route_memoire[1], extrait))
             return
         espace = board.nom_espace(corps.get("espace"))
         if m := re.fullmatch(r"/api/v2/atelier/agents/([a-z0-9_-]{1,64})/(verifier|proposer)", route):

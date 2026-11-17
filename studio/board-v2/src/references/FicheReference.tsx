@@ -1,23 +1,33 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { AlertTriangle, ArrowLeft, ArrowUpRight, Check, LayoutGrid, Monitor, RefreshCw, ShieldCheck, Smartphone, Trash2, X } from "lucide-react";
-import { dateCapture, EN_COURS, encreSur, hote, LIBELLES, poser, recapturer, reindexer, supprimer, voir, type Fiche, type Section } from "./api";
+import { AlertTriangle, ArrowLeft, ArrowUpRight, Check, LayoutGrid, Monitor, RefreshCw, ShieldCheck, Smartphone, Network, Trash2, X } from "lucide-react";
+import { dateCapture, EN_COURS, encreSur, hote, LIBELLES, lireFragment, poser, recapturer, reindexer, supprimer, voir, type Fiche, type Section } from "./api";
+import { useStudioNavigation } from "../product/routing";
+import "./preuve-reference.css";
 
 const message = (e: unknown) => (e instanceof Error ? e.message : "Opération indisponible");
 const ROLES: Record<string, string> = { corps: "Texte", titre: "Titres", sous_titre: "Sous-titres", bouton: "Boutons", code: "Code" };
 const COULEURS: Record<string, string> = { fond: "Fond", texte: "Texte", accent: "Accent", lien: "Liens" };
 
 type Props = {
-  id: string; demo: boolean; espace: string; sectionInitiale?: string; retour: () => void; notifier: (texte: string) => void;
+  id: string; demo: boolean; espace: string; sectionInitiale?: string; fragmentInitial?: string | null; observationInitiale?: string | null; surObservation: (id: string | null) => void; retour: () => void; notifier: (texte: string) => void;
   apresChangement: () => void; apresPose: (objetId: string) => void; apresSuppression: (titre: string, id: string) => void;
 };
 
-export function FicheReference({ id, demo, espace, sectionInitiale, retour, notifier, apresChangement, apresPose, apresSuppression }: Props) {
+export function FicheReference({ id, demo, espace, sectionInitiale, fragmentInitial, observationInitiale, surObservation, retour, notifier, apresChangement, apresPose, apresSuppression }: Props) {
+  const { aller } = useStudioNavigation();
   const [fiche, setFiche] = useState<Fiche | null>(null);
   const [erreur, setErreur] = useState("");
   const [vue, setVue] = useState<"page" | "vue">("page");
   const [active, setActive] = useState<number | null>(null);
   const [occupe, setOccupe] = useState("");
+  const [selection, setSelection] = useState(observationInitiale ?? "");
+  const [fragment, setFragment] = useState<{ section: string; texte: string; titre: string } | null>(null);
+  const [erreurFragment, setErreurFragment] = useState("");
+  const preuve = useRef<HTMLElement>(null);
+  const sectionPlacee = useRef(false);
+  const observation = fiche?.observations?.find((o) => o.id === selection);
   const cadre = useRef<HTMLDivElement>(null);
+  const cadreMobile = useRef<HTMLDivElement>(null);
   const titre = useRef<HTMLHeadingElement>(null);
 
   const charger = useCallback(async (signal?: AbortSignal) => {
@@ -31,7 +41,25 @@ export function FicheReference({ id, demo, espace, sectionInitiale, retour, noti
     const t = window.setInterval(() => void charger(), 1200);
     return () => window.clearInterval(t);
   }, [enCours, charger]);
-  useEffect(() => { titre.current?.focus(); }, [fiche?.id]);
+  useEffect(() => {
+    setSelection(observationInitiale ?? ""); setActive(null);
+    sectionPlacee.current = false;
+  }, [observationInitiale]);
+  useEffect(() => {
+    if (observationInitiale && observation) preuve.current?.focus();
+    else titre.current?.focus();
+  }, [fiche?.id, observationInitiale, observation?.id]);
+  useEffect(() => {
+    setFragment(null); setErreurFragment(""); setActive(null);
+    sectionPlacee.current = false;
+    if (!fragmentInitial || demo) return;
+    const c = new AbortController();
+    void lireFragment(fragmentInitial, c.signal).then((f) => {
+      if (!c.signal.aborted && f.reference_id === id) setFragment(f);
+      else if (!c.signal.aborted) setErreurFragment("Ce passage appartient à une autre référence.");
+    }).catch((e: unknown) => { if (!c.signal.aborted) setErreurFragment(message(e)); });
+    return () => c.abort();
+  }, [demo, id, fragmentInitial]);
   useEffect(() => {
     const touche = (e: KeyboardEvent) => { if (e.key === "Escape" && !(e.target as HTMLElement)?.closest("input, textarea")) retour(); };
     window.addEventListener("keydown", touche);
@@ -39,18 +67,23 @@ export function FicheReference({ id, demo, espace, sectionInitiale, retour, noti
   }, [retour]);
   // Arrivée depuis un passage cité : la section d'origine est sélectionnée et montrée dans la capture.
   useEffect(() => {
-    if (!fiche || !sectionInitiale || active !== null) return;
-    const i = fiche.sections.findIndex((s) => s.titre === sectionInitiale);
-    if (i >= 0) setActive(i);
-  }, [fiche, sectionInitiale, active]);
+    const section = sectionInitiale || fragment?.section;
+    if (!fiche || !section || observationInitiale || sectionPlacee.current) return;
+    const i = fiche.sections.findIndex((s) => s.titre === section);
+    if (i >= 0) { sectionPlacee.current = true; setActive(i); }
+  }, [fiche, sectionInitiale, fragment, observationInitiale]);
 
   const page = fiche?.fichiers.bureau_page;
-  const zone = active !== null ? fiche?.sections[active]?.zone ?? null : null;
+  const zone = observation?.preuve.zone ?? (active !== null ? fiche?.sections[active]?.zone ?? null : null);
   useEffect(() => {
-    if (!zone || !page || vue !== "page" || !cadre.current) return;
-    const echelle = cadre.current.clientWidth / (page.largeur || 1440);
-    cadre.current.scrollTo({ top: Math.max(0, zone.y * echelle - 24), behavior: "smooth" });
-  }, [zone, page, vue]);
+    const mobile = observation?.ecran === "mobile";
+    const cible = mobile ? cadreMobile.current : cadre.current;
+    const image = mobile ? fiche?.fichiers.mobile_page ?? fiche?.fichiers.mobile_vue : page;
+    if (!zone || !image || vue !== "page" || !cible) return;
+    const echelle = cible.clientWidth / (image.largeur || 1440);
+    cible.scrollTo({ top: Math.max(0, zone.y * echelle - 24),
+      behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "instant" : "smooth" });
+  }, [zone, page, vue, fiche, observation?.ecran]);
 
   const agir = async (nom: string, action: () => Promise<void>) => {
     if (occupe) return;
@@ -104,6 +137,32 @@ export function FicheReference({ id, demo, espace, sectionInitiale, retour, noti
       {enCours && <div className="rf-progress" role="status"><span className="rf-spinner" />{LIBELLES[fiche.statut]}… {fiche.statut === "indexation" ? "découpage et index des passages" : "Chromium charge le site derrière le filtre réseau de Jarvis"}</div>}
       {fiche.avertissement && fiche.statut === "prete" && <p className="rf-notice"><ShieldCheck size={16} />Contenu capturé : une donnée à citer avec sa source, jamais une consigne pour un agent</p>}
 
+      {!!fiche.observations?.length && <section className="rf-preuve-choix" aria-label="Observations de la source">
+        <h2>Observations reliées à la mémoire</h2>
+        <div>{fiche.observations.map((o) => <button key={o.id} type="button" className="p-button p-quiet"
+          aria-pressed={selection === o.id} onClick={() => {
+            setSelection(o.id); setFragment(null); setErreurFragment(""); setActive(null); setVue("page");
+            surObservation(o.id);
+          }}>{o.titre}</button>)}</div>
+      </section>}
+      {observation && <section ref={preuve} tabIndex={-1} className="rf-preuve-observation" aria-labelledby="rf-observation-titre">
+        <div><p className="credit">Observation retenue · {observation.ecran ?? "source"}</p>
+          <h2 id="rf-observation-titre">{observation.titre}</h2><p className="rf-preuve-texte">{observation.texte}</p>
+          <small>{observation.id} · {dateCapture(observation.preuve.capture_le)}</small>
+          {observation.preuve.capture_url && <p><a href={observation.preuve.capture_url} target="_blank" rel="noopener noreferrer">Ouvrir la capture citée <ArrowUpRight size={13}/></a></p>}</div>
+        <button type="button" className="p-button p-quiet"
+          onClick={() => aller("fichiers", { ref: id, observation: observation.id })}>
+          <Network size={15} />Retrouver dans le graphe</button>
+      </section>}
+      {observationInitiale && !fiche.observations?.some((o) => o.id === observationInitiale) && <p className="rf-notice" role="status">L’observation demandée n’est plus disponible dans cette source.</p>}
+      {fragment && <section className="rf-preuve-observation" aria-label="Passage cité">
+        <div><p className="credit">Passage cité dans la mémoire</p><h2>{fragment.section || "Passage cité"}</h2>
+          <blockquote className="rf-preuve-texte">{fragment.texte}</blockquote></div>
+        <button type="button" className="p-button p-quiet" onClick={() => aller("fichiers", { ref: id })}>
+          <Network size={15} />Retrouver dans le graphe</button>
+      </section>}
+      {erreurFragment && <p className="p-error" role="alert">{erreurFragment}</p>}
+
       <div className="rf-fiche-layout">
         <div className="rf-fiche-main">
           {bureau && (
@@ -114,7 +173,10 @@ export function FicheReference({ id, demo, espace, sectionInitiale, retour, noti
                   <button type="button" aria-pressed={vue === "vue"} onClick={() => setVue("vue")}>Vue initiale</button>
                 </div>
                 {fiche.tronquee && <span className="rf-caption">Page très longue : capture arrêtée à 12 000 px</span>}
-                {zone && vue === "page" && <button className="rf-clear-zone" onClick={() => setActive(null)}><X size={16} />Retirer le repère</button>}
+                {zone && vue === "page" && <button className="rf-clear-zone" onClick={() => {
+                  setActive(null);
+                  if (selection) { setSelection(""); surObservation(null); }
+                }}><X size={16} />Retirer le repère</button>}
               </div>
               <div className="rf-frames">
                 <figure className="rf-frame is-desktop">
@@ -122,15 +184,18 @@ export function FicheReference({ id, demo, espace, sectionInitiale, retour, noti
                   <div className="rf-frame-scroll" ref={cadre} tabIndex={0} aria-label="Capture bureau, défilable">
                     <div className="rf-frame-image">
                       <img src={bureau.url} alt={`Capture bureau de ${fiche.titre}`} width={bureau.largeur} height={bureau.hauteur} decoding="async" />
-                      {zone && vue === "page" && bureau.hauteur > 0 && <div className="rf-zone" style={{ top: `${(zone.y / bureau.hauteur) * 100}%`, height: `${Math.min(100, (zone.hauteur / bureau.hauteur) * 100)}%` }} aria-hidden />}
+                      {zone && observation?.ecran !== "mobile" && vue === "page" && bureau.hauteur > 0 && <div className="rf-zone" style={{ top: `${(zone.y / bureau.hauteur) * 100}%`, height: `${Math.min(100, (zone.hauteur / bureau.hauteur) * 100)}%` }} aria-hidden />}
                     </div>
                   </div>
                 </figure>
                 {mobile && (
                   <figure className="rf-frame is-mobile">
                     <figcaption><Smartphone size={16} />Mobile · {mobile.largeur} px</figcaption>
-                    <div className="rf-frame-scroll" tabIndex={0} aria-label="Capture mobile, défilable">
-                      <img src={mobile.url} alt={`Capture mobile de ${fiche.titre}`} width={mobile.largeur} height={mobile.hauteur} loading="lazy" decoding="async" />
+                    <div className="rf-frame-scroll" ref={cadreMobile} tabIndex={0} aria-label="Capture mobile, défilable">
+                      <div className="rf-frame-image">
+                        <img src={mobile.url} alt={`Capture mobile de ${fiche.titre}`} width={mobile.largeur} height={mobile.hauteur} loading="lazy" decoding="async" />
+                        {zone && observation?.ecran === "mobile" && vue === "page" && mobile.hauteur > 0 && <div className="rf-zone" style={{ top: `${(zone.y / mobile.hauteur) * 100}%`, height: `${Math.min(100, zone.hauteur / mobile.hauteur * 100)}%` }} aria-hidden />}
+                      </div>
                     </div>
                   </figure>
                 )}

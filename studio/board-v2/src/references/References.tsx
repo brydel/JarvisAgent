@@ -15,9 +15,9 @@ const ANTI_REBOND_MS = 140;
 
 function lireUrl() {
   const p = new URLSearchParams(location.search);
-  return { q: p.get("q") ?? "", ref: p.get("ref"), fragment: p.get("fragment") };
+  return { q: p.get("q") ?? "", ref: p.get("ref"), fragment: p.get("fragment"), observation: p.get("observation") };
 }
-function ecrireUrl(valeurs: { q?: string; ref?: string | null; fragment?: string | null }, empiler = false) {
+function ecrireUrl(valeurs: { q?: string; ref?: string | null; fragment?: string | null; observation?: string | null }, empiler = false) {
   const u = new URL(location.href);
   for (const [k, v] of Object.entries(valeurs)) { if (v) u.searchParams.set(k, v); else u.searchParams.delete(k); }
   if (empiler) history.pushState(null, "", u); else history.replaceState(null, "", u);
@@ -53,7 +53,7 @@ export default function ReferencesWorkspace({ source }: { source: Source }) {
   const { aller } = useStudioNavigation();
   const initial = useMemo(lireUrl, []);
   const [q, setQ] = useState(initial.q);
-  const [ouverte, setOuverte] = useState<{ id: string; fragment: string | null; section?: string } | null>(initial.ref ? { id: initial.ref, fragment: initial.fragment } : null);
+  const [ouverte, setOuverte] = useState<{ id: string; fragment: string | null; observation?: string | null; section?: string } | null>(initial.ref ? { id: initial.ref, fragment: initial.fragment, observation: initial.observation } : null);
   const [filtres, setFiltres] = useState<Filtres>({ collection: null, etiquette: null });
   const [liste, setListe] = useState<Liste | null>(null);
   const [erreur, setErreur] = useState("");
@@ -99,7 +99,7 @@ export default function ReferencesWorkspace({ source }: { source: Source }) {
   }, [question, filtres, demo, version]);
 
   useEffect(() => {
-    const retour = () => { const u = lireUrl(); setOuverte(u.ref ? { id: u.ref, fragment: u.fragment } : null); setQ(u.q); };
+    const retour = () => { const u = lireUrl(); setOuverte(u.ref ? { id: u.ref, fragment: u.fragment, observation: u.observation } : null); setQ(u.q); };
     window.addEventListener("popstate", retour);
     return () => window.removeEventListener("popstate", retour);
   }, []);
@@ -114,8 +114,8 @@ export default function ReferencesWorkspace({ source }: { source: Source }) {
   }, [ouverte]);
   useEffect(() => { if (!avis) return; const t = window.setTimeout(() => setAvis(null), 6000); return () => window.clearTimeout(t); }, [avis]);
 
-  const ouvrir = (id: string, fragment: string | null = null, section?: string) => { ecrireUrl({ ref: id, fragment }, true); setOuverte({ id, fragment, section }); };
-  const fermer = () => { ecrireUrl({ ref: null, fragment: null }, true); setOuverte(null); };
+  const ouvrir = (id: string, fragment: string | null = null, section?: string) => { ecrireUrl({ ref: id, fragment, observation: null }, true); setOuverte({ id, fragment, section }); };
+  const fermer = () => { ecrireUrl({ ref: null, fragment: null, observation: null }, true); setOuverte(null); };
   const rafraichir = () => setVersion((v) => v + 1);
   const retirer = async (r: Reference) => {
     try {
@@ -146,7 +146,10 @@ export default function ReferencesWorkspace({ source }: { source: Source }) {
       <ProductNav />
       <main className="product-main" id="contenu-produit">
         {ouverte ? (
-          <FicheReference key={ouverte.id} id={ouverte.id} sectionInitiale={ouverte.section} demo={demo} espace={source.espace} retour={fermer}
+          <FicheReference key={ouverte.id} id={ouverte.id} sectionInitiale={ouverte.section} fragmentInitial={ouverte.fragment} observationInitiale={ouverte.observation} surObservation={(observation) => {
+            ecrireUrl({ observation, fragment: null });
+            setOuverte({ id: ouverte.id, fragment: null, observation });
+          }} demo={demo} espace={source.espace} retour={fermer}
             notifier={(texte) => setAvis({ texte })} apresChangement={rafraichir}
             apresPose={(objet) => aller("board", { carte: objet })}
             apresSuppression={(titre, id) => { fermer(); rafraichir(); setAvis({ texte: `« ${titre} » retirée de la bibliothèque`, action: { libelle: "Annuler", faire: () => { void supprimer(id, true).then(rafraichir); setAvis(null); } } }); }} />

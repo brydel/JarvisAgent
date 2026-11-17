@@ -3,11 +3,15 @@
 Éditeur spatial multimédia du Studio. Code source ici ; le build est écrit dans `lib/jarvis/studio_v2/` et servi par
 `lib/jarvis/studio_api.py` sous `/v2/` (aucun serveur Node en usage normal).
 
+Pour les vérifications qui écrivent des données, utiliser une copie isolée du dépôt avec ses propres
+dossiers HOME, état, configuration et données ; les validations du graphe ont tourné dans Bubblewrap,
+avec le réseau limité au loopback. Le mode démo sert aux vérifications visuelles.
+
 ```bash
 cd studio/board-v2
 npm ci                      # dépendances verrouillées, une fois
 npm run build               # vérification des types puis build vers lib/jarvis/studio_v2
-npm test                    # tests unitaires de la couche de données (vitest, src/donnees/*.test.ts)
+npm test                    # tests unitaires du Studio (Vitest)
 bash scripts/preparer-demo.sh   # régénère les fichiers du mode démo (ffmpeg requis)
 npx playwright test         # parcours fonctionnels/visuels et mesures de fluidité (serveur isolé, port 7721 ;
                             # JARVIS_E2E_PORT et JARVIS_E2E_JETON pour un autre port / fichier de jeton)
@@ -17,6 +21,15 @@ node scripts/compare.mjs <capture.png> <dossier>   # comparaison avec la maquett
 
 - Ouvrir : `jarvis mission studio` (affiche le lien V2), ou `/v2/?demo=1` pour les données fictives signalées « DÉMO ».
 - `?demo=1&charge=250` : 250 cartes de charge (mesures de performance, démo seulement).
+- **Graphe de mémoire** (`?vue=fichiers`, `src/fichiers/`) : documents, notes, références RAG, observations
+  et journal des agents partagent un graphe interprojets. Chaque session enregistrée possède un centroïde ;
+  les missions et sources communes relient les groupes. Une provenance ancienne inconnue reste indiquée
+  « Sans session ». Le centroïde déplace son lot exclusif ; un point individuel reste libre.
+  Le dessin est mémorisé localement dans le navigateur, avec réinitialisation. Les noms apparaissent au clic,
+  au clavier ou à fort zoom. Chaque observation ou événement conserve un accès à sa preuve.
+  `GET /api/v2/graphe-global` expose la pagination et la couverture ; la projection limite les éléments
+  documentaires visibles à 64, sans confondre le nombre affiché et le nombre chargé. Les sessions chargées
+  gardent leurs centroïdes, et les lots déjà chargés sont conservés après actualisation.
 - **Travail en direct** (Board réel) : sessions de code du poste et tâches du moteur, même sans carte « mission ».
   L'accueil observe tous les projets ; un Board de projet filtre son travail. Sélectionner une session affiche
   sa sortie terminal, relue toutes les cinq secondes. Le panneau se replie pour laisser la place au canevas.

@@ -20,20 +20,31 @@ export function StudioNavigation({ children }: { children: ReactNode }) {
     window.addEventListener("beforeunload", protect);
     return () => window.removeEventListener("beforeunload", protect);
   }, []);
-  const [vue, setVue] = useState(lireVue);
+  // Une navigation dans la même vue peut changer de projet ou de sélection.
+  const [navigation, setNavigation] = useState(() => ({ vue: lireVue(), recherche: location.search }));
+  const { vue } = navigation;
   useEffect(() => {
-    const update = () => setVue(lireVue());
+    const update = () => setNavigation({ vue: lireVue(), recherche: location.search });
     window.addEventListener("popstate", update);
     return () => window.removeEventListener("popstate", update);
   }, []);
   const aller = useCallback((next: Vue, extras: Record<string, string> = {}) => {
-    const u = new URL(location.href);
-    u.searchParams.set("vue", next);
-    for (const key of ["carte", "filtre", "q", "priorite", "agent", "ref", "fragment"]) u.searchParams.delete(key);
-    for (const [key, value] of Object.entries(extras)) u.searchParams.set(key, value);
+    const u = urlStudio(next, extras);
     history.pushState(null, "", u);
-    setVue(next);
+    setNavigation({ vue: next, recherche: u.search });
   }, []);
   return <Navigation.Provider value={{ vue, aller, lireBrouillon, garderBrouillon, retirerBrouillon }}>{children}</Navigation.Provider>;
 }
 export const useStudioNavigation = () => useContext(Navigation);
+
+
+/** Adresse partageable d'une vue, sans conserver la sélection de la précédente. */
+export function urlStudio(vue: Vue, extras: Record<string, string> = {}): URL {
+  const u = new URL(location.href);
+  u.searchParams.set("vue", vue);
+  for (const key of ["carte", "filtre", "q", "priorite", "agent", "ref", "fragment", "observation", "fichier", "sources", "journal", "session", "mission", "tentative"]) {
+    u.searchParams.delete(key);
+  }
+  for (const [key, value] of Object.entries(extras)) u.searchParams.set(key, value);
+  return u;
+}

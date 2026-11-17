@@ -19,8 +19,8 @@ from jarvis import adaptateurs as ad, config, coureur, missions as mi, studio_ap
 
 
 class StudioTest(unittest.TestCase):
-    def setUp(self):
-        test_missions._reinitialiser()
+    def setUp(self, *, etat_temporaire=None):
+        test_missions._reinitialiser(etat_temporaire)
         self.org = mi.tenant_local()
         mi.declarer_connexion(self.org, "factice", "factice")
         self.jeton = studio_api.jeton(nouveau=True)
@@ -74,6 +74,89 @@ class StudioTest(unittest.TestCase):
         self.assertEqual(code, 401)
         self.assertNotIn("objets", data)
         self.assertEqual(self.req("POST", "/api/board", {"contenu": "x"})[0], 401)
+
+    def test_journal_memoire_authentifie_et_filtre_par_projet(self):
+        chemin = "/api/v2/journal-memoire?espace=Projet+A&nature=blocage&limite=1"
+        self.assertEqual(self.req("GET", chemin, cookie=False)[0], 401)
+        self.connecter()
+        m = mi.creer_mission(self.org, "Validation nécessaire", [{"type": "analyse_document", "niveau": "L3"}])
+        mi.board_ajouter(self.org, "Projet A", "mission", "Validation nécessaire", auteur="test",
+                         mission_id=m["mission_id"])
+        code, page, _ = self.req("GET", chemin)
+        self.assertEqual(code, 200)
+        self.assertIsNone(page["avant"])
+        self.assertEqual(page["entrees"][0]["nature"], "blocage")
+        self.assertEqual(page["entrees"][0]["preuve"]["mission_id"], m["mission_id"])
+        self.assertEqual(self.req("GET", chemin.replace("Projet+A", "Projet+B"))[1]["entrees"], [])
+        self.assertEqual(self.req("GET", chemin.replace("limite=1", "limite=1000"))[0], 400)
+
+
+    def test_apercu_documentaire_identique_aux_sources_de_l_analyse(self):
+        from jarvis import board, memoire_fichiers
+
+        def ajouter(type_, contenu, **kwargs):
+            return mi.board_ajouter(self.org, "accueil", type_, contenu, auteur="test", analyser=False,
+                                    **kwargs)["objet_id"]
+
+        cible = ajouter("note", "Quelles preuves sur les loyers ?")
+        note = ajouter("note", "Les témoignages restent à corroborer.")
+        document = ajouter("document", "## Chiffres\nLes loyers ont augmenté en juin.")
+        dossier = ajouter("dossier", "")
+        reference = memoire_fichiers.indexer(self.org, document)["reference_id"]
+        board.lier(self.org, "accueil", note, cible, style="alimente", par="test")
+        board.lier(self.org, "accueil", document, cible, style="inspire", par="test")
+        route = f"/api/v2/fichiers/{cible}/contexte"
+        self.assertEqual(self.req("GET", route)[0], 401)
+        self.connecter()
+        self.assertEqual(self.req("GET", f"/api/v2/fichiers/{dossier}/contexte")[:2],
+                         (200, {"analysable": False, "contexte": None}))
+        self.assertEqual(self.req("GET", f"/api/v2/fichiers/{note}/contexte")[:2],
+                         (200, {"analysable": True, "contexte": None}))
+
+        code, apercu, _ = self.req("GET", route)
+        self.assertEqual(code, 200, apercu)
+        self.assertTrue(apercu["analysable"])
+        self.assertEqual(mi.missions(self.org), [])
+        contexte = apercu["contexte"]
+        self.assertEqual([source["carte_id"] for source in contexte["alimentations"]], [note])
+        self.assertEqual({source["reference_id"] for source in contexte["references"]}, {reference})
+        self.assertTrue(any("loyers" in source["extrait"] for source in contexte["references"]))
+
+        autre_tenant = mi.creer_organisation("Organisation de contrôle")
+        autre = mi.board_ajouter(autre_tenant, "accueil", "note", "Source privée", auteur="test",
+                                 analyser=False)["objet_id"]
+        self.assertEqual(self.req("GET", f"/api/v2/fichiers/{autre}/contexte")[0], 404)
+
+        mi.lancer_contextualisation(self.org, cible, auteur="test", relance=True)
+        rid, secret = mi.enroler_executant(self.org, "poste", capacites=["analyse"], fournisseurs=["factice"])
+        travail = mi.reclamer(rid, secret)["travail"]
+        self.assertEqual(travail["relations"], contexte)
+        board.supprimer(self.org, [cible], par="test")
+        self.assertEqual(self.req("GET", route)[0], 404)
+
+
+    def test_graphe_global_authentifie_et_parametres_bornes(self):
+        from unittest import mock
+        from jarvis import graphe_global
+
+        chemin = "/api/v2/graphe-global"
+        self.assertEqual(self.req("GET", chemin)[0], 401)
+        a = mi.board_ajouter(self.org, "Alpha", "note", "Première source", auteur="test",
+                             analyser=False)["objet_id"]
+        b = mi.board_ajouter(self.org, "Beta", "note", "Seconde source", auteur="test",
+                             analyser=False)["objet_id"]
+        autre = mi.creer_organisation("Autre organisation")
+        privee = mi.board_ajouter(autre, "Secret", "note", "Document privé", auteur="test",
+                                  analyser=False)["objet_id"]
+        self.connecter()
+        with mock.patch.object(graphe_global, "_locales", return_value=([], [], [])), \
+                mock.patch.object(graphe_global, "_runtimes", return_value=([], 0, [])):
+            code, donnees, _ = self.req("GET", chemin)
+            self.assertEqual(code, 200, donnees)
+            self.assertEqual({o["id"] for o in donnees["objets"]}, {a, b})
+            self.assertNotIn(privee, str(donnees))
+            for query in ("?page=0", "?limite=101", "?objet=../secret", "?page=1&page=2"):
+                self.assertEqual(self.req("GET", chemin + query)[0], 400)
 
     def test_jeton_invalide_et_ecritures_d_une_autre_origine(self):
         self.assertEqual(self.req("POST", "/api/session", {"jeton": "faux"})[0], 401)

@@ -1,0 +1,16 @@
+.editeur-note { position: relative; display: flex; flex: 1; min-height: 0; min-width: 0; }
+.editeur-note textarea { width: 100%; min-width: 0; }
+.editeur-note textarea:focus-visible { outline: 2px solid var(--edge-inspire); outline-offset: -2px; }
+.editeur-note-suggestions {
+  position: absolute; z-index: 8; inset: auto 0 3px; margin-inline: 4px;
+  background: var(--surface-panel); border: 1px solid var(--border-strong); border-radius: var(--radius-sm);
+  box-shadow: var(--shadow-lift); overflow: hidden; font-size: 14px; line-height: 1.3;
+}
+.c-note .editeur-note-suggestions { margin-inline: 20px; }
+.editeur-note-suggestions ul { max-height: 104px; overflow: auto; overscroll-behavior: contain; margin: 0; padding: 4px; list-style: none; }
+.editeur-note-suggestions li { display: flex; align-items: center; gap: 6px; padding: 5px 6px; cursor: pointer; border-radius: var(--radius-xs); }
+.editeur-note-suggestions li[aria-selected="true"], .editeur-note-suggestions li:hover { background: var(--surface-hover); }
+.editeur-note-suggestions li span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.editeur-note-suggestions li svg { flex: none; color: var(--text-secondary); }
+.editeur-note-suggestions li small { margin-inline-start: auto; color: var(--text-secondary); font-size: .72em; }
+.editeur-note-suggestions p { margin: 0; padding: 8px; color: var(--text-secondary); }

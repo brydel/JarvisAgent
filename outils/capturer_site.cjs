@@ -124,9 +124,116 @@ function extraire(limites) {
   const corps = document.body ? getComputedStyle(document.body) : null;
   const fondHtml = getComputedStyle(document.documentElement).backgroundColor;
   const transparent = (c) => !c || c === 'transparent' || /rgba\(.*,\s*0\)$/.test(c);
+  const scope = document.body || document.documentElement;
+  const qq = (sel) => Array.from(scope.querySelectorAll(sel));
+  const arbre = document.createTreeWalker(scope, NodeFilter.SHOW_ELEMENT);
+  const echantillon = [];
+  const limiteElements = 450;
+  let prochain = scope, examines = 0;
+  while (prochain && examines < limiteElements) {
+    examines++;
+    if (visible(prochain)) echantillon.push(prochain);
+    prochain = arbre.nextNode();
+  }
+  const chemins = new Map();
+  const selecteur = (element) => {
+    if (!element) return '';
+    if (chemins.has(element)) return chemins.get(element);
+    const morceaux = [];
+    let noeud = element;
+    while (noeud && morceaux.length < 24) {
+      const tag = noeud.localName;
+      if (!tag || !/^[a-z][a-z0-9-]*$/.test(tag)) return '';
+      let rang = 1;
+      for (let frere = noeud.previousElementSibling; frere; frere = frere.previousElementSibling) {
+        if (frere.localName === tag) rang++;
+      }
+      morceaux.unshift(tag + ':nth-of-type(' + rang + ')');
+      noeud = noeud.parentElement;
+    }
+    const chemin = noeud ? '' : morceaux.join(' > ');
+    const confirme = chemin && chemin.length <= 512 && document.querySelector(chemin) === element ? chemin : '';
+    chemins.set(element, confirme);
+    return confirme;
+  };
+  const tokensComptes = { espacement: new Map(), rayon: new Map(), typographie: new Map(), couleur: new Map() };
+  const compter = (famille, valeurs) => {
+    for (const valeur of new Set(valeurs)) {
+      if (!valeur || valeur === 'normal' || valeur === 'none' || /^0(?:px)?(?: 0(?:px)?)*$/.test(valeur)
+          || transparent(valeur)) continue;
+      const propre = txt(valeur, 128);
+      tokensComptes[famille].set(propre, (tokensComptes[famille].get(propre) || 0) + 1);
+    }
+  };
+  const mesures = { largeur: Math.round(window.innerWidth), hauteur: Math.round(window.innerHeight),
+    elements_observes: echantillon.length, conteneurs_grid: 0, conteneurs_flex: 0, controles_sans_libelle_apparent: 0,
+    canvas: qq('canvas').length, videos: qq('video').length };
+  const elements = [], candidats = [], mouvements = [], signatures = new Set(), signaturesMouvement = new Set();
+  const resumerMouvement = (nature, duree, courbe, propriete) => {
+    const cle = [nature, duree, courbe, propriete].join('|');
+    if (mouvements.length < 16 && !signaturesMouvement.has(cle)) {
+      signaturesMouvement.add(cle); mouvements.push({ nature, duree: txt(duree, 80), courbe: txt(courbe, 80), propriete: txt(propriete, 80) });
+    }
+  };
+  for (const e of echantillon) {
+    const cs = getComputedStyle(e);
+    const tag = e.localName;
+    const role = txt(e.getAttribute('role') || tag, 32);
+    const grille = cs.display.includes('grid'), flex = cs.display.includes('flex');
+    mesures.conteneurs_grid += Number(grille);
+    mesures.conteneurs_flex += Number(flex);
+    const controle = e.matches('button, a[href], input:not([type=hidden]), select, textarea, [role=button], [role=tab]');
+    const nom = txt(e.getAttribute('aria-label') || e.getAttribute('title') ||
+      (e.labels ? Array.from(e.labels).map(l => l.textContent).join(' ') : '') ||
+      (controle && e.textContent) || (controle && e.querySelector('img[alt]')?.alt) || '', 90);
+    if (controle && !nom && !e.getAttribute('aria-labelledby')) mesures.controles_sans_libelle_apparent++;
+    compter('espacement', [cs.gap, cs.paddingTop, cs.paddingRight, cs.paddingBottom, cs.paddingLeft,
+      cs.marginTop, cs.marginRight, cs.marginBottom, cs.marginLeft]);
+    compter('rayon', [cs.borderRadius]);
+    compter('typographie', [premiere(cs.fontFamily) + ' · ' + cs.fontSize + ' / ' + cs.lineHeight + ' · ' + cs.fontWeight]);
+    compter('couleur', [cs.color, cs.backgroundColor]);
+    if (e === scope || controle || grille || flex || e.matches('img, video, canvas, h1, h2, nav, article')) {
+      const alignement = grille || flex ? `${cs.justifyContent} / ${cs.alignItems}` : cs.textAlign;
+      const colonnes = grille ? cs.gridTemplateColumns : '';
+      const cle = [role, nom, cs.display, cs.borderRadius, cs.gap, cs.fontSize, alignement, colonnes].join('|');
+      const priorite = Number(e === scope) * 10 + Number(controle) * 5 + Number(e.matches('h1, h2, nav, article')) * 4
+        + Number(grille) * 4 + Number(flex) * 2 + Number(e.matches('img, video, canvas'));
+      candidats.push({ e, cs, role, nom, alignement, colonnes, cle, priorite, ordre: candidats.length });
+    }
+    if (cs.animationName !== 'none' && /[1-9]/.test(cs.animationDuration)) {
+      resumerMouvement('animation CSS', cs.animationDuration, cs.animationTimingFunction, cs.animationName);
+    }
+    if (cs.transitionProperty !== 'none' && /[1-9]/.test(cs.transitionDuration)) {
+      resumerMouvement('transition CSS', cs.transitionDuration, cs.transitionTimingFunction, cs.transitionProperty);
+    }
+  }
+  candidats.sort((a, b) => b.priorite - a.priorite || a.ordre - b.ordre);
+  for (const { e, cs, role, nom, alignement, colonnes, cle } of candidats) {
+    if (elements.length >= 24) break;
+    if (signatures.has(cle)) continue;
+    signatures.add(cle);
+    const r = e.getBoundingClientRect();
+    elements.push({ role, nom, largeur: Math.round(r.width), hauteur: Math.round(r.height),
+      x: Math.round(r.left + window.scrollX),
+      y: Math.round(Math.max(0, r.top + window.scrollY)),
+      selecteur: selecteur(e), parent_selecteur: selecteur(e.parentElement),
+      affichage: cs.display, espacement: cs.gap, rayon: cs.borderRadius, police: premiere(cs.fontFamily),
+      taille: cs.fontSize, alignement, colonnes, position: cs.position,
+      couleur: cs.color, fond: cs.backgroundColor, padding: cs.padding, interligne: cs.lineHeight, graisse: cs.fontWeight });
+  }
+  const tokens = Object.fromEntries(Object.entries(tokensComptes).map(([famille, valeurs]) => [famille,
+    [...valeurs].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0])).slice(0, 8)
+      .map(([valeur, occurrences]) => ({ valeur, occurrences })),
+  ]));
+  for (const a of (scope.getAnimations?.({ subtree: true }) || []).slice(0, 80)) {
+    const t = a.effect?.getTiming();
+    if (t && Number(t.duration) > 0) resumerMouvement('animation active', `${t.duration}ms`, t.easing, '');
+  }
   return {
     titre: txt(document.title, 300) || meta(['og:title', 'twitter:title']),
     description: meta(['description', 'og:description', 'twitter:description']),
+    releve: { mesures, elements, mouvements, tokens,
+      echantillon: { examines, limite: limiteElements, tronque: !!prochain } },
     langue: txt(document.documentElement.lang, 12), url_finale: location.href.slice(0, 2048),
     sections: propres.slice(0, limites.sections_max),
     polices: { roles, declarees: Array.from(new Set(declarees)).slice(0, 30) },
@@ -190,7 +297,7 @@ async function gabarit(navigateur, cfg, nom, [largeur, hauteur], compteur) {
     await page.waitForLoadState('load', { timeout: 10000 }).catch(() => undefined);
     await page.waitForLoadState('networkidle', { timeout: 4000 }).catch(() => undefined);
     await defiler(page, cfg.hauteur_max);
-    const donnees = mobile ? {} : await page.evaluate(extraire, { texte_max: cfg.texte_max, sections_max: cfg.sections_max });
+    const donnees = await page.evaluate(extraire, { texte_max: cfg.texte_max, sections_max: cfg.sections_max });
     const fichiers = {};
     const vue = path.join(cfg.dossier, `${nom}_vue.jpg`);
     await page.screenshot({ path: vue, type: 'jpeg', quality: 86, animations: 'disabled', caret: 'hide', timeout: 20000 });
@@ -282,7 +389,7 @@ async function principal() {
     }
     let couleurs = [];
     try { couleurs = await palette(navigateur, path.join(cfg.dossier, 'bureau_vue.jpg')); } catch (_) { /* palette facultative */ }
-    return { ...bureau.donnees, palette: couleurs, fichiers: { ...bureau.fichiers, ...mobile.fichiers }, statut_http: bureau.statut,
+    return { ...bureau.donnees, releve: { bureau: bureau.donnees.releve, mobile: mobile.donnees?.releve }, palette: couleurs, fichiers: { ...bureau.fichiers, ...mobile.fichiers }, statut_http: bureau.statut,
       bac_a_sable: bacASable, requetes: compteur.n, refus_navigateur: compteur.refus };
   } finally {
     await navigateur.close().catch(() => undefined);

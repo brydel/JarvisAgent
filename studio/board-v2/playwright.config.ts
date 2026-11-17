@@ -4,19 +4,22 @@ import { defineConfig } from "@playwright/test";
 // Port et fichier du jeton réglables (JARVIS_E2E_PORT, JARVIS_E2E_JETON) : deux suites peuvent tourner sur le même poste.
 const PORT = process.env.JARVIS_E2E_PORT || "7721";
 const JETON = process.env.JARVIS_E2E_JETON || "/tmp/jarvis-e2e-jeton";
+// Chemins relatifs à cette configuration, séparables pour conserver les preuves de chaque lot CI.
+const SORTIES = process.env.JARVIS_E2E_SORTIES || "../../reports/board-v2/playwright-sorties";
+const RESULTATS = process.env.JARVIS_E2E_RESULTATS || "../../reports/board-v2/playwright-resultats.json";
 process.env.JARVIS_E2E_JETON = JETON;
 // présent = l'exécutant factice du serveur de test ne prend aucune tâche (tests/e2e/intelligence.spec.ts)
 const PAUSE = `${JETON}.pause-executant`;
 process.env.JARVIS_E2E_PAUSE = PAUSE;
 export default defineConfig({
   testDir: "tests/e2e",
-  outputDir: "../../reports/board-v2/playwright-sorties",
+  outputDir: SORTIES,
   snapshotPathTemplate: "tests/e2e/__captures__/{testFilePath}/{arg}{ext}",
   fullyParallel: false,
   workers: 1,
   timeout: 60_000,
   expect: { timeout: 10_000, toHaveScreenshot: { maxDiffPixelRatio: 0.012, animations: "disabled", caret: "hide" } },
-  reporter: [["list"], ["json", { outputFile: "../../reports/board-v2/playwright-resultats.json" }]],
+  reporter: [["list"], ["json", { outputFile: RESULTATS }]],
   use: {
     baseURL: `http://localhost:${PORT}`,
     channel: process.env.JARVIS_TEST_BROWSER_CHANNEL === "chrome" ? "chrome" : undefined,

@@ -75,7 +75,7 @@ export interface Source {
   modifierLien(id: string, champs: { libelle?: string; style?: StyleLien; supprime?: boolean }, version?: number): Promise<{ version?: number }>;
   televerser(fichier: File): Promise<Asset>;
   apercu(url: string): Promise<Apercu>;
-  inspection(missionId: string): Promise<Inspection>;
+  inspection(missionId: string, signal?: AbortSignal): Promise<Inspection>;
   approbations(): Promise<Approbation[]>;
   decider(id: string, accord: boolean): Promise<void>;
   commentaires(objetId: string): Promise<{ id: string; auteur: string; texte: string; cree: number }[]>;
@@ -158,8 +158,8 @@ export class SourceReelle implements Source {
   apercu(url: string) {
     return poster<Apercu>("/api/v2/apercu", { url });
   }
-  inspection(missionId: string) {
-    return json<Inspection>(`/api/missions/${missionId}/inspection`);
+  inspection(missionId: string, signal?: AbortSignal) {
+    return json<Inspection>(`/api/missions/${encodeURIComponent(missionId)}/inspection`, { signal });
   }
   async approbations() {
     return (await json<{ approbations: Approbation[] }>("/api/approbations")).approbations;
@@ -192,7 +192,11 @@ export class SourceReelle implements Source {
 /** Démo en mémoire : chaque modification vit le temps de l'onglet. */
 export class SourceDemo implements Source {
   demo = true;
-  espace = "Refonte de l'accueil";
+  espace: string;
+  constructor(etat: EtatBoard = fixtureDemo(), espace = "Refonte de l'accueil") {
+    this.etat = etat;
+    this.espace = espace;
+  }
   private reglagesDemo: ReglagesBoard = { auto_analyse: true, actions_auto: true };
   async espaces() {
     return [{ nom: this.espace, objets: this.etat.objets.length, projet: true, description: "Démonstration" }];
@@ -201,7 +205,7 @@ export class SourceDemo implements Source {
     this.reglagesDemo = { ...this.reglagesDemo, ...valeurs };
     return this.reglagesDemo;
   }
-  private etat: EtatBoard = fixtureDemo();
+  private etat: EtatBoard;
   private compteur = 0;
   private commentairesDemo = new Map<string, { id: string; auteur: string; texte: string; cree: number }[]>();
   private id(p: string) {

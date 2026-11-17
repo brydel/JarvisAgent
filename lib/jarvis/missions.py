@@ -424,7 +424,7 @@ def _evenement(c: sqlite3.Connection, tenant_id: str, type_: str, *, mission_id:
 
 
 def _transition(c: sqlite3.Connection, tache: sqlite3.Row | dict, vers: str, *, now: float, raison: str = "",
-                **champs) -> None:
+                factice: bool = False, **champs) -> None:
     de = tache["statut"]
     if vers not in TRANSITIONS[de]:
         raise TransitionInterdite(de, vers)
@@ -433,8 +433,10 @@ def _transition(c: sqlite3.Connection, tache: sqlite3.Row | dict, vers: str, *, 
                   (vers, now, raison, *champs.values(), tache["id"], de)).rowcount
     if n != 1:  # un autre processus a changé la tâche entre la lecture et l'écriture : on n'écrase rien
         raise MissionError("concurrence", f"la tâche {tache['id']} n'est plus {de}")
+    tentative = champs.get("tentative_id") or (tache["tentative_id"] if de in (LEASED, RUNNING, REVIEW) else None)
     _evenement(c, tache["tenant_id"], "tache_etat", mission_id=tache["mission_id"], tache_id=tache["id"], now=now,
-               de=de, vers=vers, raison=raison)
+               de=de, vers=vers, raison=raison, **({"tentative_id": tentative} if tentative else {}),
+               **({"factice": True} if factice else {}))
     if vers in TERMINAUX:
         # une demande d'approbation pour une tâche terminée (annulée, expirée) ne doit plus pouvoir être accordée
         c.execute("UPDATE approbations SET statut='caduque', decide=? WHERE tache_id=? AND statut='en_attente'",
@@ -924,13 +926,21 @@ def _appliquer_resultat(c: sqlite3.Connection, executant_id: str, secret: str, r
     e = _authentifier(c, executant_id, secret)
     tent = c.execute("SELECT * FROM tentatives WHERE cle_idempotence=? AND tenant_id=?",
                      (r["cle_idempotence"], e["tenant_id"])).fetchone()
-    if tent is not None and tent["issue"] in proto.ISSUES:
+    if (tent is not None and tent["issue"] in proto.ISSUES and tent["executant_id"] == e["id"]
+            and (tent["tache_id"], tent["id"], tent["bail_jeton"]) == (r["tache_id"], r["tentative_id"], r["bail_jeton"])):
         return {"acquitte": True, "doublon": True, "issue": tent["issue"]}
     t = _tache_du_bail(c, e, r["tache_id"], r["tentative_id"], r["bail_jeton"], now)
     if tent is None or tent["id"] != r["tentative_id"]:
         raise MissionError("perime", "tentative inconnue pour ce bail")
     c.execute("UPDATE tentatives SET fin=?, issue=?, erreur=? WHERE id=?",
               (now, r["issue"], r.get("erreur", ""), tent["id"]))
+    factice = bool(r.get("factice")) or tent["fournisseur"] == "factice"
+    if r.get("frustration"):
+        from . import memoire
+        _evenement(c, t["tenant_id"], "frustration_declaree", mission_id=t["mission_id"], tache_id=t["id"], now=now,
+                   texte=memoire.expurger(r["frustration"])[:proto.FRUSTRATION_MAX], auteur=e["id"],
+                   tentative_id=tent["id"], fournisseur=tent["fournisseur"],
+                   factice=factice)
     if r.get("outils"):
         _evenement(c, t["tenant_id"], "outils", mission_id=t["mission_id"], tache_id=t["id"], now=now,
                    tentative_id=tent["id"], outils=r["outils"])
@@ -938,7 +948,6 @@ def _appliquer_resultat(c: sqlite3.Connection, executant_id: str, secret: str, r
         if t["statut"] == LEASED:
             _transition(c, t, RUNNING, now=now)
             t = c.execute("SELECT * FROM taches WHERE id=?", (t["id"],)).fetchone()
-        factice = bool(r.get("factice")) or tent["fournisseur"] == "factice"
         aid = _id("AR")
         c.execute("INSERT INTO artefacts (id, tenant_id, mission_id, tache_id, tentative_id, type, contenu, empreinte, "
                   "fournisseur, factice, cree) VALUES (?,?,?,?,?,?,?,?,?,?,?)",
@@ -951,8 +960,8 @@ def _appliquer_resultat(c: sqlite3.Connection, executant_id: str, secret: str, r
         ok, raison = _verifier_artefact(t["type"], r["contenu"])
         c.execute("UPDATE artefacts SET revue=? WHERE id=?", ("acceptee" if ok else "refusee", aid))
         if not ok:  # l'artefact refusé reste consultable ; un nouvel essai est planifié si le budget d'essais le permet
-            return {**_echec(c, t, now, f"revue refusée : {raison}"), "issue": "reussi"}
-        _transition(c, t, SUCCEEDED, now=now, raison=f"revue : {raison}")
+            return {**_echec(c, t, now, f"revue refusée : {raison}", factice=factice), "issue": "reussi"}
+        _transition(c, t, SUCCEEDED, now=now, raison=f"revue : {raison}", factice=factice)
         if t["type"] == "contextualiser":
             _enregistrer_propositions(c, t, r["contenu"], now)
         elif t["type"] == "converser":  # prise de parole d'un agent : publiée dans le réseau, jamais une carte
@@ -971,20 +980,20 @@ def _appliquer_resultat(c: sqlite3.Connection, executant_id: str, secret: str, r
                   (now + INDISPONIBILITE_S, r.get("erreur", "")[:200], t["tenant_id"], tent["fournisseur"]))
         # l'essai ne compte pas : le fournisseur n'a pas pu travailler
         # nouveau routage dès le prochain balayage : un autre fournisseur compatible peut prendre le relais
-        _transition(c, t, WAITING_PROVIDER, now=now, raison=f"{tent['fournisseur']} indisponible",
+        _transition(c, t, WAITING_PROVIDER, now=now, raison=f"{tent['fournisseur']} indisponible", factice=factice,
                     essais=max(0, t["essais"] - 1), bail_expire=None, prochaine_tentative=now)
         return {"acquitte": True, "doublon": False, "issue": r["issue"], "statut": WAITING_PROVIDER}
-    return _echec(c, t, now, f"échec déclaré : {r.get('erreur', '')[:200]}")
+    return _echec(c, t, now, f"échec déclaré : {r.get('erreur', '')[:200]}", factice=factice)
 
 
-def _echec(c: sqlite3.Connection, t: sqlite3.Row, now: float, raison: str) -> dict:
+def _echec(c: sqlite3.Connection, t: sqlite3.Row, now: float, raison: str, *, factice: bool = False) -> dict:
     if t["essais"] >= t["essais_max"]:
         _transition(c, t, FAILED, now=now, raison=f"{raison} ; essais épuisés ({t['essais']}/{t['essais_max']})",
-                    bail_expire=None)
+                    bail_expire=None, factice=factice)
         return {"acquitte": True, "doublon": False, "issue": "echec", "statut": FAILED}
     attente = 10 * 2 ** (t["essais"] - 1)
     _transition(c, t, RETRY_SCHEDULED, now=now, raison=f"{raison} ; nouvel essai dans {attente} s",
-                prochaine_tentative=now + attente, bail_expire=None)
+                prochaine_tentative=now + attente, bail_expire=None, factice=factice)
     return {"acquitte": True, "doublon": False, "issue": "echec", "statut": RETRY_SCHEDULED}
 
 
@@ -1117,6 +1126,33 @@ def _rattacher_mission(c, tenant_id: str, objet_id: str, espace: str, mission_id
     c.execute("UPDATE board_objets SET mission_id=? WHERE id=? AND tenant_id=?", (mission_id, objet_id, tenant_id))
     _evenement(c, tenant_id, "board_maj", mission_id=mission_id, now=now, objet_id=objet_id, champs=["mission_id"],
                espace=espace, par="jarvis")
+
+
+def _titre_analyse(carte, meta: dict) -> str:
+    return meta.get("titre") or (carte["contenu"].split("\n")[0][:80] if carte["contenu"] else carte["type"])
+
+
+def _relations_analyse(tenant_id: str, carte, titre: str) -> dict | None:
+    from . import board_relations
+
+    return board_relations.contexte(tenant_id, carte["id"], f"{titre} {carte['contenu'][:800]}")
+
+
+def apercu_contexte_documentaire(tenant_id: str, objet_id: str) -> dict:
+    """Aperçu des sources qu'une analyse de cette carte recevrait au moment de la lecture."""
+    c = _connecter(tenant_id)
+    try:
+        carte = c.execute("SELECT id, type, meta, contenu FROM board_objets WHERE id=? AND tenant_id=? AND supprime=0",
+                          (objet_id, tenant_id)).fetchone()
+    finally:
+        c.close()
+    if carte is None:
+        raise MissionError("inconnue", f"objet inconnu : {objet_id}")
+    if carte["type"] not in CONTEXTUALISABLES:
+        return {"analysable": False, "contexte": None}
+    titre = _titre_analyse(carte, json.loads(carte["meta"] or "{}"))
+    return {"analysable": True, "contexte": _relations_analyse(tenant_id, carte, titre)}
+
 
 
 def lancer_contextualisation(tenant_id: str, objet_id: str, *, auteur: str, relance: bool = False,

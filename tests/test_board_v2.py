@@ -40,6 +40,51 @@ def wav(secondes: float = 0.5, freq: int = 8000) -> bytes:
             + b"data" + struct.pack("<I", n) + donnees)
 
 
+class ArgumentsBoardTest(unittest.TestCase):
+    def lire(self, *arguments):
+        with mock.patch.object(cli, "cmd_board", return_value=0) as commande:
+            self.assertEqual(cli.main(["board", *arguments]), 0)
+        return commande.call_args.args[0]
+
+    def test_options_et_contenu_peuvent_s_entremeler(self):
+        for arguments, contenu in (
+            (["deposer", "--espace", "atelier", "--titre", "Plan", "Plan de la semaine"],
+             ["Plan de la semaine"]),
+            (["--espace", "atelier", "deposer", "Premier", "--titre", "Plan", "fragment"],
+             ["Premier", "fragment"]),
+        ):
+            with self.subTest(arguments=arguments):
+                lu = self.lire(*arguments)
+                self.assertEqual((lu.cmd, lu.action, lu.espace, lu.titre, lu.quoi),
+                                 ("board", "deposer", "atelier", "Plan", contenu))
+
+    def test_double_tiret_preserve_le_contenu_litteral(self):
+        lu = self.lire("deposer", "--titre", "Plan", "--", "--titre", "contenu")
+        self.assertEqual((lu.titre, lu.quoi), ("Plan", ["--titre", "contenu"]))
+
+    def test_options_inconnues_et_action_invalide_restent_refusees(self):
+        import contextlib
+        import io
+
+        for arguments in (["deposer", "--option-inconnue", "contenu"], ["inventer"], ["deposer", "--titre"]):
+            with self.subTest(arguments=arguments), mock.patch.object(cli, "cmd_board") as commande:
+                with contextlib.redirect_stderr(io.StringIO()), self.assertRaises(SystemExit) as erreur:
+                    cli.main(["board", *arguments])
+                self.assertEqual(erreur.exception.code, 2)
+                commande.assert_not_called()
+
+    def test_board_sans_action_garde_la_vue_par_defaut(self):
+        lu = self.lire()
+        self.assertEqual((lu.cmd, lu.action, lu.quoi), ("board", "voir", []))
+
+    def test_entree_processus_utilise_les_memes_arguments(self):
+        with mock.patch("sys.argv", ["jarvis", "board", "deposer", "--titre", "Plan", "Contenu"]):
+            with mock.patch.object(cli, "cmd_board", return_value=0) as commande:
+                self.assertEqual(cli.main(), 0)
+        lu = commande.call_args.args[0]
+        self.assertEqual((lu.cmd, lu.action, lu.titre, lu.quoi), ("board", "deposer", "Plan", ["Contenu"]))
+
+
 class Base(unittest.TestCase):
     def setUp(self):
         test_missions._reinitialiser()

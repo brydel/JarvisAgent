@@ -345,12 +345,17 @@ class Coureur:
             # Aucun résultat tardif n'entre dans le journal de réémission ou dans le plan de contrôle.
             return {"etat": "perime", "tache_id": env["tache_id"], "raison": jeton.raison,
                     "bail_perdu": True, "execution_arretee": True}
+        frustration = sortie.get("frustration")
+        if isinstance(frustration, str):
+            from . import memoire
+            frustration = memoire.expurger(frustration)[:proto.FRUSTRATION_MAX] or None
         resultat = proto.resultat(env, sortie["issue"], contenu=sortie.get("contenu", ""),
                                   erreur=sortie.get("erreur", ""), fournisseur=env["fournisseur"],
-                                  factice=bool(sortie.get("factice")), outils=sortie.get("outils"))
+                                  factice=bool(sortie.get("factice")), outils=sortie.get("outils"), frustration=frustration)
         try:
             proto.valider_resultat(resultat)
         except proto.EnveloppeInvalide as exc:  # réponse vide, trop longue… : un échec, pas un résultat
+            resultat.pop("frustration", None)
             resultat.update(issue="echec", contenu="", erreur=str(exc))
         self._garder(resultat)  # écrit AVANT l'envoi : un plantage ici ne perd pas le travail
         if self.avant_envoi:

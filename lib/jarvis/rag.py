@@ -27,7 +27,7 @@ FRAGMENT_MAX = 900       # caractères par fragment
 RECOUVREMENT = 120       # caractères repris du fragment précédent (contexte)
 FRAGMENTS_MAX = 400      # par référence
 RRF_K = 60
-VERSION_INDEX = 1        # à incrémenter si le découpage ou la préparation du texte change
+VERSION_INDEX = 2        # à incrémenter si le découpage ou la préparation du texte change
 
 MOTS_VIDES = frozenset("""a afin ai au aux avec ce ces cet cette comme comment d dans de des du elle elles en est et etre
 il ils j je l la le les leur leurs lui ma mais me mes mon n ne nos notre nous on ou où par pas pour qu que quel quelle

@@ -1,0 +1,62 @@
+.jm-commandes, .jm-entete {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: .625rem;
+}
+
+.jm-liste { padding: 1rem; }
+.mf-legende [data-relation="memoire"]::before { border-color: var(--edge-utilise); }
+.mf-legende [data-relation="causalite"]::before { border-color: var(--edge-inspire); border-top-style: dashed; }
+.mf-canevas + .jm-liste, .jm-preuve { border-top: 1px solid var(--border-subtle); }
+.jm-entete h2 { margin: 0; font: 650 17px/1.3 var(--font-sans); }
+
+.jm-liste ul {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 285px), 1fr));
+  gap: .375rem;
+  list-style: none;
+  margin: .75rem 0 0;
+  padding: 0;
+}
+
+.jm-entree {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: .5rem;
+  width: 100%;
+  height: 100%;
+  text-align: start;
+  color: var(--text-primary);
+  background: var(--surface-card);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  padding: .5rem;
+}
+
+.jm-entree[aria-pressed="true"] { border-color: var(--edge-inspire); }
+.jm-entree :is(strong, small) { display: block; }
+.jm-entree strong { font-size: .81rem; overflow-wrap: anywhere; }
+.jm-entree small, .jm-entree time, .jm-preuve time, .jm-declaration { color: var(--text-secondary); font-size: .75rem; }
+.jm-preuve { padding-block: .625rem; display: grid; justify-items: start; gap: .625rem; }
+.jm-preuve p { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; }
+.jm-point { width: .55rem; height: .55rem; border-radius: 50%; background: var(--edge-default); }
+.jm-point[data-nature="blocage"], .jm-point[data-nature="refus"] { background: var(--edge-depend); }
+.jm-point[data-nature="echec"] { background: var(--accent-texte); }
+.jm-point[data-nature="reprise"] { background: var(--edge-utilise); }
+.jm-point[data-nature="resolution"] { background: var(--edge-alimente); }
+.jm-point[data-nature="frustration"] { background: var(--edge-inspire); }
+
+@media (max-width: 480px) {
+  .jm-entree { grid-template-columns: auto minmax(0, 1fr); }
+  .jm-entree time { grid-column: 2; }
+}
+
+.jm-preuve-mission { margin: 14px 0; padding: 16px; border: 1px solid var(--border-strong); border-radius: var(--radius-card); background: var(--surface-card); }
+.jm-preuve-mission header { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; }
+.jm-preuve-detail { white-space: pre-wrap; overflow-wrap: anywhere; line-height: 1.6; }
+.jm-preuve-donnees { display: grid; gap: 8px; margin-top: 14px; }
+.jm-preuve-donnees > div { display: grid; grid-template-columns: 90px minmax(0, 1fr); gap: 12px; }
+.jm-preuve-donnees dt { color: var(--text-secondary); }
+.jm-preuve-donnees dd { margin: 0; overflow-wrap: anywhere; }

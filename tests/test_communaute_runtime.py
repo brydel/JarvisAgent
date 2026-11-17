@@ -24,7 +24,7 @@ class ReseauApiTest(unittest.TestCase):
         patch = mock.patch.object(config, "STATE_DIR", Path(tmp.name))
         patch.start()
         self.addCleanup(patch.stop)
-        test_studio.StudioTest.setUp(self)
+        test_studio.StudioTest.setUp(self, etat_temporaire=tmp)
 
     def tearDown(self):
         test_studio.StudioTest.tearDown(self)

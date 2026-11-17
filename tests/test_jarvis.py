@@ -21,11 +21,18 @@ from unittest import mock
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
 
+# Les chemins sont lus à l’import de config. Une initialisation tardive ne
+# peut pas isoler les modules déjà chargés et ne doit jamais lancer les tests.
+if "jarvis.config" in sys.modules:
+    raise SystemExit("Isolation des tests impossible. Importe test_jarvis avant tout module jarvis.")
+
 ROOT = Path(__file__).resolve().parents[1]
 TMP = Path(tempfile.mkdtemp(prefix="jarvis-test-"))
 TMUX_SOCKET = f"jarvis-test-{os.getpid()}"
 
 # L'environnement doit être prêt AVANT d'importer jarvis (chemins lus à l'import).
+# Les tests PostgreSQL branchent eux-mêmes une base jetable via missions.utiliser().
+os.environ.pop("JARVIS_MISSIONS_PG", None)
 os.environ.update({
     "JARVIS_CONFIG_DIR": str(TMP / "cfg"),
     "JARVIS_STATE_DIR": str(TMP / "state"),
@@ -1969,6 +1976,16 @@ class JarvisTest(unittest.TestCase):
         self.assertTrue(any(f.read_text() == "notes à moi" for f in chef_dir.glob("AGENTS.md.bak.*")))
 
     def test_chef_starts_on_codex_when_claude_is_out(self):
+        def attendre_ecran(*attendus):
+            limite = time.monotonic() + 10
+            ecran = ""
+            while time.monotonic() < limite:
+                ecran = tmux("capture-pane", "-p", "-J", "-S", "-200", "-t", "jtest5:chef")
+                if all(attendu in ecran for attendu in attendus):
+                    return ecran
+                time.sleep(0.1)
+            return ecran
+
         self.set_claude(99)
         self.set_codex(10)
         env = dict(os.environ, JARVIS_SESSION="jtest5", PYTHONPATH=str(ROOT / "lib"))
@@ -1976,8 +1993,7 @@ class JarvisTest(unittest.TestCase):
         try:
             res = subprocess.run([str(ROOT / "bin" / "jarvis"), "chef-lancer"], capture_output=True, text=True, env=env)
             self.assertEqual(res.returncode, 0, res.stderr)
-            time.sleep(1.5)
-            ecran = tmux("capture-pane", "-p", "-J", "-S", "-200", "-t", "jtest5:chef")
+            ecran = attendre_ecran("workspace-write", "--no-daemon", "network_access=false", "Nouvelle session.")
             for attendu in ("workspace-write", "--no-daemon", "network_access=false", "Nouvelle session."):
                 self.assertIn(attendu, ecran)
             self.assertNotIn("--permission-mode", ecran)       # ce n'est pas la ligne de commande de Claude
@@ -1987,9 +2003,8 @@ class JarvisTest(unittest.TestCase):
             self.set_codex(99)
             res = subprocess.run([str(ROOT / "bin" / "jarvis"), "chef-lancer", "--releve"], capture_output=True, text=True, env=env)
             self.assertEqual(res.returncode, 0, res.stderr)
-            time.sleep(1.5)
+            ecran = attendre_ecran("--permission-mode", "RELÈVE")
             self.assertEqual(len([w for w in tmux("list-windows", "-t", "jtest5", "-F", "#{window_name}").split() if w == "chef"]), 1)
-            ecran = tmux("capture-pane", "-p", "-J", "-S", "-200", "-t", "jtest5:chef")
             self.assertIn("--permission-mode", ecran)
             self.assertIn("RELÈVE", ecran)
             self.assertEqual(store.read_json("chef_moteur.json", {})["moteur"], "claude")

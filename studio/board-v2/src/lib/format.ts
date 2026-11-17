@@ -58,6 +58,8 @@ export function extension(mime: string, nom: string): string {
 }
 
 export const LIBELLE_TYPE: Record<string, string> = {
+  note: "Note", texte: "Texte", mission: "Mission", image: "Image", capture: "Capture", lien: "Lien", audio: "Audio",
+  video: "Vidéo", pdf: "PDF", document: "Document", dossier: "Dossier", agents: "Équipe d’agents", plan: "Plan", tache: "Tâche",
   analyse_document: "Analyse du document", recherche: "Recherche", design: "Design", developpement: "Développement",
   tests: "Tests", envoi_candidature: "Envoi de candidature",
 };

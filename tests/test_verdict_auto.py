@@ -46,6 +46,40 @@ def iso(decalage: float) -> str:
     return datetime.fromtimestamp(time.time() + decalage, timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
+class ArgumentsVerdictTest(unittest.TestCase):
+    def lire(self, *arguments):
+        with mock.patch.object(cli, "cmd_verdict", return_value=0) as commande:
+            self.assertEqual(cli.main(["verdict", *arguments]), 0)
+        return commande.call_args.args[0]
+
+    def test_pr_peut_preceder_la_decision_et_entrecouper_le_resume(self):
+        for arguments, reste in (
+            (["repriceo", "BIS-82", "--pr", "141", "pret", "Résumé"], ["pret", "Résumé"]),
+            (["repriceo", "BIS-82", "corrections", "Premier", "--pr", "141", "fragment"],
+             ["corrections", "Premier", "fragment"]),
+        ):
+            with self.subTest(arguments=arguments):
+                lu = self.lire(*arguments)
+                self.assertEqual((lu.cmd, lu.projet, lu.issue, lu.pr, lu.reste),
+                                 ("verdict", "repriceo", "BIS-82", "141", reste))
+
+    def test_double_tiret_preserve_le_resume_litteral(self):
+        lu = self.lire("repriceo", "BIS-82", "--pr", "141", "--", "pret", "--pr", "littéral")
+        self.assertEqual((lu.pr, lu.reste), ("141", ["pret", "--pr", "littéral"]))
+
+    def test_option_inconnue_et_arguments_manquants_restent_refuses(self):
+        for arguments in (
+            ["repriceo", "BIS-82", "--option-inconnue", "pret"],
+            ["repriceo"],
+            ["repriceo", "BIS-82", "--pr"],
+        ):
+            with self.subTest(arguments=arguments), mock.patch.object(cli, "cmd_verdict") as commande:
+                with contextlib.redirect_stderr(io.StringIO()), self.assertRaises(SystemExit) as erreur:
+                    cli.main(["verdict", *arguments])
+                self.assertEqual(erreur.exception.code, 2)
+                commande.assert_not_called()
+
+
 class Base(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory(prefix="jarvis-verdict-")

@@ -726,6 +726,135 @@ class StockageTest(unittest.TestCase):
         self.assertEqual((carte["type"], carte["meta"]["reference_id"]), ("note", ref["id"]))
 
 
+    @unittest.skipUnless(node_et_playwright(), "node ou Playwright absents : capture réelle non testée")
+    def test_capture_reelle_releve_relie_au_graphe_et_au_rag(self):
+        page = """<!doctype html><meta charset="utf-8"><title>Atelier mémoire</title>
+        <style>section { display: grid; grid-template-columns: 223px 257px; gap: 17px; }
+        button { transition: transform 250ms ease; }</style>
+        <h1>Preuves de l’atelier</h1><section><h2>Grille quartz</h2>
+        <button>Action mémoire quartz</button></section>""".encode()
+        with site({"/atelier": html(page)}) as httpd:
+            port = httpd.server_address[1]
+            ref = references.ajouter(self.org, url=f"http://127.0.0.1:{port}/atelier", auteur="test")
+            ref = references.traiter(self.org, ref["id"], exceptions=[("127.0.0.1", port)])
+            if ref["statut"] == "echec" and any(m in ref["raison"] for m in (
+                    "Chromium ne démarre pas", "Playwright introuvable")):
+                self.skipTest(ref["raison"])
+            self.assertEqual(ref["statut"], "prete", ref["raison"])
+        observes = ref["observations"]
+        grille = next(o for o in observes if o["type"] == "element" and o["ecran"] == "bureau"
+                      and "223px 257px" in o["texte"])
+        self.assertIn("Espacement CSS : 17px", grille["texte"])
+        self.assertIn("asset_id", grille["preuve"])
+        self.assertTrue(grille["preuve"]["capture_url"].startswith("/api/v2/fichiers/AS-"))
+        self.assertTrue(any(o["type"] == "mouvement" and "0.25s" in o["texte"] for o in observes))
+        self.assertTrue(any(o.get("ecran") == "mobile" for o in observes))
+        projete = references.graphe(self.org)["references"][0]
+        self.assertEqual([o["id"] for o in projete["observations"]], [o["id"] for o in observes])
+        resultats = references.chercher(self.org, "223px 257px")["resultats"]
+        self.assertTrue(any(r["citation"].get("observation_id") == grille["id"] for r in resultats))
+        for r in resultats:
+            if r["citation"].get("observation_id") == grille["id"]:
+                self.assertEqual(r["citation"]["capture_url"], grille["preuve"]["capture_url"])
+
+    def test_graphe_commun_pagine_preserve_identites_et_isolation(self):
+        from jarvis import references_api
+        capture = references.ajouter(self.org, url="https://exemple.org/studio", auteur="test")
+        capture = references.traiter(self.org, capture["id"], pilote=pilote_simule(), autoriser_prives=True)
+        notes = [references.ajouter(self.org, texte=f"# Note {i}\nContexte {i}.", auteur="test") for i in range(9)]
+        references.supprimer(self.org, notes[-1]["id"], par="test")
+        autre = mi.creer_organisation("Autre", id_="ORG-graphe-autre")
+        etrangere = references.ajouter(autre, texte="# Source privée\nContexte distinct.", auteur="test")
+        premier = references.graphe(self.org, limite=999)
+        self.assertEqual((premier["total"], premier["page"], premier["limite"]), (9, 1, 8))
+        self.assertEqual(len(premier["references"]), 8)
+        code, dernier = references_api.lire("/api/v2/references/graphe", {"page": ["999"]}, self.org)
+        self.assertEqual((code, dernier["page"], len(dernier["references"])), (200, 2, 1))
+        toutes = premier["references"] + dernier["references"]
+        ids = [r["id"] for r in toutes]
+        self.assertEqual(len(set(ids)), 9)
+        self.assertNotIn(notes[-1]["id"], ids)
+        self.assertNotIn(etrangere["id"], ids)
+        observee = next(r for r in toutes if r["id"] == capture["id"])
+        self.assertEqual(observee["observations"], capture["observations"])
+        self.assertEqual(observee["fragments"], capture["index"]["fragments"])
+        self.assertTrue(all(o["preuve"]["reference_id"] == capture["id"] for o in observee["observations"]))
+        self.assertNotIn("fichiers", observee)
+        vide = mi.creer_organisation("Vide", id_="ORG-graphe-vide")
+        self.assertEqual(references.graphe(vide), {"references": [], "total": 0, "page": 1, "limite": 8})
+
+
+    def test_releve_structure_indexe_a_la_meme_preuve_et_expurge_les_identifiants(self):
+        pilote = pilote_simule(
+            releve={"bureau": {"mesures": {"conteneurs_grid": 2}, "elements": [{
+                "role": "section", "nom": "Grille des partenariats", "largeur": 780, "hauteur": 122, "y": 240,
+                "affichage": "grid", "espacement": "31px", "rayon": "28px", "police": "Epilogue",
+                "taille": "17px", "alignement": "space-around / center", "colonnes": "243px 257px",
+            }]}, "mobile": {"mesures": {"conteneurs_grid": 1}, "mouvements": [{
+                "nature": "transition CSS", "duree": "0.42s", "courbe": "ease-in-out", "propriete": "clip-path",
+            }]}},
+            liens=[{"url": "https://exemple.org/inviter?secret=PARAMETREPRIVE",
+                    "texte": "Contacter hello@example.com", "zone": "entete"}],
+        )
+        ref = references.ajouter(self.org, url="https://exemple.org/studio", auteur="test")
+        ref = references.traiter(self.org, ref["id"], pilote=pilote, autoriser_prives=True)
+        self.assertEqual(ref["statut"], "prete", ref.get("raison"))
+        observes = ref["observations"]
+        self.assertEqual(len({o["id"] for o in observes}), len(observes))
+        self.assertTrue({"capture", "element", "mouvement", "typographie", "palette", "structure",
+                         "comparaison", "preuve", "lien", "mesure"} <= {o["type"] for o in observes})
+        self.assertNotIn("hello@example.com", str(observes))
+        self.assertNotIn("PARAMETREPRIVE", str(observes))
+        grille = next(o for o in observes if o["type"] == "element")
+        self.assertEqual(grille["preuve"]["zone"], {"y": 240, "hauteur": 122, "largeur": 1440})
+        self.assertIn("Colonnes de grille : 243px 257px", grille["texte"])
+        self.assertEqual(grille["nature"], "donnee_non_fiable")
+
+        resultat = references.chercher(self.org, "243px 257px")["resultats"][0]
+        self.assertEqual(resultat["citation"]["observation_id"], grille["id"])
+        self.assertTrue(resultat["citation"]["lien"].endswith(f"&observation={grille['id']}"))
+        fragment = references.fragment(self.org, resultat["fragment_id"])
+        self.assertEqual(fragment["observation_id"], grille["id"])
+        self.assertEqual(references.passages(self.org, [ref["id"]], "243px 257px")[0]["observation_id"], grille["id"])
+        mouvement = references.chercher(self.org, "clip-path")["resultats"][0]
+        self.assertEqual(mouvement["citation"]["capture_url"], ref["fichiers"]["mobile_page"]["url"])
+
+        # Une ancienne fiche gardait un résumé redondant dans le texte. Sa réindexation relie les mêmes observations.
+        with references._ecrire(self.org) as a:
+            ligne = references._ligne(a.c, self.org, ref["id"])
+            contenu = json.loads(ligne["contenu"])
+            contenu += [{"titre": f"Relevé d’interface · {ecran}", "niveau": 2,
+                         "texte": "résumé obsolète COGNITIFLEGACY", "zone": None} for ecran in ("bureau", "mobile")]
+            a.c.execute("UPDATE board_references SET contenu=? WHERE id=? AND tenant_id=?",
+                        (json.dumps(contenu), ref["id"], self.org))
+        references.reindexer(self.org, ref["id"])
+        relue = references.voir(self.org, ref["id"])
+        self.assertEqual([o["id"] for o in relue["observations"]], [o["id"] for o in observes])
+        self.assertEqual(references.chercher(self.org, "COGNITIFLEGACY")["resultats"], [])
+        self.assertEqual(references.chercher(self.org, "243px 257px")["resultats"][0]["citation"]["observation_id"], grille["id"])
+
+
+    def test_tokens_longs_gardent_le_texte_complet_de_leur_preuve(self):
+        tokens = [{"valeur": "police " + chr(97 + i) * 111, "occurrences": i + 1} for i in range(8)]
+        ref = references.ajouter(self.org, url="https://exemple.org/tokens", auteur="test")
+        ref = references.traiter(self.org, ref["id"], pilote=pilote_simule(releve={
+            "bureau": {"mesures": {"conteneurs_grid": 2}, "tokens": {"typographie": tokens}},
+        }), autoriser_prives=True)
+        self.assertEqual(ref["statut"], "prete", ref.get("raison"))
+        observes = {o["id"]: o for o in ref["observations"]}
+        self.assertEqual(sum(o["titre"] == "Styles typographiques récurrents" for o in observes.values()), 2)
+        for token in tokens:
+            ligne = f"{token['valeur']} · {token['occurrences']} éléments observés"
+            self.assertTrue(any(ligne in o["texte"].splitlines() for o in observes.values()))
+        resultat = references.chercher(self.org, tokens[-1]["valeur"])["resultats"]
+        self.assertTrue(any(r["citation"].get("observation_id") in observes for r in resultat))
+        references.reindexer(self.org, ref["id"])
+        self.assertEqual([o["id"] for o in references.voir(self.org, ref["id"])["observations"]], list(observes))
+
+
+
+
+
 # --- API -------------------------------------------------------------------------------------------------
 
 class ApiTest(unittest.TestCase):

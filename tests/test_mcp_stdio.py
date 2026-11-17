@@ -6,7 +6,6 @@ import json
 import os
 import sys
 import tempfile
-import threading
 import time
 import unittest
 from pathlib import Path
@@ -297,14 +296,25 @@ class StdioTest(unittest.TestCase):
     @unittest.skipUnless(os.name == "posix", "groupes de processus POSIX")
     def test_annulation_tue_parent_et_enfant_ignorant_term(self):
         controle = annulation.ControleExecution()
-        timer = threading.Timer(0.4, controle.annuler)
-        self.addCleanup(timer.cancel)
-        debut = time.monotonic()
-        timer.start()
-        with mcp.Client(self.spec("ignore"), annulation=controle, timeout=5) as client:
+        debut_annulation = []
+
+        def annuler_apres_creation_enfant():
+            if debut_annulation:
+                return
+            try:
+                enfant_pret = any("enfant" in message for message in self.messages())
+            except json.JSONDecodeError:
+                return  # Le journal peut être lu pendant l’écriture de sa dernière ligne.
+            if enfant_pret:
+                debut_annulation.append(time.monotonic())
+                controle.annuler()
+
+        with mcp.Client(self.spec("ignore"), annulation=controle, timeout=5,
+                        verifier=annuler_apres_creation_enfant) as client:
             with self.assertRaises(annulation.ExecutionAnnulee):
                 client.initialiser()
-        self.assertLess(time.monotonic() - debut, 3)
+        self.assertTrue(debut_annulation, "L’enfant doit exister avant de demander son annulation.")
+        self.assertLess(time.monotonic() - debut_annulation[0], 3)
         self.assertIsNotNone(client.proc.poll())
         self.assertEnfantsArretes()
 

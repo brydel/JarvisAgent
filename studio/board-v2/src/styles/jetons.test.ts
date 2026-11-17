@@ -78,6 +78,8 @@ describe("jetons de design", () => {
     const fautifs: string[] = [];
     for (const f of sourcesInterface()) {
       if (/demo|fixture|\.test\./.test(f.chemin)) continue;
+      // Palette de calcul du shader tiers : les couleurs visibles des points restent des jetons dans ZoomGraphe.
+      if (f.chemin === "ui/react-bits/crystalized-ball/CrystalizedBall.tsx") continue;
       for (const m of f.code.matchAll(/["'`](#[0-9a-fA-F]{6}|#[0-9a-fA-F]{3}|rgba?\([^"'`]*\))["'`]/g)) fautifs.push(`${f.chemin} : ${m[1]}`);
     }
     expect(fautifs).toEqual([]);
