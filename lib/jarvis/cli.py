@@ -2446,7 +2446,8 @@ def build_parser() -> argparse.ArgumentParser:
     s.add_argument("--espacement", type=float, default=60)
     s.add_argument("--colonnes", type=int)
     s.add_argument("--echelle", type=float, default=0.6, help="reduire : facteur de taille (0.1 à 3)")
-    s.set_defaults(fn=cmd_board)
+    s.set_defaults(fn=cmd_board, cmd="board")
+    p._parseur_board = s
 
     s = sub.add_parser("memoire", help="mémoire du chef : décisions, échecs, leçons (recherche pondérée)")
     s.add_argument("action", nargs="?", default="liste", choices=("noter", "chercher", "liste"))
@@ -2719,7 +2720,13 @@ def _cockpit() -> int:
 
 
 def main(argv: list[str] | None = None) -> int:
-    args = build_parser().parse_args(argv)
+    parseur = build_parser()
+    arguments = sys.argv[1:] if argv is None else argv
+    # Board accepte les options entre les fragments de contenu, y compris sous Python 3.11.
+    if arguments and arguments[0] == "board":
+        args = parseur._parseur_board.parse_intermixed_args(arguments[1:])
+    else:
+        args = parseur.parse_args(arguments)
     try:
         return int(args.fn(args) or 0)
     except KeyboardInterrupt:

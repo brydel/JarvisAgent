@@ -18,7 +18,7 @@ async function glisser(page: Page, prise: Locator, dx: number, dy: number) {
   await page.mouse.up();
 }
 
-test("le graphe global rassemble les projets, les sessions et leurs sources partagées", async ({ page }) => {
+test("le graphe global rassemble les projets, les sessions et leurs sources partagées", async ({ page }, testInfo) => {
   await page.emulateMedia({ reducedMotion: "reduce" });
   await page.goto("/v2/?demo=1&vue=fichiers");
   const graphe = page.getByRole("region", { name: "Graphe de mémoire", exact: true });
@@ -32,7 +32,7 @@ test("le graphe global rassemble les projets, les sessions et leurs sources part
   await expect(graphe.locator(".mf-graphe-memoire")).toHaveAttribute("data-libelles", "masques");
   expect(await graphe.locator(".mf-sommet strong, .mf-centroide small, .mf-groupes text").evaluateAll((elements) =>
     elements.filter((e) => { const s = getComputedStyle(e); return s.display !== "none" && s.visibility !== "hidden" && Number(s.opacity) > 0; }).length)).toBe(0);
-  await page.screenshot({ path: "/tmp/graphe-global-sessions-nuit.png", fullPage: false });
+  await page.screenshot({ path: testInfo.outputPath("graphe-global-sessions-nuit.png"), fullPage: false });
 
   await graphe.locator('[data-id="centroide:AR-demo-campagne-redaction"]').press("Enter");
   const session = page.getByRole("complementary", { name: "Inspecteur de la session" });
@@ -54,7 +54,7 @@ test("le graphe global rassemble les projets, les sessions et leurs sources part
   await graphe.scrollIntoViewIfNeeded();
   await graphe.getByRole("button", { name: "Cadrer le graphe", exact: true }).click();
   await expect(page.locator(".p-feedback")).toBeHidden();
-  await page.screenshot({ path: "/tmp/graphe-global-sessions-mobile.png", fullPage: false });
+  await page.screenshot({ path: testInfo.outputPath("graphe-global-sessions-mobile.png"), fullPage: false });
 });
 
 test("un centroïde déplace son lot, un membre reste libre et le dessin survit au rechargement", async ({ page }) => {

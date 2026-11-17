@@ -76,7 +76,27 @@ jobs:
         working-directory: studio/board-v2
         env:
           JARVIS_TEST_BROWSER_CHANNEL: chrome
-        run: npx playwright test product.spec.ts activite.spec.ts communaute.spec.ts integrations.spec.ts runtime.spec.ts fichiers.spec.ts graphe-global.spec.ts graphe-global-actualisation.spec.ts graphe-global-navigation.spec.ts graphe-memoire.spec.ts graphe-references.spec.ts graphe-unifie.spec.ts journal-memoire.spec.ts
+          JARVIS_E2E_SORTIES: ../../reports/board-v2/produit/sorties
+          JARVIS_E2E_RESULTATS: ../../reports/board-v2/produit/resultats.json
+        run: npx playwright test product.spec.ts activite.spec.ts communaute.spec.ts integrations.spec.ts runtime.spec.ts
+      - name: Captures et preuves de la bibliothèque
+        working-directory: studio/board-v2
+        env:
+          JARVIS_TEST_BROWSER_CHANNEL: chrome
+          JARVIS_E2E_SORTIES: ../../reports/board-v2/references/sorties
+          JARVIS_E2E_RESULTATS: ../../reports/board-v2/references/resultats.json
+        run: |
+          export JARVIS_CHROMIUM="$(command -v google-chrome)"
+          npx playwright test tests/e2e/references.spec.ts
+      - name: Parcours du graphe global et du journal
+        working-directory: studio/board-v2
+        env:
+          JARVIS_TEST_BROWSER_CHANNEL: chrome
+          JARVIS_E2E_SORTIES: ../../reports/board-v2/graphe/sorties
+          JARVIS_E2E_RESULTATS: ../../reports/board-v2/graphe/resultats.json
+        run: |
+          export JARVIS_CHROMIUM="$(command -v google-chrome)"
+          npx playwright test fichiers.spec.ts graphe-global.spec.ts graphe-global-actualisation.spec.ts graphe-global-navigation.spec.ts graphe-memoire.spec.ts graphe-references.spec.ts graphe-unifie.spec.ts journal-memoire.spec.ts
       - name: Conserver les preuves visuelles et les resultats
         if: always()
         uses: actions/upload-artifact@v4
@@ -84,8 +104,7 @@ jobs:
           name: jarvis-product-evidence-${{ github.sha }}
           path: |
             reports/product-studio
-            reports/board-v2/playwright-resultats.json
-            reports/board-v2/playwright-sorties
+            reports/board-v2/
           if-no-files-found: warn
           retention-days: 7
 
