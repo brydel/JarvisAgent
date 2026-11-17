@@ -2447,7 +2447,7 @@ def build_parser() -> argparse.ArgumentParser:
     s.add_argument("--colonnes", type=int)
     s.add_argument("--echelle", type=float, default=0.6, help="reduire : facteur de taille (0.1 à 3)")
     s.set_defaults(fn=cmd_board, cmd="board")
-    p._parseur_board = s
+    p._parseurs_entremeles = {"board": s}
 
     s = sub.add_parser("memoire", help="mémoire du chef : décisions, échecs, leçons (recherche pondérée)")
     s.add_argument("action", nargs="?", default="liste", choices=("noter", "chercher", "liste"))
@@ -2666,7 +2666,8 @@ def build_parser() -> argparse.ArgumentParser:
     s.add_argument("--pr", default="", help="numéro de la PR où le relecteur a publié (sinon : celle de la relecture)")
     s.add_argument("--stdin", action="store_true",
                    help="lire le compte rendu du relecteur sur l'entrée standard (réservé à l'humain)")
-    s.set_defaults(fn=cmd_verdict)
+    s.set_defaults(fn=cmd_verdict, cmd="verdict")
+    p._parseurs_entremeles["verdict"] = s
     s = sub.add_parser("bilan", help="ce que l'usine a produit ; « quotidien » : le bilan du matin")
     s.add_argument("quoi", nargs="?", choices=("quotidien",))
     s.add_argument("--envoyer", action="store_true", help="quotidien : l'envoyer aussi sur Telegram")
@@ -2722,9 +2723,9 @@ def _cockpit() -> int:
 def main(argv: list[str] | None = None) -> int:
     parseur = build_parser()
     arguments = sys.argv[1:] if argv is None else argv
-    # Board accepte les options entre les fragments de contenu, y compris sous Python 3.11.
-    if arguments and arguments[0] == "board":
-        args = parseur._parseur_board.parse_intermixed_args(arguments[1:])
+    # Board et verdict acceptent les options entre les fragments, y compris sous Python 3.11.
+    if arguments and arguments[0] in parseur._parseurs_entremeles:
+        args = parseur._parseurs_entremeles[arguments[0]].parse_intermixed_args(arguments[1:])
     else:
         args = parseur.parse_args(arguments)
     try:

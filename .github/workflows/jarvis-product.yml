@@ -65,6 +65,7 @@ jobs:
           python -m unittest discover -s tests -p 'test_transport_runtime.py' -v
           python -m unittest discover -s tests -p 'test_mcp_stdio.py' -v
           python -m unittest discover -s tests -p 'test_stdio_integration.py' -v
+          python -m unittest discover -s tests -p 'test_verdict_auto.py' -v
           python -m unittest discover -s tests -p 'test_oauth.py' -v
           python -m unittest discover -s tests -p 'test_oauth_api.py' -v
           python -m unittest discover -s tests -p 'test_courriel.py' -v
