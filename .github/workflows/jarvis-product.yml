@@ -34,14 +34,21 @@ jobs:
       - name: Verifier TypeScript et construire le Studio
         working-directory: studio/board-v2
         run: npm run build
+      - name: Verifier les modèles et les jetons du Studio
+        working-directory: studio/board-v2
+        run: npm test
       - name: Verifier la syntaxe Python et shell
         run: |
           python -m compileall -q lib/jarvis services
           bash -n install.sh bin/jarvis
       - name: Tests du moteur, du Board, de l'atelier et de la passerelle
         run: |
+          export JARVIS_CHROMIUM="$(command -v google-chrome)"
           python -m unittest discover -s tests -p 'test_missions.py' -v
           python -m unittest discover -s tests -p 'test_board_v2.py' -v
+          python -m unittest discover -s tests -p 'test_graphe_global.py' -v
+          python -m unittest discover -s tests -p 'test_journal_memoire.py' -v
+          python -m unittest discover -s tests -p 'test_references.py' -v
           python -m unittest discover -s tests -p 'test_activite.py' -v
           python -m unittest discover -s tests -p 'test_contrats.py' -v
           python -m unittest discover -s tests -p 'test_mandats.py' -v
@@ -69,7 +76,7 @@ jobs:
         working-directory: studio/board-v2
         env:
           JARVIS_TEST_BROWSER_CHANNEL: chrome
-        run: npx playwright test product.spec.ts activite.spec.ts communaute.spec.ts integrations.spec.ts runtime.spec.ts
+        run: npx playwright test product.spec.ts activite.spec.ts communaute.spec.ts integrations.spec.ts runtime.spec.ts fichiers.spec.ts graphe-global.spec.ts graphe-global-actualisation.spec.ts graphe-global-navigation.spec.ts graphe-memoire.spec.ts graphe-references.spec.ts graphe-unifie.spec.ts journal-memoire.spec.ts
       - name: Conserver les preuves visuelles et les resultats
         if: always()
         uses: actions/upload-artifact@v4

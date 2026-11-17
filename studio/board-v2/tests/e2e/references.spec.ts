@@ -117,7 +117,7 @@ for (const [nom, largeur, hauteur] of [["bureau", 1440, 1000], ["mobile", 390, 8
     page.on("pageerror", (e) => erreurs.push(e.message));
     await page.setViewportSize({ width: largeur, height: hauteur });
     await page.goto("/v2/?demo=1&vue=references");
-    await expect(page.locator(".rf-card")).toHaveCount(4);
+    await expect(page.locator(".rf-card")).toHaveCount(5);
     await expect(page.getByRole("button", { name: "Capturer" })).toBeDisabled();
     await page.screenshot({ path: path.join(sorties, `demo-grille-${nom}.png`) });
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);

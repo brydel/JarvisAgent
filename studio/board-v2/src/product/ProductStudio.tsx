@@ -8,6 +8,8 @@ import { DialogueMission, type DemandeMission } from "../components/DialogueMiss
 import { ProductNav } from "./ProductNav";
 import { useStudioNavigation } from "./routing";
 import { chargerProduit, dateCourte, requete, verifierAgent, type Agent, type Candidate, type Catalogue, type ProductData, type Verification } from "./api";
+import { PreuveMission } from "../fichiers/PreuveMission";
+import "../fichiers/journal-memoire.css";
 import "../styles/product.css";
 
 const ETATS: Record<string, string> = { OPEN: "En cours", SUCCEEDED: "Terminée", FAILED: "À examiner", CANCELLED: "Annulée",
@@ -304,6 +306,21 @@ function CandidateReview({ candidat, demo, fermer, refresh, notifier }: { candid
 
 function Missions({ source, objets, recherche, composer }: { source: Source; objets: ObjetBoard[]; recherche: string; composer: () => void }) {
   const [inspection, setInspection] = useState<Inspection | null>(null); const [error, setError] = useState(""); const [busy, setBusy] = useState(false);
+  const parametres = new URLSearchParams(location.search);
+  const missionDemandee = parametres.get("mission");
+  const sequence = Number(parametres.get("evenement"));
+  const ciblePreuve = missionDemandee && Number.isSafeInteger(sequence) && sequence > 0
+    ? { sequence, etape: parametres.get("etape") || undefined, tentative: parametres.get("tentative") || undefined } : undefined;
+  useEffect(() => {
+    if (!missionDemandee) return;
+    const controle = new AbortController();
+    setBusy(true); setError(""); setInspection(null);
+    void source.inspection(missionDemandee, controle.signal)
+      .then((detail) => { if (!controle.signal.aborted) setInspection(detail); })
+      .catch((e: unknown) => { if (!controle.signal.aborted) setError(message(e)); })
+      .finally(() => { if (!controle.signal.aborted) setBusy(false); });
+    return () => controle.abort();
+  }, [source, missionDemandee]);
   // une ligne par mission : la carte Mission et sa carte Équipe portent la même mission
   const vues = new Set<string>();
   const missions = [...objets].sort((a, b) => Number(b.type === "mission") - Number(a.type === "mission")).filter(o => o.mission && !vues.has(o.mission.id) && Boolean(vues.add(o.mission.id)))
@@ -315,9 +332,9 @@ function Missions({ source, objets, recherche, composer }: { source: Source; obj
       <span className="p-mission-summary"><strong>{o.mission!.objectif}</strong><small className="tab-num">{o.mission!.faites} / {o.mission!.total} tâches terminées<span aria-hidden>·</span><span>{dateCourte(o.mission!.cree)}</span></small></span>
       <Statut etat={o.mission!.statut}/></button>)}
       {!missions.length && <EtatVide titre="Aucune mission" texte="Rassemble quelques ressources sur le Board, puis prépare un premier objectif" action={recherche ? undefined : ["Cadrer une mission", () => composer()]}/>}</div>
-      {missions.length > 0 && <aside className="p-mission-inspector"><h2>Détail de la mission</h2>{error && <p role="alert">{error}</p>}{busy ? <p>Chargement</p> : inspection ? <><h3>{inspection.objectif}</h3>
+      {(missions.length > 0 || inspection || busy || error) && <article className="p-mission-inspector" aria-label={inspection?.objectif}><h2>Détail de la mission</h2>{error && <p role="alert">{error}</p>}{busy ? <p>Chargement</p> : inspection ? <><h3>{inspection.objectif}</h3>{ciblePreuve && inspection.id === missionDemandee && <PreuveMission detail={inspection} cible={ciblePreuve}/>}
         <p className="credit">{origine && <>{origine}<span aria-hidden>·</span></>}<span>{dateCourte(inspection.cree)}</span></p>
-        {inspection.taches.map(t => <div key={t.id} className="p-task"><p>{t.libelle || t.type}</p><Statut etat={t.statut}/><small>{t.raison || `Niveau ${t.niveau}`}</small></div>)}{inspection.artefacts.map(a => <details key={a.id}><summary>{a.factice ? "Résultat factice" : "Résultat"} · {a.fournisseur}</summary><pre>{a.contenu}</pre></details>)}</> : <p>Sélectionne une mission pour retrouver ses étapes, ses interruptions et ses résultats vérifiés</p>}</aside>}</div>
+        {inspection.taches.map(t => <div key={t.id} className="p-task"><p>{t.libelle || t.type}</p><Statut etat={t.statut}/><small>{t.raison || `Niveau ${t.niveau}`}</small></div>)}{inspection.artefacts.map(a => <details key={a.id}><summary>{a.factice ? "Résultat factice" : "Résultat"} · {a.fournisseur}</summary><pre>{a.contenu}</pre></details>)}</> : <p>Sélectionne une mission pour retrouver ses étapes, ses interruptions et ses résultats vérifiés</p>}</article>}</div>
   </section>;
 }
 

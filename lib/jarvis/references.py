@@ -22,7 +22,7 @@ import threading
 import time
 from pathlib import Path
 
-from . import apercus, capture_site, config, missions, rag
+from . import apercus, capture_site, config, missions, rag, references_observations
 from .missions import MissionError
 
 ETATS = ("en_attente", "capture", "indexation", "prete", "echec")
@@ -202,6 +202,11 @@ def _fichiers(c, tenant_id: str, ids: list[str]) -> dict[str, dict]:
     return sortie
 
 
+def _url(r) -> str:
+    return r["url_finale"] or (r["source"] if r["source"].startswith(("https://", "http://")) else "")
+
+
+
 def _publique(r, fichiers: dict, n_fragments: int | None = None) -> dict:
     meta = _json(r["meta"], {})
     vignette = fichiers.get("bureau_vue") or {}
@@ -217,10 +222,13 @@ def _publique(r, fichiers: dict, n_fragments: int | None = None) -> dict:
 # --- Création -------------------------------------------------------------------------------------------
 
 def ajouter(tenant_id: str, *, url: str = "", texte: str = "", objet_id: str = "", titre: str = "",
-            collection: str = "", etiquettes=(), auteur: str, now: float | None = None) -> dict:
+            collection: str = "", etiquettes=(), auteur: str, now: float | None = None,
+            note: str = "", rattacher: bool = False) -> dict:
     """Crée une référence. Un site reste « en_attente » (la capture est lancée par `planifier` ou `traiter`) ;
     un texte ou une carte du Board est indexé tout de suite. Le même site dans la même collection n'est pas
     dupliqué : la référence existante est rendue avec `deja: True`."""
+    if not isinstance(note, str) or len(note) > 25_000 or (rattacher and not objet_id):
+        raise MissionError("reference", "notes invalides ou carte à rattacher absente")
     now = now or time.time()
     collection, tags, titre = _court(collection, COLLECTION_MAX), _etiquettes(etiquettes), _court(titre, 200)
     fournis = [bool(url), bool(texte and texte.strip()), bool(objet_id)]
@@ -263,11 +271,34 @@ def ajouter(tenant_id: str, *, url: str = "", texte: str = "", objet_id: str = "
             texte = titre
     else:
         source, type_ = "texte", "texte"
+    if note.strip():
+        texte += "\n\n## Notes déposées\n" + note.strip()
     if not texte.strip() or len(texte) > TEXTE_MAX:
         raise MissionError("reference", f"texte vide ou trop long ({TEXTE_MAX} caractères au plus)")
     sections = rag.sections_de_texte(texte)
     titre = titre or next((s["titre"] for s in sections if s["titre"]), "") or _court(texte, 80)
     with _ecrire(tenant_id) as a:
+        if rattacher:
+            courante = a.c.execute("SELECT meta, version FROM board_objets WHERE tenant_id=? AND id=? AND supprime=0",
+                                   (tenant_id, objet_id)).fetchone()
+            if courante is None:
+                raise MissionError("inconnue", "la carte a été retirée")
+            meta_courante = _json(courante["meta"], {})
+            actuelle = meta_courante.get("reference_id")
+            if isinstance(actuelle, str) and a.c.execute(
+                    "SELECT 1 FROM board_references WHERE tenant_id=? AND id=? AND supprime=0 AND statut='prete'",
+                    (tenant_id, actuelle)).fetchone():
+                return {**voir(tenant_id, actuelle, _acces=a), "deja": True}
+            if courante["version"] != o["version"]:
+                raise MissionError("conflit", "le fichier a changé pendant l’indexation")
+            meta_courante["reference_id"] = rid
+            resultat = a.c.execute("UPDATE board_objets SET meta=?, version=version+1, maj=? "
+                                   "WHERE tenant_id=? AND id=? AND version=? AND supprime=0",
+                                   (json.dumps(meta_courante, ensure_ascii=False), now, tenant_id, objet_id, o["version"]))
+            if resultat.rowcount != 1:
+                raise MissionError("conflit", "le fichier a changé pendant l’indexation")
+            missions._evenement(a.c, tenant_id, "board_maj", now=now, objet_id=objet_id, espace=o["espace"],
+                                champs=["meta"], par=auteur, version=o["version"] + 1)
         a.c.execute("INSERT INTO board_references (id, tenant_id, type, source, titre, description, collection, etiquettes, "
                     "contenu, statut, auteur, cree, maj, capture_le, empreinte) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
                     (rid, tenant_id, type_, source, titre, _court(texte, 300), collection,
@@ -306,13 +337,30 @@ def _indexer(a: _Acces, tenant_id: str, reference_id: str, titre: str, sections:
                   (tenant_id, reference_id))
     if a.fts:
         c.execute("DELETE FROM board_reference_fts WHERE tenant_id=? AND reference_id=?", (tenant_id, reference_id))
-    fragments = rag.decouper(sections)
-    for f in fragments:
+    r = _ligne(c, tenant_id, reference_id, supprimees=True)
+    meta = _json(r["meta"], {})
+    fichiers = _fichiers(c, tenant_id, [reference_id])[reference_id]
+    observes = references_observations.projeter(reference_id, meta, fichiers, capture_le=r["capture_le"], source=_url(r))
+    if _url(r) and meta.get("releve"):
+        sections = list(sections)
+        # Les anciennes captures gardaient un résumé DOM à la fin du texte. Le relevé structuré le remplace.
+        for ecran in reversed(tuple(meta["releve"])):
+            if sections and sections[-1].get("titre") == f"Relevé d’interface · {ecran}" and not sections[-1].get("zone"):
+                sections.pop()
+    if meta.get("media"):
+        sections = [s for s in sections if s.get("titre") not in ("Fichier source", "Palette du fichier", "Images du storyboard")]
+    fragments_meta = rag.decouper([{
+        "titre": f"{o['titre']} · {o['ecran']}" if o.get("ecran") else o["titre"], "niveau": 2, "texte": o["texte"],
+        "zone": {**o["preuve"].get("zone", {}), "observation_id": o["id"],
+                 **{k: o["preuve"][k] for k in ("asset_id", "capture_url") if k in o["preuve"]}},
+    } for o in observes])
+    fragments = rag.decouper(sections)[:rag.FRAGMENTS_MAX - len(fragments_meta)] + fragments_meta
+    for position, f in enumerate(fragments):
         fid = missions._id("FR")
         norme = rag.normaliser(f["texte"])
         c.execute("INSERT INTO board_reference_fragments (id, tenant_id, reference_id, position, section, niveau, texte, "
                   "texte_norm, zone, version_index, cree) VALUES (?,?,?,?,?,?,?,?,?,?,?)",
-                  (fid, tenant_id, reference_id, f["position"], f["section"], f["niveau"], f["texte"], norme,
+                  (fid, tenant_id, reference_id, position, f["section"], f["niveau"], f["texte"], norme,
                    json.dumps(f["zone"]) if f["zone"] else None, rag.VERSION_INDEX, now))
         if a.fts:
             c.execute("INSERT INTO board_reference_fts (texte, section, titre, fragment_id, reference_id, tenant_id) "
@@ -422,7 +470,7 @@ def _enregistrer_capture(tenant_id: str, reference_id: str, r, capture: dict) ->
         zone = {**s["zone"], "asset_id": page, "largeur": capture_site.GABARITS["bureau"][0]} if page else None
         sections.append({"titre": s["titre"], "niveau": s["niveau"], "texte": s["texte"], "zone": zone})
     meta = {k: capture[k] for k in ("palette", "couleurs_css", "polices", "structure", "liens", "langue",
-                                    "statut_http", "bac_a_sable", "reseau")}
+                                    "statut_http", "bac_a_sable", "reseau", "releve")}
     meta["tronquee"] = any(f.get("tronquee") for f in capture["fichiers"].values())
     titre = r["titre"] or capture["titre"] or capture["url_finale"]
     now = time.time()
@@ -527,6 +575,35 @@ def lister(tenant_id: str, *, collection: str | None = None, etiquette: str | No
             "etiquettes": [{"nom": k, "n": v} for k, v in sorted(tags.items(), key=lambda kv: (-kv[1], kv[0]))]}
 
 
+def graphe(tenant_id: str, *, page: int = 1, limite: int = 8) -> dict:
+    """Charge un lot de références et leurs observations pour le graphe de mémoire commun."""
+    limite = max(1, min(8, int(limite)))
+    with _lire(tenant_id) as a:
+        c = a.c
+        total = c.execute("SELECT COUNT(*) AS n FROM board_references WHERE tenant_id=? AND supprime=0",
+                          (tenant_id,)).fetchone()["n"]
+        page = min(max(1, int(page)), max(1, (total + limite - 1) // limite))
+        lignes = c.execute("SELECT * FROM board_references WHERE tenant_id=? AND supprime=0 "
+                           "ORDER BY cree DESC, id LIMIT ? OFFSET ?",
+                           (tenant_id, limite, (page - 1) * limite)).fetchall()
+        ids = [r["id"] for r in lignes]
+        fichiers = _fichiers(c, tenant_id, ids)
+        comptes = {}
+        if ids:
+            marques = ",".join("?" * len(ids))
+            comptes = {r["reference_id"]: r["n"] for r in c.execute(
+                f"SELECT reference_id, COUNT(*) AS n FROM board_reference_fragments WHERE tenant_id=? AND actif=1 "
+                f"AND reference_id IN ({marques}) GROUP BY reference_id", (tenant_id, *ids))}
+        references = []
+        for r in lignes:
+            observes = references_observations.projeter(r["id"], _json(r["meta"], {}), fichiers[r["id"]],
+                                                        capture_le=r["capture_le"], source=_url(r))
+            references.append({**_publique(r, fichiers[r["id"]], comptes.get(r["id"], 0)),
+                               "observations": observes})
+    return {"references": references, "total": total, "page": page, "limite": limite}
+
+
+
 def voir(tenant_id: str, reference_id: str, *, supprimees: bool = False, _acces: _Acces | None = None) -> dict:
     """Fiche complète : sections (avec leur zone dans la capture), palette, polices, structure, liens, fichiers."""
     def lire(a: _Acces) -> dict:
@@ -539,7 +616,10 @@ def voir(tenant_id: str, reference_id: str, *, supprimees: bool = False, _acces:
         sections = [{"titre": s.get("titre") or "", "niveau": s.get("niveau") or 0, "zone": s.get("zone"),
                      "caracteres": len(s.get("texte") or ""), "extrait": (s.get("texte") or "")[:600]}
                     for s in _json(r["contenu"], [])]
+        observations = references_observations.projeter(reference_id, meta, fichiers,
+                                                       capture_le=r["capture_le"], source=_url(r))
         return {**_publique(r, fichiers, v["n"] or 0), "fichiers": fichiers, "sections": sections,
+                "observations": observations,
                 "couleurs_css": meta.get("couleurs_css") or {}, "polices_declarees": (meta.get("polices") or {}).get("declarees") or [],
                 "structure": meta.get("structure"), "liens": meta.get("liens") or [], "langue": meta.get("langue") or "",
                 "tronquee": bool(meta.get("tronquee")), "empreinte": r["empreinte"], "auteur": r["auteur"],
@@ -671,8 +751,10 @@ def chercher(tenant_id: str, question: str, *, collection: str | None = None, et
                 if l is None or (etiquette and etiquette.lower() not in _json(l["etiquettes"], [])):
                     continue
                 f = fichiers.get(l["reference_id"], {})
-                zone = _json(l["zone"], None)
-                url = l["url_finale"] or (l["source"] if l["type"] == "site" else "")
+                preuve = _json(l["zone"], None) or {}
+                observation = preuve.get("observation_id")
+                url = references_observations.adresse(_url(l)) if observation else _url(l)
+                cible = f"observation={observation}" if observation else f"fragment={l['id']}"
                 resultats.append({
                     "fragment_id": l["id"], "reference_id": l["reference_id"], "score": round(score, 6),
                     "rangs": {"mots": rangs_mots.get(ident), "vecteurs": rangs_vecteurs.get(ident)},
@@ -681,10 +763,11 @@ def chercher(tenant_id: str, question: str, *, collection: str | None = None, et
                     "nature": "donnee_non_fiable",
                     "citation": {"reference_id": l["reference_id"], "titre": l["titre"], "url": url, "type": l["type"],
                                  "collection": l["collection"], "section": l["section"], "capture_le": l["capture_le"],
-                                 "capture_url": (f.get("bureau_page") or f.get("bureau_vue") or {}).get("url"),
+                                 "capture_url": preuve.get("capture_url") or (f.get("bureau_page") or f.get("bureau_vue") or {}).get("url"),
                                  "vignette_url": (f.get("bureau_vue") or {}).get("url"),
-                                 "zone": {"y": zone.get("y"), "hauteur": zone.get("hauteur")} if isinstance(zone, dict) else None,
-                                 "lien": f"/v2/?vue=references&ref={l['reference_id']}&fragment={l['id']}"}})
+                                 "zone": {"y": preuve["y"], "hauteur": preuve["hauteur"]} if {"y", "hauteur"} <= preuve.keys() else None,
+                                 **({"observation_id": observation} if observation else {}),
+                                 "lien": f"/v2/?vue=references&ref={l['reference_id']}&{cible}"}})
                 if len(resultats) >= n:
                     break
     return {**base, "mode": "hybride" if etat == "ok" and voisins else "bm25", "vecteurs": etat, "resultats": resultats}
@@ -699,9 +782,12 @@ def fragment(tenant_id: str, fragment_id: str) -> dict:
                         (fragment_id, tenant_id, tenant_id)).fetchone()
     if l is None or l["supprime"]:
         raise MissionError("inconnue", f"fragment inconnu : {fragment_id}")
+    preuve = _json(l["zone"], None) or {}
+    observation = preuve.get("observation_id")
     return {"fragment_id": l["id"], "reference_id": l["reference_id"], "section": l["section"], "position": l["position"],
-            "texte": l["texte"], "zone": _json(l["zone"], None), "titre": l["titre"],
-            "url": l["url_finale"] or (l["source"] if l["type"] == "site" else ""), "capture_le": l["capture_le"],
+            "texte": l["texte"], "zone": preuve if {"y", "hauteur"} <= preuve.keys() else None, "titre": l["titre"],
+            "url": references_observations.adresse(_url(l)) if observation else _url(l), "capture_le": l["capture_le"],
+            **({"observation_id": observation} if observation else {}),
             "nature": "donnee_non_fiable", "avertissement": AVERTISSEMENT}
 
 
@@ -719,7 +805,7 @@ def passages(tenant_id: str, reference_ids: list[str], question: str, *, par_ref
     marques = ",".join("?" * len(ids))
     with _lire(tenant_id) as a:
         lignes = a.c.execute(
-            "SELECT f.id, f.reference_id, f.position, f.section, f.texte, f.texte_norm, r.titre, r.type, r.source, "
+            "SELECT f.id, f.reference_id, f.position, f.section, f.texte, f.texte_norm, f.zone, r.titre, r.type, r.source, "
             "r.url_finale, r.collection, r.capture_le FROM board_reference_fragments f JOIN board_references r "
             "ON r.id = f.reference_id WHERE f.tenant_id=? AND r.tenant_id=? AND r.supprime=0 AND r.statut='prete' "
             f"AND f.actif=1 AND f.reference_id IN ({marques}) ORDER BY f.reference_id, f.position LIMIT 2000",
@@ -738,11 +824,13 @@ def passages(tenant_id: str, reference_ids: list[str], question: str, *, par_ref
     for ref in ids:
         for ident, pertinence in retenus.get(ref, []):
             l = par_id[ident]
-            url = l["url_finale"] or (l["source"] if l["type"] == "site" else "")
+            observation = (_json(l["zone"], None) or {}).get("observation_id")
+            url = references_observations.adresse(_url(l)) if observation else _url(l)
             jour = time.strftime("%Y-%m-%d", time.localtime(l["capture_le"])) if l["capture_le"] else "date inconnue"
             origine = url or f"collection « {l['collection']} »"
             sortie.append({
                 "reference_id": ref, "fragment_id": ident, "section": l["section"], "titre": l["titre"], "url": url,
+                **({"observation_id": observation} if observation else {}),
                 "extrait": rag.extrait(l["texte"], question, largeur=largeur)["texte"], "pertinence": pertinence,
                 "capture_le": l["capture_le"], "nature": "donnee_non_fiable",
                 "citation": f"[{ref}#{ident}] {l['titre']} — {origine} (capturé le {jour})"})

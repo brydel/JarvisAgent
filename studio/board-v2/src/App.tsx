@@ -1,6 +1,7 @@
 import { Component, lazy, Suspense, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { MotionConfig } from "motion/react";
-import { SourceDemo, SourceReelle, sessionValide } from "./api";
+import { SourceReelle, sessionValide } from "./api";
+import { creerSourceDemo, sourceProjetDemo } from "./fichiers/global-demo";
 import { brancherTheme } from "./etat/ui";
 import { StudioNavigation, useStudioNavigation } from "./product/routing";
 import { ProductStudio } from "./product/ProductStudio";
@@ -14,15 +15,20 @@ function espaceDeLUrl(p: URLSearchParams): string {
 const Workspace = lazy(() => import("./product/BoardWorkspace"));
 // Bibliothèque de références (remplace l'ancien écran « Connaissances », dont l'adresse ?vue=connaissances reste valide).
 const References = lazy(() => import("./references/References"));
+const Fichiers = lazy(() => import("./fichiers/Fichiers"));
 class StudioBoundary extends Component<{ children: ReactNode }, { failed: boolean }> {
   state = { failed: false };
   static getDerivedStateFromError() { return { failed: true }; }
   render() { return this.state.failed ? <main className="porte-v2" role="alert"><h1>L'espace n'a pas pu s'afficher</h1><p>Tes données enregistrées restent sur le serveur</p><button className="p-button p-primary" onClick={() => location.reload()}>Recharger</button></main> : this.props.children; }
 }
-function Pages({ source, charge }: { source: Source; charge?: number }) {
+function Pages({ source: origine, charge }: { source: Source; charge?: number }) {
   const { vue } = useStudioNavigation();
+  const espace = espaceDeLUrl(new URLSearchParams(location.search));
+  const source = useMemo(() => origine.demo ? sourceProjetDemo(origine, espace)
+    : espace === origine.espace ? origine : new SourceReelle(espace), [origine, espace]);
+  if (vue === "fichiers") return <Suspense fallback={<div className="p-loading" role="status">Ouverture du graphe de mémoire</div>}><Fichiers source={source}/></Suspense>;
   if (vue === "references" || vue === "connaissances") return <Suspense fallback={<div className="p-loading" role="status">Ouverture de la bibliothèque</div>}><References source={source}/></Suspense>;
-  return vue === "board" ? <Suspense fallback={<div className="p-loading" role="status">Ouverture du Board</div>}><Workspace source={source} charge={charge}/></Suspense> : <ProductStudio source={source}/>;
+  return vue === "board" ? <Suspense fallback={<div className="p-loading" role="status">Ouverture du Board</div>}><Workspace key={source.espace} source={source} charge={charge}/></Suspense> : <ProductStudio source={source}/>;
 }
 export function App() {
   const params = useMemo(() => new URLSearchParams(location.search), []);
@@ -31,7 +37,7 @@ export function App() {
   const charge = demo && Number.isFinite(n) ? Math.max(0, Math.min(6000, n)) : 0;
   const [session, setSession] = useState<"attente" | "ok" | "refus">(demo ? "ok" : "attente");
   const verificationSession = useRef<Promise<boolean> | null>(null);
-  const source = useMemo(() => demo ? new SourceDemo() : new SourceReelle(espaceDeLUrl(params)), [demo, params]);
+  const source = useMemo(() => demo ? creerSourceDemo(espaceDeLUrl(params)) : new SourceReelle(espaceDeLUrl(params)), [demo, params]);
   // un seul thème (nuit, jour, automatique) pour tout le produit, mémorisé sur ce poste
   useEffect(() => brancherTheme(), []);
   useEffect(() => {

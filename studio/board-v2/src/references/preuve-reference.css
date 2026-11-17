@@ -1,0 +1,10 @@
+.rf-preuve-choix, .rf-preuve-observation { margin: 16px 0; padding: 18px; border: 1px solid var(--border-card); border-radius: var(--radius-panel); background: var(--surface-card); }
+.rf-preuve-choix h2, .rf-preuve-observation h2 { font-size: 19px; line-height: 1.3; margin-bottom: 10px; }
+.rf-preuve-choix > div { display: flex; flex-wrap: wrap; gap: 6px; }
+.rf-preuve-choix button[aria-pressed="true"] { color: var(--text-primary); border-color: var(--border-strong); background: var(--surface-hover); }
+.rf-preuve-observation { display: flex; align-items: start; justify-content: space-between; gap: 20px; }
+.rf-preuve-observation > div { min-width: 0; }
+.rf-preuve-texte { white-space: pre-wrap; overflow-wrap: anywhere; color: var(--text-secondary); line-height: 1.6; margin: 10px 0; }
+.rf-preuve-observation small { color: var(--text-muted); overflow-wrap: anywhere; }
+.rf-preuve-observation > button { flex-shrink: 0; }
+@media (max-width: 680px) { .rf-preuve-observation { flex-direction: column; } }

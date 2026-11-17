@@ -326,7 +326,7 @@ def _txt(v, n: int) -> str:
 
 
 def _nombre(v, mini: float = 0, maxi: float = 1_000_000) -> float:
-    return max(mini, min(maxi, float(v))) if isinstance(v, (int, float)) and not isinstance(v, bool) and v == v else 0.0
+    return float(max(mini, min(maxi, v))) if isinstance(v, (int, float)) and not isinstance(v, bool) and v == v else 0.0
 
 
 def _hex(v) -> str:
@@ -355,6 +355,71 @@ def _url_publique(v) -> str:
 
 def _police(v) -> str:
     return re.sub(r"[^\w .,'+-]", "", _txt(v, 80).strip("\"'"), flags=re.UNICODE).strip()
+
+
+def _releve(brut) -> dict:
+    """Observations bornées issues du DOM rendu, au format données."""
+    if not isinstance(brut, dict):
+        return {}
+    sortie = {}
+    for ecran in ("bureau", "mobile"):
+        donnees = brut.get(ecran)
+        if not isinstance(donnees, dict):
+            continue
+        mesures = donnees.get("mesures")
+        mesures = mesures if isinstance(mesures, dict) else {}
+        dimensions = ("largeur", "hauteur", "elements_observes", "conteneurs_grid", "conteneurs_flex",
+                      "controles_sans_libelle_apparent", "canvas", "videos")
+        elements, mouvements = [], []
+        vals = donnees.get("elements")
+        for item in (vals if isinstance(vals, list) else [])[:24]:
+            if isinstance(item, dict):
+                elements.append({k: _txt(item.get(k), 96).replace("\n", " ")
+                                 for k in ("role", "nom", "affichage", "espacement", "rayon", "police", "taille")}
+                                | {k: _txt(item[k], 96).replace("\n", " ")
+                                   for k in ("alignement", "colonnes", "couleur", "fond", "padding", "interligne", "graisse", "position")
+                                   if isinstance(item.get(k), str) and item[k]}
+                                | {k: _txt(item[k], 512).replace("\n", " ")
+                                   for k in ("selecteur", "parent_selecteur") if isinstance(item.get(k), str) and item[k]}
+                                | {k: round(_nombre(item.get(k), 0, 20_000)) for k in ("largeur", "hauteur")}
+                                | ({"y": round(_nombre(item["y"], 0, 200_000))}
+                                   if type(item.get("y")) in (int, float) else {})
+                                | ({"x": round(_nombre(item["x"], -20_000, 200_000))}
+                                   if type(item.get("x")) in (int, float) else {}))
+        vals = donnees.get("mouvements")
+        for item in (vals if isinstance(vals, list) else [])[:16]:
+            if isinstance(item, dict) and item.get("nature") in ("animation CSS", "transition CSS", "animation active"):
+                mouvements.append({k: _txt(item.get(k), 80).replace("\n", " ")
+                                   for k in ("nature", "duree", "courbe", "propriete")})
+        sortie[ecran] = {"mesures": {k: int(_nombre(mesures[k], 0, 20_000)) for k in dimensions
+                                     if type(mesures.get(k)) in (int, float)},
+                         "elements": elements, "mouvements": mouvements}
+        echantillon = donnees.get("echantillon")
+        if isinstance(echantillon, dict):
+            sortie[ecran]["echantillon"] = {
+                "examines": int(_nombre(echantillon.get("examines"), 0, 450)),
+                "limite": 450,
+                "tronque": echantillon.get("tronque") is True,
+            }
+        tokens = donnees.get("tokens")
+        if isinstance(tokens, dict):
+            sortie[ecran]["tokens"] = {}
+            for famille in ("espacement", "rayon", "typographie", "couleur"):
+                valeurs = tokens.get(famille)
+                propres, vus = [], set()
+                for token in (valeurs if isinstance(valeurs, list) else [])[:8]:
+                    if not isinstance(token, dict) or type(token.get("occurrences")) not in (int, float):
+                        continue
+                    valeur = _txt(token.get("valeur"), 128).replace("\n", " ")
+                    if not valeur or valeur in vus:
+                        continue
+                    vus.add(valeur)
+                    occurrences = int(_nombre(token["occurrences"], 0, 450))
+                    if occurrences:
+                        propres.append({"valeur": valeur, "occurrences": occurrences})
+                sortie[ecran]["tokens"][famille] = propres
+    return sortie
+
 
 
 def valider(brut: dict, *, url: str, dossier: Path) -> dict:
@@ -434,6 +499,7 @@ def valider(brut: dict, *, url: str, dossier: Path) -> dict:
             "langue": re.sub(r"[^A-Za-z-]", "", _txt(brut.get("langue"), 12)),
             "sections": sections, "palette": palette, "couleurs_css": couleurs_css, "polices": polices,
             "structure": structure, "liens": liens, "fichiers": fichiers,
+            "releve": _releve(brut.get("releve")),
             "statut_http": int(_nombre(brut.get("statut_http"), 0, 999)),
             "bac_a_sable": bool(brut.get("bac_a_sable")), "capture_le": time.time(), "avertissement": AVERTISSEMENT}
 

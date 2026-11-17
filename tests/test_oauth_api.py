@@ -39,7 +39,7 @@ class OAuthApiTest(unittest.TestCase):
         patch.start(); self.addCleanup(patch.stop)
         patch_env = mock.patch.dict(os.environ, {"JARVIS_OAUTH_API_TEST_SECRET": "client-prive-test"})
         patch_env.start(); self.addCleanup(patch_env.stop)
-        test_studio.StudioTest.setUp(self)
+        test_studio.StudioTest.setUp(self, etat_temporaire=temporaire)
 
     def tearDown(self):
         test_studio.StudioTest.tearDown(self)

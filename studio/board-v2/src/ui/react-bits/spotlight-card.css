@@ -1,0 +1,34 @@
+.spotlight-card {
+  --spot-x: 50%;
+  --spot-y: 50%;
+  --spot-tint: color-mix(in srgb, var(--text-primary) 9%, transparent);
+  position: relative;
+  isolation: isolate;
+}
+.spotlight-card::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  border-radius: inherit;
+  opacity: 0;
+  background: radial-gradient(210px circle at var(--spot-x) var(--spot-y), var(--spot-tint), transparent 100%);
+  transition: opacity var(--dur-hover) var(--ease-standard);
+}
+.spotlight-card:hover::before,
+.spotlight-card:focus-visible::before { opacity: 1; }
+@media (prefers-reduced-motion: reduce) {
+  .spotlight-card::before { transition: none; }
+}
+
+/* Contour réactif inspiré de Magic Bento, avec la position du Spotlight Card. */
+@media (hover: hover) and (prefers-reduced-motion: no-preference) {
+  .spotlight-card--contour::after {
+    content: ""; position: absolute; inset: 0; padding: 1px; border-radius: inherit; pointer-events: none;
+    background: radial-gradient(90px circle at var(--spot-x) var(--spot-y), var(--text-muted), transparent);
+    mask: linear-gradient(var(--paper) 0 0) content-box, linear-gradient(var(--paper) 0 0);
+    mask-composite: exclude; opacity: 0; transition: opacity var(--dur-hover) var(--ease-standard);
+  }
+  .spotlight-card--contour:hover::after { opacity: .65; }
+}

@@ -6,6 +6,7 @@
 // ════════════════════════════════════════════════════════════════════════════════════════════════════════════
 import type { Asset, EtatBoard, MissionResume, ObjetBoard } from "../types";
 import type { Inspection } from "../api";
+import { chronologieJournalDemo, tentativesJournalDemo } from "../fichiers/journal-demo";
 
 const T0 = 1_760_000_000;
 const D = "/v2/demo/";
@@ -67,6 +68,9 @@ export function fixtureDemo(): EtatBoard {
       contenu: "**Objectif** : un accueil qui montre le vrai Board dès l'ouverture.\n\n" +
         "- Reprendre les missions en cours\n- Aucune donnée inventée\n- Thèmes nuit et jour\n- PR relue avant fusion",
       meta: { titre: "Note de cadrage", tags: ["Cadrage", "Accueil"] } }),
+    objet({ id: "BO-demo-decisions", type: "note", x: 180, y: 1210, largeur: 408, hauteur: 280,
+      contenu: "L’accueil montre la progression des missions. Les critères sont dans [[BO-demo-note|Note de cadrage]].",
+      meta: { titre: "Décisions de conception", tags: ["Produit"] } }),
     objet({ id: "BO-demo-mission", type: "mission", x: 747.5, y: 443.75, largeur: 452, hauteur: 362, z: 2, priorite: "P1",
       mission_id: missionDemo.id, mission: missionDemo,
       meta: { titre: missionDemo.objectif, echeance: "15 janv. 2026", tags: ["Accueil", "PR"],
@@ -92,6 +96,7 @@ export function fixtureDemo(): EtatBoard {
     { id: "BL-demo7", source_id: "BO-demo-agents", cible_id: "BO-demo-mission", libelle: "", style: "defaut" as const, cotes: { s: "left", sf: 0.45, t: "right", tf: 0.4 } as const },
     { id: "BL-demo8", source_id: "BO-demo-mission", cible_id: "BO-demo-video", libelle: "", style: "defaut" as const, cotes: { s: "bottom", sf: 0.49, t: "top", tf: 0.46 } as const },
     { id: "BL-demo9", source_id: "BO-demo-mission", cible_id: "BO-demo-audio", libelle: "", style: "defaut" as const, cotes: { s: "left", sf: 0.86, t: "top", tf: 0.74 } as const },
+    { id: "BL-demo11", source_id: "BO-demo-note", cible_id: "BO-demo-pdf", libelle: "Cadre du projet", style: "alimente" as const },
     { id: "BL-demo10", source_id: "BO-demo-dossier", cible_id: "BO-demo-mission", libelle: "Utilisé par", style: "utilise" as const, cotes: { s: "top", sf: 0.36, t: "right", tf: 0.68, c: 0.2, lt: 0.22 } as const },
   ];
   return { espace: "accueil", objets, liens };
@@ -104,11 +109,12 @@ export function inspectionDemo(missionId: string): Inspection {
     description: "Remplacer l'accueil par un aperçu du Board, puis ouvrir une PR avec ses tests Playwright.",
     tags: ["Accueil", "PR"],
     taches: m.taches.map((t, i) => ({
-      ...t, essais_max: 3, tentatives: [],
+      ...t, essais_max: 3, tentatives: t.id === "TA-demo3" ? tentativesJournalDemo : [],
       approbations: i === 1 ? [{ id: "AP-demo1", statut: "en_attente", demandeur: "Designer (démo)", decide_par: null, cree: Date.now() / 1000 - 7200 }] : [],
     })),
     artefacts: [],
     chronologie: [
+      ...chronologieJournalDemo,
       { seq: 3, type: "demo", ts: Date.now() / 1000 - 720, tache_id: null, donnees: { texte: "Designer a ajouté une image", agent: "AT-demo-designer" } },
       { seq: 2, type: "demo", ts: Date.now() / 1000 - 3600, tache_id: null, donnees: { texte: "Analyste a terminé « Audit de l'accueil actuel »", agent: "AT-demo-analyste" } },
       { seq: 1, type: "demo", ts: Date.now() / 1000 - 7200, tache_id: null, donnees: { texte: "Mission créée", agent: "" } },

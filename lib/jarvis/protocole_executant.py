@@ -13,6 +13,7 @@ from __future__ import annotations
 
 VERSION = 1
 VERSIONS_ACCEPTEES = (1,)
+FRUSTRATION_MAX = 500
 TAILLE_MAX_CONTENU = 200_000
 OUTILS_MAX = 10  # outils déclarés par l'exécutant pour une tentative (affichés sur le Board, jamais exécutés)  # caractères d'un artefact renvoyé (borne contre l'épuisement de la base)
 
@@ -108,6 +109,10 @@ def valider_resultat(env: object) -> dict:
         raise EnveloppeInvalide(f"résultat : contenu trop long ({len(contenu)} > {TAILLE_MAX_CONTENU})")
     if env["issue"] == "reussi" and not contenu.strip():
         raise EnveloppeInvalide("résultat : une réussite sans contenu n'est pas une preuve")
+    if "frustration" in env:
+        note = env["frustration"]
+        if not isinstance(note, str) or not note.strip() or len(note) > FRUSTRATION_MAX:
+            raise EnveloppeInvalide(f"résultat : « frustration » doit être un texte de 1 à {FRUSTRATION_MAX} caractères")
     outils = env.get("outils", [])
     if not isinstance(outils, list) or len(outils) > OUTILS_MAX or not all(
             isinstance(o, dict) and set(o) <= {"outil", "detail"} and all(isinstance(v, str) and len(v) <= 200
@@ -117,7 +122,7 @@ def valider_resultat(env: object) -> dict:
 
 
 def resultat(tache: dict, issue: str, *, contenu: str = "", erreur: str = "", fournisseur: str = "",
-             factice: bool = False, outils: list | None = None) -> dict:
+             factice: bool = False, outils: list | None = None, frustration: str | None = None) -> dict:
     """Construit le résultat d'une tentative, lié à son bail (jeton de clôture) et à sa clé d'idempotence."""
     return {
         "version": VERSION,
@@ -130,6 +135,7 @@ def resultat(tache: dict, issue: str, *, contenu: str = "", erreur: str = "", fo
         "erreur": erreur[:2000],
         "fournisseur": fournisseur,
         "factice": factice,
+        **({"frustration": frustration} if frustration is not None else {}),
         **({"outils": [{k: str(v)[:200] for k, v in o.items() if k in ("outil", "detail")} for o in outils][:OUTILS_MAX]}
            if outils else {}),
     }

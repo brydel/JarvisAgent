@@ -19,7 +19,7 @@ from urllib.parse import parse_qs
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "lib"))
 
 from jarvis import outils_http as http  # noqa: E402
-from jarvis.annulation import ControleExecution, ExecutionAnnulee  # noqa: E402
+from jarvis.annulation import ControleExecution, ExecutionAnnulee, _arreter  # noqa: E402
 
 SECRET = "credential-de-test-avec+&=é"
 
@@ -63,7 +63,7 @@ class ServeurControle(BaseHTTPRequestHandler):
 def vivant(pid):
     try:
         return Path(f"/proc/{pid}/stat").read_text().split(") ", 1)[1].split()[0] not in ("Z", "X")
-    except FileNotFoundError:
+    except (FileNotFoundError, ProcessLookupError):
         return False
 
 
@@ -217,11 +217,26 @@ class TransportRuntimeTest(unittest.TestCase):
 
     @unittest.skipUnless(os.name == "posix", "groupes POSIX nécessaires")
     def test_deadline_totale_ne_repart_pas_a_chaque_octet(self):
+        # Les imports et la création de l'enfant peuvent dépasser 350 ms sur un hôte chargé.
+        # Préparer le worker sur stdin permet de mesurer réellement le flux lent, sans changer
+        # l'horloge ni l'échéance absolue que requete() lui transmet ensuite.
+        pret = Path(self.temp.name) / "worker-pret"
+        code = self.worker(enfant=True).replace(
+            "h._worker()\n", f"Path({str(pret)!r}).touch()\nh._worker()\n")
+        proc = subprocess.Popen([sys.executable, "-c", code, str(Path(http.__file__).resolve().parents[1])],
+            stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, start_new_session=True)
+        self.addCleanup(lambda: _arreter(proc) if proc.poll() is None else None)
+        fin = time.monotonic() + 10
+        while not pret.exists() and proc.poll() is None and time.monotonic() < fin:
+            time.sleep(0.01)
+        self.assertTrue(pret.exists(), "Le worker doit attendre son entrée avant la mesure.")
         debut = time.monotonic()
-        with mock.patch.object(http, "_WORKER_CODE", self.worker(enfant=True)), self.assertRaises(http.TransportError):
+        with mock.patch.object(subprocess, "Popen", return_value=proc), self.assertRaises(http.TransportError):
             http.requete("https://api.example.invalid/lent", timeout=0.35)
+        duree = time.monotonic() - debut
         self.assertTrue(self.serveur.lecture_commencee.is_set())
-        self.assertLess(time.monotonic() - debut, 3)
+        self.assertGreaterEqual(duree, 0.35, "Une erreur précoce ne vérifie pas le délai total.")
+        self.assertLess(duree, 3)
         self.verifier_groupes_arretes()
 
     @unittest.skipUnless(os.name == "posix", "groupes POSIX nécessaires")
