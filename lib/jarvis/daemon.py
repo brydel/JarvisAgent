@@ -1002,6 +1002,19 @@ def sante_loop(stop: threading.Event) -> None:
 
 # --- Pont Telegram -----------------------------------------------------------
 
+
+def _message_chef_telegram(contenu: str) -> str:
+    """Conserve l'origine et rappelle le canal de retour, sans envoyer de réponse."""
+    from . import chef_moteur
+    commande = "jarvis-chef jarvis note" if chef_moteur.courant() == "codex" else "jarvis note"
+    return (
+        f"[Message de ton humain via Telegram] {contenu}"
+        "\n[JARVIS — réponse sur Telegram] Ta réponse finale dans ce panneau n'est pas transmise à Telegram. "
+        f'Avant de terminer ton tour, envoie ta réponse avec : {commande} "<ta réponse>" --envoyer. '
+        "Ne déclare la réponse envoyée que si cette commande réussit."
+    )
+
+
 def handle_update(bot: Bot, chat_id: str, upd: dict) -> None:
     owner = str(chat_id)
 
@@ -1166,7 +1179,7 @@ def handle_update(bot: Bot, chat_id: str, upd: dict) -> None:
                  f"ne refais pas ce travail)") if depot else ""
         if depot:
             bot.send(owner, f"📌 Déposé sur le Board « {depot['espace']} » : Jarvis l'analyse.")
-        if ag.chef_inject(f"[Message de ton humain via Telegram] {text}{suite}"):
+        if ag.chef_inject(_message_chef_telegram(f"{text}{suite}")):
             bot.send(owner, "✔ Transmis au chef.")
         elif not depot:
             bot.send(owner, "⚠ Le chef n'est pas lancé. Sur ton PC : jarvis chef")
@@ -1224,9 +1237,10 @@ def _transmettre_fichier(bot: Bot, owner: str, fichier: dict, legende: str) -> N
     depot = _deposer_sur_board(legende, dest, fichier["nom"])
     if depot:
         bot.send(owner, f"📌 Déposé sur le Board « {depot['espace']} » : Jarvis l'analyse.")
-    if ag.chef_inject(f"[Message de ton humain via Telegram] Fichier joint : {dest} (ouvre-le avec l'outil Read). "
-                      f"Légende : {legende or '(aucune)'}"
-                      + (f" (aussi déposé sur le Board {depot['espace']}, carte {depot['objet_id']})" if depot else "")):
+    contenu = (f"Fichier joint : {dest} (ouvre-le avec tes outils de lecture). "
+               f"Légende : {legende or '(aucune)'}"
+               + (f" (aussi déposé sur le Board {depot['espace']}, carte {depot['objet_id']})" if depot else ""))
+    if ag.chef_inject(_message_chef_telegram(contenu)):
         bot.send(owner, "✔ Fichier transmis au chef.")
     else:
         bot.send(owner, f"⚠ Fichier enregistré ({dest.name}) mais le chef n'est pas lancé. Sur ton PC : jarvis chef")
