@@ -74,7 +74,7 @@ jobs:
       - name: Vérifier les outils Linux et les réponses Telegram du Chef
         env:
           PYTHONPATH: lib:tests
-        run: python -m unittest -v test_chef_environnement test_lancement_environnement test_chef_canaux test_note_telegram test_telegram_reponses
+        run: python -m unittest -v test_chef_environnement test_lancement_environnement test_chef_canaux test_note_telegram test_telegram_reponses test_chef_saisie_codex
       - name: Verifier le navigateur fourni par l'image GitHub
         run: google-chrome --version
       - name: Parcours produit et captures bureau/mobile
