@@ -16,7 +16,7 @@ from unittest import mock
 
 import test_missions
 from jarvis import adaptateurs as ad, coureur, missions as mi
-from jarvis.annulation import ControleExecution, ExecutionAnnulee, executer_processus
+from jarvis.annulation import ControleExecution, ExecutionAnnulee, _arreter, executer_processus
 
 
 PROCESSUS_LONG = r'''import json, os, signal, subprocess, sys, time
@@ -27,6 +27,28 @@ Path(sys.argv[1]).write_text(json.dumps([os.getpid(), enfant.pid]))
 while True:
     time.sleep(0.02)
 '''
+
+
+def processus_long_pret(test, chemin_pids):
+    # Les imports du Python factice peuvent dépasser 300 ms sur un hôte chargé.
+    # La mesure commence seulement quand le vrai parent et son enfant existent.
+    proc = subprocess.Popen([sys.executable, "-c", PROCESSUS_LONG, str(chemin_pids)],
+                            stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                            text=True, start_new_session=True)
+    test.addCleanup(_arreter, proc)
+    limite = time.monotonic() + 10
+    pret = False
+    while proc.poll() is None and time.monotonic() < limite:
+        try:
+            pids = json.loads(chemin_pids.read_text())
+            pret = isinstance(pids, list) and len(pids) == 2 and pids[0] == proc.pid
+        except (OSError, ValueError):
+            pass
+        if pret:
+            break
+        time.sleep(0.01)
+    test.assertTrue(pret, "Le parent et son enfant doivent être prêts avant la mesure du délai.")
+    return proc
 
 
 def vivant(pid):
@@ -78,7 +100,8 @@ class ProcessusAnnulationTest(unittest.TestCase):
         self.verifier_arret()
 
     def test_timeout_tue_aussi_les_enfants(self):
-        with self.assertRaises(subprocess.TimeoutExpired):
+        proc = processus_long_pret(self, self.pids)
+        with mock.patch.object(subprocess, "Popen", return_value=proc), self.assertRaises(subprocess.TimeoutExpired):
             executer_processus([sys.executable, "-c", PROCESSUS_LONG, str(self.pids)], timeout=0.3)
         self.verifier_arret()
 
@@ -197,7 +220,8 @@ class CoureurAnnulationTest(test_missions.Base):
         self.assertTrue(tous_arretes(json.loads(self.pids.read_text())))
 
     def test_battement_bloque_ne_retarde_pas_l_expiration_locale(self):
-        _, transport, _, cr = self.preparer()
+        _, transport, adaptateur, cr = self.preparer()
+        proc = processus_long_pret(self, self.pids)
         battement = transport.battement
         liberer = threading.Event()
         appels = 0
@@ -212,11 +236,15 @@ class CoureurAnnulationTest(test_missions.Base):
 
         debut = time.monotonic()
         try:
-            with mock.patch.object(transport, "battement", side_effect=battre), mock.patch.object(transport, "rendre") as rendre:
+            with mock.patch.object(subprocess, "Popen", return_value=proc), \
+                    mock.patch.object(transport, "battement", side_effect=battre), \
+                    mock.patch.object(transport, "rendre") as rendre:
                 r = cr.tour()
                 rendre.assert_not_called()
         finally:
             liberer.set()
+        self.assertEqual(adaptateur.appels, 1)
+        self.assertGreaterEqual(appels, 2, "Le battement suivant doit être bloqué pendant l'exécution.")
         self.assertLess(time.monotonic() - debut, 3)
         self.assertEqual(r["etat"], "perime")
         self.assertIn("expiré localement", r["raison"])

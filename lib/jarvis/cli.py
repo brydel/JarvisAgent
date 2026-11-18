@@ -237,8 +237,12 @@ def cmd_note(a) -> int:
         pass
     store.feed_add("note", text if len(text) < 160 else text[:157] + "…")
     if a.envoyer:
-        notify.telegram(f"📝 Bilan du chef\n\n{text}")
-    print("Noté dans le journal.")
+        if not notify.telegram(f"📝 Bilan du chef\n\n{text}"):
+            return _err("Note conservée dans le journal, mais envoi Telegram non confirmé : "
+                        "connexion absente ou indisponible.", 1)
+        print("Noté dans le journal et envoyé sur Telegram.")
+    else:
+        print("Noté dans le journal.")
     return 0
 
 

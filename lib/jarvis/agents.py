@@ -7,6 +7,7 @@ import os
 import shutil
 import subprocess
 import time
+import uuid
 
 from . import config
 
@@ -413,19 +414,45 @@ def chef_has_dialog(cible: tuple[str, str] | None = None) -> bool:
 CODEX_PAUSE_SAISIE = 0.6
 
 
+def _coller_dans_codex(line: str, cible: tuple[str, str]) -> bool:
+    """Collage explicite, privé à cette remise : Codex ne doit pas confondre Entrée avec la fin d'une frappe rapide."""
+    tampon = f"jarvis-chef-{os.getpid()}-{uuid.uuid4().hex}"
+    try:
+        charge = _run(["tmux", "load-buffer", "-b", tampon, "-"], timeout=5, input_text=line)
+        if charge.returncode:
+            return False
+        if not _chef_cible_vivante(cible) or chef_has_dialog(cible):
+            return False
+        collage = _run(["tmux", "paste-buffer", "-p", "-d", "-b", tampon, "-t", cible[0]], timeout=5)
+        if collage.returncode:
+            return False
+        # L'interface traite l'événement de collage avant la validation. Aucun second Entrée automatique.
+        time.sleep(CODEX_PAUSE_SAISIE)
+        if not _chef_cible_vivante(cible) or chef_has_dialog(cible):
+            return False
+        validation = _run(["tmux", "send-keys", "-t", cible[0], "Enter"], timeout=5)
+        return validation.returncode == 0
+    except (subprocess.TimeoutExpired, OSError):
+        return False
+    finally:
+        # -d supprime le tampon après collage ; on nettoie aussi les échecs avant ou pendant la remise.
+        try:
+            _run(["tmux", "delete-buffer", "-b", tampon], timeout=5)
+        except (subprocess.TimeoutExpired, OSError):
+            pass
+
+
 def _type_into_chef(line: str) -> bool:
     cible = _chef_cible()
     if cible is None or chef_has_dialog(cible) or not _chef_cible_vivante(cible):
         return False
     try:
+        from . import chef_moteur
+        if chef_moteur.courant() == "codex":
+            return _coller_dans_codex(line, cible)
         saisie = _run(["tmux", "send-keys", "-t", cible[0], "-l", line], timeout=5)
         if saisie.returncode:
             return False
-        from . import chef_moteur
-        if chef_moteur.courant() == "codex":
-            # Codex prend une saisie rapide suivie d'Entrée pour un collage : le message resterait dans la
-            # zone de saisie sans partir (constaté à l'essai réel du 11 nov.).
-            time.sleep(CODEX_PAUSE_SAISIE)
         # Le chef peut s'arrêter ou afficher une question pendant la saisie. On garde le message
         # en file et on ne presse jamais Entrée dans le shell qui a repris sa place.
         if not _chef_cible_vivante(cible) or chef_has_dialog(cible):
@@ -455,7 +482,7 @@ def chef_inject(text: str, *, message_id: str | None = None) -> bool:
     """Persiste avant remise. Une coupure ne vide plus les messages avant leur envoi.
 
     `message_id` permet au producteur de rejouer une remise sans réinjecter un message déjà acquitté.
-    L'acquittement signifie « tapé dans tmux », pas « compris/exécuté par le modèle ». Une interruption
+    L'acquittement signifie « transmis puis validé dans tmux », pas « compris/exécuté par le modèle ». Une interruption
     entre le retour de tmux et cet acquittement peut encore dupliquer la ligne à la reprise.
     """
     if not chef_running():
