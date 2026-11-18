@@ -5,6 +5,9 @@
 set -euo pipefail
 
 JARVIS_HOME="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")/.." && pwd)"
+# Les services tmux et les lancements non interactifs ne lisent pas forcément ~/.bashrc.
+# Les commandes de cette version et les outils Linux de l'utilisateur précèdent le PATH hérité de WSL/Windows.
+export PATH="$JARVIS_HOME/bin:$HOME/.local/bin:$HOME/.npm-global/bin${PATH:+:$PATH}"
 SESSION="${JARVIS_SESSION:-jarvis}"
 
 C_CYAN=$'\033[36m'; C_GREEN=$'\033[32m'; C_YELLOW=$'\033[33m'; C_RED=$'\033[31m'; C_OFF=$'\033[0m'

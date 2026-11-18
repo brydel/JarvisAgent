@@ -16,8 +16,8 @@ set -euo pipefail
 
 JARVIS_HOME="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")/.." && pwd)"
 export JARVIS_HOME JARVIS_ROLE=chef JARVIS_CHEF_MOTEUR=codex
-# Dossiers npm/pip de l'utilisateur en dernier : un shell non interactif ne lit pas ~/.bashrc, qui les ajoute.
-export PATH="$JARVIS_HOME/bin:$PATH:$HOME/.local/bin:$HOME/.npm-global/bin"
+# Même résolution que le lanceur : outils Linux du dépôt et de l’utilisateur avant le PATH hérité.
+export PATH="$JARVIS_HOME/bin:$HOME/.local/bin:$HOME/.npm-global/bin:$PATH"
 CODEX_CFG="${CODEX_HOME:-$HOME/.codex}/config.toml"
 
 py() { PYTHONPATH="$JARVIS_HOME/lib" python3 -m jarvis "$@"; }
